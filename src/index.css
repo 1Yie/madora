@@ -10,6 +10,21 @@
     @apply h-screen overflow-hidden bg-background text-foreground;
     margin: 0;
   }
+  html[data-native-dialog-open],
+  html[data-native-dialog-open] body {
+    overflow: hidden;
+  }
+  html[data-native-dialog-open] body * {
+    scrollbar-width: none;
+  }
+  html[data-native-dialog-open] body *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+  html[data-native-dialog-open] [data-slot="scroll-area-scrollbar"] {
+    opacity: 0 !important;
+    transition: none !important;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -235,4 +250,43 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+.madora-code-block {
+  background-color: transparent !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  margin: 0;
+  min-height: 100%;
+  overflow-x: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.madora-code-block code {
+  display: block;
+  font-family: inherit;
+}
+
+.madora-markdown .shiki {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  margin: 0;
+  overflow-x: auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.madora-markdown .shiki code {
+  display: block;
+  font-family: inherit;
+}
+
+.dark .madora-markdown .shiki,
+.dark .madora-markdown .shiki span {
+  background-color: var(--shiki-dark-bg) !important;
+  color: var(--shiki-dark) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
 }

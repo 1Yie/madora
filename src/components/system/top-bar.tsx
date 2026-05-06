@@ -1,13 +1,11 @@
 import { Window } from "@tauri-apps/api/window";
-import { X, Square, Minus, Sparkles, Moon, Sun } from "lucide-react";
+import { X, Square, Minus, Sparkles } from "lucide-react";
 
-import { useTheme } from "@/components/system/theme-provider";
+import { SettingsDialog } from "@/components/system/settings-dialog";
 
 const appWindow = new Window("main");
 
 export default function Titlebar() {
-  const { theme, toggleTheme } = useTheme();
-
   return (
     <div
       data-tauri-drag-region
@@ -18,16 +16,7 @@ export default function Titlebar() {
         <span className="text-sm font-medium text-muted-foreground">Madora</span>
       </div>
       <div className="flex items-center h-full">
-        <button
-          type="button"
-          aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-          aria-pressed={theme === "dark"}
-          title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"}
-          onClick={toggleTheme}
-          className="flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
+        <SettingsDialog />
         <button
           type="button"
           onClick={() => appWindow.minimize()}
