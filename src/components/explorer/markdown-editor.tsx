@@ -41,11 +41,13 @@ export function MarkdownEditor({
       <div className="flex items-center justify-between gap-4 border-t border-border/70 px-4 py-2 text-xs">
         <div
           className={cn(
-            "flex min-w-0 items-center gap-2",
+            "flex min-w-0 items-center gap-2 leading-none",
             saveStatus === "error" ? "text-destructive" : "text-muted-foreground",
           )}
         >
-          {saveStatus === "saving" ? <Spinner className="size-3.5 shrink-0 text-primary" /> : null}
+          {saveStatus === "saving" ? (
+            <Spinner className="size-3.5 shrink-0 flex-none text-primary" />
+          ) : null}
           <span className="truncate">{getSaveStatusText(saveStatus, saveError)}</span>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-muted-foreground tabular-nums">

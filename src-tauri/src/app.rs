@@ -19,6 +19,9 @@ pub fn run() {
             explorer::read_workspace_file,
             explorer::create_markdown_file,
             explorer::write_workspace_file,
+            explorer::rename_workspace_node,
+            explorer::delete_workspace_node,
+            explorer::move_workspace_node,
             ai::generate_completion,
             project::read_file_content,
             project::scan_project

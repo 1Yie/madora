@@ -81,3 +81,48 @@ pub async fn write_workspace_file(path: String, content: String) -> Result<(), S
     .await
     .map_err(|error| error.to_string())?
 }
+
+#[tauri::command]
+pub async fn rename_workspace_node(
+    root_path: String,
+    target_path: String,
+    new_name: String,
+) -> Result<(), String> {
+    let root_path = PathBuf::from(root_path);
+    let target_path = PathBuf::from(target_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::rename_workspace_node(&root_path, &target_path, &new_name)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn delete_workspace_node(root_path: String, target_path: String) -> Result<(), String> {
+    let root_path = PathBuf::from(root_path);
+    let target_path = PathBuf::from(target_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::delete_workspace_node(&root_path, &target_path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn move_workspace_node(
+    root_path: String,
+    source_path: String,
+    destination_directory: String,
+) -> Result<(), String> {
+    let root_path = PathBuf::from(root_path);
+    let source_path = PathBuf::from(source_path);
+    let destination_directory = PathBuf::from(destination_directory);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::move_workspace_node(&root_path, &source_path, &destination_directory)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}

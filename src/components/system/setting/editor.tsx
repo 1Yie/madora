@@ -98,7 +98,7 @@ export function EditorSettings() {
             </p>
           </label>
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-foreground">模型</span>
+            <span className="text-sm font-medium text-foreground">Model</span>
             <Input
               autoComplete="off"
               placeholder="deepseek-v4-pro"

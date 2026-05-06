@@ -74,20 +74,6 @@ fn sorted_directory_entries(directory: &Path) -> Result<Vec<fs::DirEntry>, Strin
     Ok(entries)
 }
 
-fn directory_has_visible_entries(directory: &Path) -> Result<bool, String> {
-    for entry in fs::read_dir(directory).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let path = entry.path();
-        let entry_type = entry.file_type().map_err(|error| error.to_string())?;
-
-        if entry_type.is_dir() || classify_file_kind(&path).is_some() {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
 fn build_file_node(root: &Path, path: &Path, file_kind: ExplorerFileKind) -> ExplorerNode {
     ExplorerNode {
         name: path_name(path),
@@ -160,18 +146,23 @@ pub fn read_directory_children(root: &Path, directory: &Path) -> Result<Vec<Expl
         let entry_type = entry.file_type().map_err(|error| error.to_string())?;
 
         if entry_type.is_dir() {
-            if directory_has_visible_entries(&path)? {
-                children.push(ExplorerNode {
-                    name: path_name(&path),
-                    path: path.to_string_lossy().into_owned(),
-                    relative_path: relative_path(root, &path),
-                    kind: ExplorerNodeKind::Directory,
-                    file_kind: None,
-                    has_children: true,
-                    loaded: false,
-                    children: Vec::new(),
-                });
-            }
+            let has_children = fs::read_dir(&path)
+                .map_err(|error| error.to_string())?
+                .next()
+                .transpose()
+                .map_err(|error| error.to_string())?
+                .is_some();
+
+            children.push(ExplorerNode {
+                name: path_name(&path),
+                path: path.to_string_lossy().into_owned(),
+                relative_path: relative_path(root, &path),
+                kind: ExplorerNodeKind::Directory,
+                file_kind: None,
+                has_children,
+                loaded: false,
+                children: Vec::new(),
+            });
 
             continue;
         }
@@ -258,4 +249,140 @@ pub fn create_markdown_file(
         &file_path,
         ExplorerFileKind::Markdown,
     ))
+}
+
+fn ensure_existing_path(path: &Path) -> Result<(), String> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    Err(format!("路径不存在: {}", path.display()))
+}
+
+fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
+    if path == root_path || path.starts_with(root_path) {
+        return Ok(());
+    }
+
+    Err("不能操作工作区之外的文件或文件夹".to_string())
+}
+
+fn ensure_parent_exists(path: &Path) -> Result<(), String> {
+    let Some(parent) = path.parent() else {
+        return Err("无法确定目标目录".to_string());
+    };
+
+    if parent.is_dir() {
+        return Ok(());
+    }
+
+    Err("目标目录不存在".to_string())
+}
+
+fn ensure_target_available(target_path: &Path) -> Result<(), String> {
+    if !target_path.exists() {
+        return Ok(());
+    }
+
+    Err(format!("目标已存在: {}", target_path.display()))
+}
+
+pub fn rename_workspace_node(
+    root_path: &Path,
+    target_path: &Path,
+    new_name: &str,
+) -> Result<(), String> {
+    ensure_within_root(root_path, target_path)?;
+    ensure_existing_path(target_path)?;
+
+    let trimmed_name = new_name.trim();
+
+    if trimmed_name.is_empty() {
+        return Err("请输入名称".to_string());
+    }
+
+    if trimmed_name.contains('/') || trimmed_name.contains('\\') {
+        return Err("名称不能包含路径分隔符".to_string());
+    }
+
+    let Some(parent) = target_path.parent() else {
+        return Err("无法重命名工作区根目录".to_string());
+    };
+
+    let next_path = parent.join(trimmed_name);
+
+    if next_path == target_path {
+        return Ok(());
+    }
+
+    ensure_target_available(&next_path)?;
+    fs::rename(target_path, next_path).map_err(|error| error.to_string())
+}
+
+pub fn delete_workspace_node(root_path: &Path, target_path: &Path) -> Result<(), String> {
+    ensure_within_root(root_path, target_path)?;
+    ensure_existing_path(target_path)?;
+
+    if target_path == root_path {
+        return Err("不能删除工作区根目录".to_string());
+    }
+
+    let metadata = fs::metadata(target_path).map_err(|error| error.to_string())?;
+
+    if metadata.is_dir() {
+        fs::remove_dir_all(target_path).map_err(|error| error.to_string())
+    } else {
+        fs::remove_file(target_path).map_err(|error| error.to_string())
+    }
+}
+
+pub fn move_workspace_node(
+    root_path: &Path,
+    source_path: &Path,
+    destination_directory: &Path,
+) -> Result<(), String> {
+    ensure_within_root(root_path, source_path)?;
+    ensure_within_root(root_path, destination_directory)?;
+    ensure_existing_path(source_path)?;
+    ensure_existing_path(destination_directory)?;
+
+    if !destination_directory.is_dir() {
+        return Err("粘贴目标必须是文件夹".to_string());
+    }
+
+    if source_path == root_path {
+        return Err("不能移动工作区根目录".to_string());
+    }
+
+    if destination_directory == source_path {
+        return Err("不能移动到自身".to_string());
+    }
+
+    if source_path.starts_with(destination_directory) {
+        let source_parent = source_path.parent();
+
+        if source_parent.is_some_and(|parent| parent == destination_directory) {
+            return Ok(());
+        }
+    }
+
+    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+
+    if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
+        return Err("不能将文件夹移动到它自己的子目录中".to_string());
+    }
+
+    let file_name = source_path
+        .file_name()
+        .ok_or_else(|| "无法确定源文件名".to_string())?;
+    let destination_path = destination_directory.join(file_name);
+
+    if destination_path == source_path {
+        return Ok(());
+    }
+
+    ensure_parent_exists(&destination_path)?;
+    ensure_target_available(&destination_path)?;
+
+    fs::rename(source_path, destination_path).map_err(|error| error.to_string())
 }

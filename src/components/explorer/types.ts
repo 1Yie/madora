@@ -12,6 +12,12 @@ export type ExplorerNode = {
   children: ExplorerNode[];
 };
 
+export type ExplorerClipboardItem = {
+  name: string;
+  nodeKind: ExplorerNodeKind;
+  path: string;
+};
+
 export type FilePreview = {
   fileKind: ExplorerFileKind;
   content: string | null;
