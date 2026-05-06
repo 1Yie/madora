@@ -1,10 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FileExplorerSidebar } from "@/components/explorer/file-explorer-sidebar";
 import { FilePreview } from "@/components/explorer/file-preview";
 
 import type { ExplorerNode, FilePreview as FilePreviewData } from "./types";
+
+const WORKSPACE_ROOT_STORAGE_KEY = "madora-workspace-root-path";
 
 function findFirstFile(node: ExplorerNode): ExplorerNode | null {
   if (node.kind === "file") {
@@ -91,6 +93,7 @@ export function WorkspaceBrowser() {
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewRequestId = useRef(0);
+  const restoredWorkspaceRef = useRef(false);
 
   const clearPreviewState = () => {
     previewRequestId.current += 1;
@@ -144,6 +147,7 @@ export function WorkspaceBrowser() {
 
       setLoadingPaths(new Set());
       setRoot(nextRoot);
+      window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
 
       const firstFile = findFirstFile(nextRoot);
 
@@ -175,6 +179,7 @@ export function WorkspaceBrowser() {
       setLoadingPaths(new Set());
       setRoot(nextRoot);
       setSidebarError(null);
+      window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
 
       if (selectedFile) {
         const nextSelectedFile = findFileByPath(nextRoot, selectedFile.path) ?? selectedFile;
@@ -266,6 +271,68 @@ export function WorkspaceBrowser() {
       });
     }
   };
+
+  useEffect(() => {
+    if (restoredWorkspaceRef.current) {
+      return;
+    }
+
+    restoredWorkspaceRef.current = true;
+
+    const savedRootPath = window.localStorage.getItem(WORKSPACE_ROOT_STORAGE_KEY);
+
+    if (!savedRootPath) {
+      return;
+    }
+
+    let active = true;
+
+    const restoreWorkspace = async () => {
+      setSidebarBusy(true);
+      setSidebarError(null);
+
+      try {
+        const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
+          rootPath: savedRootPath,
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setLoadingPaths(new Set());
+        setRoot(nextRoot);
+        window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
+
+        const firstFile = findFirstFile(nextRoot);
+
+        if (firstFile) {
+          await loadPreview(firstFile);
+        } else {
+          clearPreviewState();
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        window.localStorage.removeItem(WORKSPACE_ROOT_STORAGE_KEY);
+        setRoot(null);
+        clearPreviewState();
+        setSidebarError(getErrorMessage(error));
+      } finally {
+        if (active) {
+          setSidebarBusy(false);
+        }
+      }
+    };
+
+    void restoreWorkspace();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground">

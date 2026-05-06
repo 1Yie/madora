@@ -1,6 +1,7 @@
-import { Palette, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { EditorSettings } from "@/components/system/setting/editor";
 import { useTheme } from "@/components/system/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,31 +12,7 @@ import {
 } from "@/components/ui/native-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-
-type SettingsSectionId = "appearance" | "workspace" | "about";
-
-type SettingsSection = {
-  id: SettingsSectionId;
-  label: string;
-  description: string;
-  icon: typeof Palette;
-};
-
-const settingsSections: SettingsSection[] = [
-  {
-    id: "appearance",
-    label: "外观",
-    description: "主题与界面显示",
-    icon: Palette,
-  },
-
-  {
-    id: "about",
-    label: "关于",
-    description: "产品信息与方向",
-    icon: Settings2,
-  },
-];
+import { settingsSections, type SettingsSectionId } from "./setting/types";
 
 function SettingsSectionCard({
   title,
@@ -132,6 +109,10 @@ function AboutSettings() {
 }
 
 function SettingsContent({ section }: { section: SettingsSectionId }) {
+  if (section === "editor") {
+    return <EditorSettings />;
+  }
+
   if (section === "about") {
     return <AboutSettings />;
   }

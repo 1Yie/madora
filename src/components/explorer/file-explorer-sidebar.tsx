@@ -186,6 +186,28 @@ function collectAncestorPaths(root: ExplorerNode, targetPath: string): string[] 
   return ancestors;
 }
 
+function collectExpandedDirectoriesNeedingLoad(
+  node: ExplorerNode,
+  expandedPaths: Set<string>,
+): ExplorerNode[] {
+  if (node.kind === "file") {
+    return [];
+  }
+
+  const directories: ExplorerNode[] = [];
+
+  if (expandedPaths.has(node.path) && node.hasChildren && !node.loaded) {
+    directories.push(node);
+    return directories;
+  }
+
+  for (const child of node.children) {
+    directories.push(...collectExpandedDirectoriesNeedingLoad(child, expandedPaths));
+  }
+
+  return directories;
+}
+
 function FileTreeNode({
   depth,
   expandedPaths,
@@ -337,6 +359,18 @@ export function FileExplorerSidebar({
       return nextPaths;
     });
   }, [root, selectedPath]);
+
+  useEffect(() => {
+    if (!root) {
+      return;
+    }
+
+    for (const directory of collectExpandedDirectoriesNeedingLoad(root, expandedPaths)) {
+      if (!loadingPaths.has(directory.path)) {
+        onExpandDirectory(directory);
+      }
+    }
+  }, [expandedPaths, loadingPaths, onExpandDirectory, root]);
 
   const toggleDirectory = (path: string) => {
     setExpandedPaths((currentPaths) => {

@@ -241,7 +241,7 @@ export function FilePreview({
           {selectedFile.relativePath || selectedFile.path}
         </CardDescription>
       </div>
-      <div className="min-h-0 flex-1 px-2">
+      <div className="min-h-0 flex-1">
         <PreviewState
           error={error}
           loading={loading}

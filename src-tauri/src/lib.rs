@@ -4,9 +4,12 @@ use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use ignore::WalkBuilder;
-use serde::Serialize;
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 512 * 1024;
+const DEEPSEEK_FIM_COMPLETION_URL: &str = "https://api.deepseek.com/beta/completions";
+const DEEPSEEK_FIM_MODEL: &str = "deepseek-v4-pro";
 
 #[derive(Clone, Copy, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -44,6 +47,27 @@ struct FilePreview {
     image_data_url: Option<String>,
     size: u64,
     truncated: bool,
+}
+
+#[derive(Deserialize)]
+struct DeepSeekFimChoice {
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct DeepSeekFimResponse {
+    choices: Vec<DeepSeekFimChoice>,
+}
+
+#[derive(Serialize)]
+struct DeepSeekFimRequest<'a> {
+    model: &'a str,
+    prompt: &'a str,
+    suffix: Option<&'a str>,
+    max_tokens: usize,
+    temperature: f32,
+    top_p: f32,
+    stream: bool,
 }
 
 #[tauri::command]
@@ -346,6 +370,74 @@ async fn create_markdown_file(
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+async fn write_workspace_file(path: String, content: String) -> Result<(), String> {
+    let file_path = PathBuf::from(path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        fs::write(file_path, content).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn complete_fim(
+    api_key: String,
+    prompt: String,
+    suffix: Option<String>,
+    max_tokens: Option<usize>,
+) -> Result<String, String> {
+    let trimmed_api_key = api_key.trim();
+
+    if trimmed_api_key.is_empty() {
+        return Err("请先在设置中填写 DeepSeek API Key".to_string());
+    }
+
+    if prompt.trim().is_empty() {
+        return Ok(String::new());
+    }
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(DEEPSEEK_FIM_COMPLETION_URL)
+        .bearer_auth(trimmed_api_key)
+        .json(&DeepSeekFimRequest {
+            model: DEEPSEEK_FIM_MODEL,
+            prompt: &prompt,
+            suffix: suffix.as_deref(),
+            max_tokens: max_tokens.unwrap_or(128).min(512),
+            temperature: 0.2,
+            top_p: 1.0,
+            stream: false,
+        })
+        .send()
+        .await
+        .map_err(|error| format!("调用 DeepSeek 失败: {error}"))?;
+
+    if response.status() != StatusCode::OK {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "无法读取错误详情".to_string());
+
+        return Err(format!("DeepSeek 请求失败 ({status}): {body}"));
+    }
+
+    let payload = response
+        .json::<DeepSeekFimResponse>()
+        .await
+        .map_err(|error| format!("解析 DeepSeek 响应失败: {error}"))?;
+
+    Ok(payload
+        .choices
+        .into_iter()
+        .next()
+        .map(|choice| choice.text)
+        .unwrap_or_default())
+}
+
 // 指令：读取单个文件内容
 #[tauri::command]
 async fn read_file_content(path: String) -> Result<String, String> {
@@ -387,6 +479,8 @@ pub fn run() {
             read_workspace_directory,
             read_workspace_file,
             create_markdown_file,
+            write_workspace_file,
+            complete_fim,
             read_file_content,
             scan_project
         ])
