@@ -1,6 +1,6 @@
 import { Settings2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-
+import { AboutSettings } from "@/components/system/setting/about";
 import { EditorSettings } from "@/components/system/setting/editor";
 import { useTheme } from "@/components/system/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,8 @@ import {
   NativeDialogHeader,
   NativeDialogTitle,
 } from "@/components/ui/native-dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { settingsSections, type SettingsSectionId } from "./setting/types";
+import { settingsSections, type SettingsSectionId } from "@/components/system/setting/types";
 
 function SettingsSectionCard({
   title,
@@ -95,18 +94,6 @@ function AppearanceSettings() {
   );
 }
 
-function AboutSettings() {
-  return (
-    <div className="space-y-4">
-      <SettingsSectionCard description="说明当前设置页的定位与扩展方向。" title="关于设置中心">
-        <div className="space-y-3 text-sm leading-6 text-muted-foreground">
-          <p>设置中心采用左侧功能导航、右侧详情面板的结构，便于逐步扩展更多桌面端能力。</p>
-          <p>现在已经接入外观配置，后续可以继续补充编辑器、工作区和同步等选项。</p>
-        </div>
-      </SettingsSectionCard>
-    </div>
-  );
-}
 
 function SettingsContent({ section }: { section: SettingsSectionId }) {
   if (section === "editor") {
@@ -143,7 +130,7 @@ export function SettingsDialog() {
         onOpenChange={setOpen}
         open={open}
       >
-        <div className="flex min-h-[min(70vh,620px)] min-w-0 flex-col">
+        <div className="flex h-[min(70vh,620px)] min-h-0 min-w-0 flex-col overflow-hidden">
           <NativeDialogClose
             className="absolute inset-e-3 top-3 z-10"
             onClick={() => setOpen(false)}
@@ -151,9 +138,9 @@ export function SettingsDialog() {
           <NativeDialogHeader className="border-b bg-muted/35 pe-14">
             <NativeDialogTitle>设置</NativeDialogTitle>
           </NativeDialogHeader>
-          <div className="flex min-h-0 flex-1 min-w-0 flex-col md:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
             <aside className="border-b bg-muted/25 md:w-64 md:shrink-0 md:border-b-0 md:border-r">
-              <ScrollArea className="max-h-60 md:max-h-none" scrollbarGutter>
+              <div className="max-h-60 overflow-y-auto [scrollbar-gutter:stable] md:h-full md:max-h-none">
                 <nav className="flex flex-col gap-1 p-3">
                   {settingsSections.map((section) => {
                     const Icon = section.icon;
@@ -192,10 +179,10 @@ export function SettingsDialog() {
                     );
                   })}
                 </nav>
-              </ScrollArea>
+              </div>
             </aside>
-            <section className="min-h-0 min-w-0 flex-1 bg-popover">
-              <ScrollArea scrollFade scrollbarGutter>
+            <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-popover">
+              <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                 <div className="space-y-6 p-4 sm:p-6">
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -207,7 +194,7 @@ export function SettingsDialog() {
                   </div>
                   <SettingsContent section={currentSection.id} />
                 </div>
-              </ScrollArea>
+              </div>
             </section>
           </div>
         </div>

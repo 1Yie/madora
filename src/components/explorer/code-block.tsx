@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { codeToHtml, type BundledLanguage, type BundledTheme } from "shiki";
 
 import { useTheme } from "@/components/system/theme-provider";
-import { Card, CardPanel } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type CodeBlockProps = {
@@ -114,15 +113,11 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
   }, [code, language, theme]);
 
   return (
-    <Card className="overflow-hidden">
-      <CardPanel className="p-0">
-        <div
-          className={cn(
-            wrapLongLines && "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap",
-          )}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      </CardPanel>
-    </Card>
+    <div
+      className={cn(
+        wrapLongLines && "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap",
+      )}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }

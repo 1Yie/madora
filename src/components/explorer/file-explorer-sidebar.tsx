@@ -420,7 +420,10 @@ export function FileExplorerSidebar({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-2 pb-3" data-sidebar-scroll>
+      <div
+        className="min-h-0 flex-1 overflow-auto px-2 pb-3"
+        data-native-dialog-scroll-lock
+      >
         {root ? (
           root.children.length > 0 ? (
             <div className="space-y-1 py-2">

@@ -14,17 +14,6 @@
   html[data-native-dialog-open] body {
     overflow: hidden;
   }
-  html[data-native-dialog-open] body * {
-    scrollbar-width: none;
-  }
-  html[data-native-dialog-open] body *::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-  }
-  html[data-native-dialog-open] [data-slot="scroll-area-scrollbar"] {
-    opacity: 0 !important;
-    transition: none !important;
-  }
   * {
     @apply border-border outline-ring/50;
   }

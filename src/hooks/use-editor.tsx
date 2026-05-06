@@ -22,11 +22,20 @@ import { createRoot, type Root } from "react-dom/client";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
 type UseEditorOptions = {
   onChange?: (value: string) => void;
+  title?: string;
   value: string;
+};
+
+type CompletionRequestMode = "auto" | "chat-prefix" | "fim";
+
+type CompletionResultData = {
+  mode: Exclude<CompletionRequestMode, "auto">;
+  text: string;
 };
 
 type CompletionStatusTone = "muted" | "loading" | "success" | "error";
@@ -44,6 +53,7 @@ type CompletionTooltipState = {
 
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
+const EMPTY_COMPLETION_MESSAGE = "暂无建议，按 Tab 重新尝试";
 
 const setCompletionTooltipEffect = StateEffect.define<CompletionTooltipState | null>();
 
@@ -165,7 +175,7 @@ function getDefaultCompletionStatus(
 
   if (apiKey.trim().length === 0) {
     return {
-      message: "填写 DeepSeek API Key 后可用",
+      message: "填写 API Key 后可用",
       tone: "muted",
     };
   }
@@ -190,10 +200,9 @@ function shouldTriggerCompletion(
   }
 
   const cursor = state.selection.main.head;
-  const line = state.doc.lineAt(cursor);
-  const linePrefix = state.doc.sliceString(line.from, cursor);
+  const prompt = state.doc.sliceString(Math.max(0, cursor - MAX_PREFIX_CHARS), cursor);
 
-  return linePrefix.trim().length > 0;
+  return prompt.trim().length > 0;
 }
 
 function shouldShowCompletionTooltip(
@@ -261,15 +270,18 @@ function CompletionTooltipContent({ status }: { status: CompletionTooltipState }
           "border-emerald-500/20 bg-background/95 text-emerald-600 dark:text-emerald-400",
       )}
     >
-      <Sparkles
-        className={cn(
-          "size-4 shrink-0",
-          status.tone === "error" && "text-destructive",
-          status.tone === "loading" && "animate-pulse text-primary",
-          status.tone === "muted" && "text-primary",
-          status.tone === "success" && "text-emerald-600 dark:text-emerald-400",
-        )}
-      />
+      {status.tone === "loading" ? (
+        <Spinner className="size-4 shrink-0 text-primary" />
+      ) : (
+        <Sparkles
+          className={cn(
+            "size-4 shrink-0",
+            status.tone === "error" && "text-destructive",
+            status.tone === "muted" && "text-primary",
+            status.tone === "success" && "text-emerald-600 dark:text-emerald-400",
+          )}
+        />
+      )}
       <span className="whitespace-nowrap">{status.message}</span>
     </div>
   );
@@ -299,20 +311,23 @@ function createCompletionTooltipView(status: CompletionTooltipState): TooltipVie
   };
 }
 
-export function useEditor({ onChange, value }: UseEditorOptions) {
+export function useEditor({ onChange, title, value }: UseEditorOptions) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const requestIdRef = useRef(0);
   const aiSettingsRef = useRef({
     apiKey: "",
+    apiUrl: "",
     enabled: true,
+    fimEnabled: true,
+    model: "",
   });
   const completionStatusRef = useRef<CompletionStatus>({
-    message: "填写 DeepSeek API Key 后可用",
+    message: "填写 API Key 后可用",
     tone: "muted",
   });
 
-  const { apiKey, enabled } = useAiSettings();
+  const { apiKey, apiUrl, enabled, fimEnabled, model } = useAiSettings();
 
   const handleChange = useEffectEvent((nextValue: string) => {
     onChange?.(nextValue);
@@ -353,17 +368,26 @@ export function useEditor({ onChange, value }: UseEditorOptions) {
 
     requestIdRef.current = requestId;
     setCompletionStatus({
-      message: "正在生成 FIM 补全...",
+      message: "正在生成 AI 补全...",
       tone: "loading",
     });
 
     try {
-      const completion = await invoke<string>("complete_fim", {
-        apiKey: settings.apiKey,
-        maxTokens: 128,
-        prompt,
-        suffix: suffix.length > 0 ? suffix : null,
+      const result = await invoke<CompletionResultData>("generate_completion", {
+        config: {
+          apiKey: settings.apiKey,
+          apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
+          fimEnabled: settings.fimEnabled,
+          model: settings.model.trim().length > 0 ? settings.model : null,
+        },
+        request: {
+          mode: "auto",
+          prefix: prompt,
+          suffix: suffix.length > 0 ? suffix : null,
+          title: title ?? null,
+        },
       });
+      const completion = result.text;
 
       if (requestId !== requestIdRef.current) {
         return;
@@ -392,7 +416,7 @@ export function useEditor({ onChange, value }: UseEditorOptions) {
 
       if (completion.length === 0) {
         setCompletionStatus({
-          message: "按 Tab 触发 FIM 补全",
+          message: EMPTY_COMPLETION_MESSAGE,
           tone: "muted",
         });
         return;
@@ -422,12 +446,15 @@ export function useEditor({ onChange, value }: UseEditorOptions) {
   useEffect(() => {
     aiSettingsRef.current = {
       apiKey,
+      apiUrl,
       enabled,
+      fimEnabled,
+      model,
     };
     requestIdRef.current += 1;
     completionStatusRef.current = getDefaultCompletionStatus(enabled, apiKey);
     syncTooltip();
-  }, [apiKey, enabled, syncTooltip]);
+  }, [apiKey, apiUrl, enabled, fimEnabled, model, syncTooltip]);
 
   useEffect(() => {
     if (!editorRef.current) {
@@ -473,6 +500,16 @@ export function useEditor({ onChange, value }: UseEditorOptions) {
           EditorView.updateListener.of((update: ViewUpdate) => {
             if (update.docChanged) {
               handleChange(update.state.doc.toString());
+            }
+
+            if (
+              completionStatusRef.current.message === EMPTY_COMPLETION_MESSAGE &&
+              (update.docChanged || update.selectionSet)
+            ) {
+              completionStatusRef.current = getDefaultCompletionStatus(
+                aiSettingsRef.current.enabled,
+                aiSettingsRef.current.apiKey,
+              );
             }
 
             if (

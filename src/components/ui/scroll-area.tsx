@@ -1,22 +1,8 @@
 "use client";
 
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
-import { useEffect, useState } from "react";
 import type React from "react";
 import { cn } from "@/lib/utils";
-
-function useDialogOpen() {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const el = document.documentElement;
-    const obs = new MutationObserver(() =>
-      setOpen(el.hasAttribute("data-native-dialog-open")),
-    );
-    obs.observe(el, { attributes: true, attributeFilter: ["data-native-dialog-open"] });
-    return () => obs.disconnect();
-  }, []);
-  return open;
-}
 
 export function ScrollArea({
   className,
@@ -57,12 +43,10 @@ export function ScrollBar({
   orientation = "vertical",
   ...props
 }: ScrollAreaPrimitive.Scrollbar.Props): React.ReactElement {
-  const dialogOpen = useDialogOpen();
   return (
     <ScrollAreaPrimitive.Scrollbar
       className={cn(
         "m-1 flex opacity-0 transition-opacity delay-300 data-[orientation=horizontal]:h-1.5 data-[orientation=vertical]:w-1.5 data-[orientation=horizontal]:flex-col data-hovering:opacity-100 data-scrolling:opacity-100 data-hovering:delay-0 data-scrolling:delay-0 data-hovering:duration-100 data-scrolling:duration-100",
-        dialogOpen && "!opacity-0 !transition-none !delay-0",
         className,
       )}
       data-slot="scroll-area-scrollbar"

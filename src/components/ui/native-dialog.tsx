@@ -9,21 +9,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nativeDialogOpenAttr = "data-native-dialog-open";
 const nativeDialogCountAttr = "data-native-dialog-count";
+const nativeDialogScrollLockAttr = "data-native-dialog-scroll-lock";
+const nativeDialogPrevOverflowAttr = "data-native-dialog-prev-overflow";
 
-function lockNativeDialogScrollbars() {
+function lockNativeDialogScrollbars(dialog: HTMLDialogElement | null) {
   const root = document.documentElement;
   const currentCount = Number(root.getAttribute(nativeDialogCountAttr) ?? "0");
 
   root.setAttribute(nativeDialogOpenAttr, "true");
   root.setAttribute(nativeDialogCountAttr, String(currentCount + 1));
 
-  // Directly hide overflow on all native-scrolling containers
-  const scrollEls = document.querySelectorAll<HTMLElement>("[data-sidebar-scroll]");
-  const prevOverflows: string[] = [];
-  scrollEls.forEach((el) => {
-    prevOverflows.push(el.style.overflow);
-    el.style.overflow = "hidden";
-  });
+  if (currentCount === 0) {
+    const scrollEls = document.querySelectorAll<HTMLElement>(
+      `[${nativeDialogScrollLockAttr}]`,
+    );
+
+    scrollEls.forEach((el) => {
+      if (dialog?.contains(el)) {
+        return;
+      }
+
+      el.setAttribute(nativeDialogPrevOverflowAttr, el.style.overflow);
+      el.style.overflow = "hidden";
+    });
+  }
 
   return () => {
     const nextCount = Math.max(
@@ -34,9 +43,16 @@ function lockNativeDialogScrollbars() {
     if (nextCount === 0) {
       root.removeAttribute(nativeDialogOpenAttr);
       root.removeAttribute(nativeDialogCountAttr);
-      scrollEls.forEach((el, i) => {
-        el.style.overflow = prevOverflows[i] ?? "";
+
+      const scrollEls = document.querySelectorAll<HTMLElement>(
+        `[${nativeDialogScrollLockAttr}]`,
+      );
+
+      scrollEls.forEach((el) => {
+        el.style.overflow = el.getAttribute(nativeDialogPrevOverflowAttr) ?? "";
+        el.removeAttribute(nativeDialogPrevOverflowAttr);
       });
+
       return;
     }
 
@@ -74,7 +90,7 @@ export function NativeDialog({
         prevBodyOverflowRef.current = document.body.style.overflow || "";
         document.documentElement.style.overflow = "hidden";
         document.body.style.overflow = "hidden";
-        releaseScrollLockRef.current ??= lockNativeDialogScrollbars();
+        releaseScrollLockRef.current ??= lockNativeDialogScrollbars(dialog);
       } catch {}
 
       dialog.showModal();

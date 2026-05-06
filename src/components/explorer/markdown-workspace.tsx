@@ -12,6 +12,13 @@ type MarkdownWorkspaceProps = {
 
 const SAVE_DEBOUNCE_MS = 400;
 
+function getFileTitle(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const fileName = normalizedPath.split("/").pop() ?? "Untitled";
+
+  return fileName.replace(/\.(md|markdown|mdx)$/i, "");
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -97,6 +104,7 @@ export function MarkdownWorkspace({ content, filePath }: MarkdownWorkspaceProps)
       onChange={setValue}
       saveError={saveError}
       saveStatus={saveStatus}
+      title={getFileTitle(filePath)}
       value={value}
     />
   );
