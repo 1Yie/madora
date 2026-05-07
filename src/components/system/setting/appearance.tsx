@@ -7,8 +7,14 @@ export function AppearanceSettings() {
 
   return (
     <div className="space-y-4">
-      <SettingsSectionCard description="当前提供浅色与深色两套界面方案。" title="主题模式">
-        <div className="grid gap-3 md:grid-cols-2">
+      <SettingsSectionCard description="默认跟随系统外观，也可以手动固定为浅色或深色。" title="主题模式">
+        <div className="grid gap-3 md:grid-cols-3">
+          <ThemeOption
+            active={theme === "system"}
+            description="跟随当前设备或系统设置决定。"
+            label="跟随系统"
+            onClick={() => setTheme("system")}
+          />
           <ThemeOption
             active={theme === "light"}
             description="更适合明亮环境，页面层次会更轻。"

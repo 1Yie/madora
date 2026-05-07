@@ -67,7 +67,7 @@ type FileExplorerSidebarProps = {
     mode: "cut";
   } | null;
   loadingPaths: Set<string>;
-  onCreateMarkdown: (fileName: string) => Promise<void>;
+  onCreateMarkdown: (fileName: string, targetPath: string | null) => Promise<void>;
   onCreateDirectory: (directoryName: string, targetPath: string | null) => Promise<void>;
   onCutNode: (node: ExplorerNode) => void;
   onDeleteNode: (targetPath: string) => Promise<void>;
@@ -80,6 +80,7 @@ type FileExplorerSidebarProps = {
 };
 
 type PendingAction =
+  | { type: "createMarkdown"; targetPath: string | null }
   | { type: "createDirectory"; node: ExplorerNode | null; targetPath: string | null }
   | { type: "rename"; node: ExplorerNode }
   | { type: "delete"; node: ExplorerNode }
@@ -166,7 +167,9 @@ function ContextMenuContent({
 }: {
   clipboard: FileExplorerSidebarProps["clipboard"];
   includeNodeActions?: boolean;
-  onAction: (action: "createDirectory" | "cut" | "delete" | "rename" | "paste") => void;
+  onAction: (
+    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
+  ) => void;
   pasteDisabled: boolean;
   target: ExplorerNode | null;
 }) {
@@ -176,6 +179,10 @@ function ContextMenuContent({
     <ContextMenuPopup align="start" sideOffset={6}>
       {target && includeNodeActions ? (
         <>
+          <MenuItem onClick={() => onAction("createMarkdown")}>
+            <FileText />
+            新建 Markdown 文档
+          </MenuItem>
           {canCreateDirectory ? (
             <MenuItem onClick={() => onAction("createDirectory")}>
               <FolderPlus />
@@ -202,6 +209,10 @@ function ContextMenuContent({
         </>
       ) : (
         <>
+          <MenuItem onClick={() => onAction("createMarkdown")}>
+            <FileText />
+            新建 Markdown 文档
+          </MenuItem>
           <MenuItem onClick={() => onAction("createDirectory")}>
             <FolderPlus />
             新建文件夹
@@ -273,7 +284,7 @@ function CreateMarkdownDialog({
           <NativeDialogHeader>
             <NativeDialogTitle>新建 Markdown 文档</NativeDialogTitle>
             <NativeDialogDescription>
-              默认创建在当前选中目录内；如果当前选中的是文件，则创建在它的同级目录；如果还没有选中节点，则创建到工作区根目录。
+              默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。
             </NativeDialogDescription>
           </NativeDialogHeader>
           <NativeDialogPanel>
@@ -374,7 +385,7 @@ function CreateDirectoryDialog({
         <NativeDialogHeader>
           <NativeDialogTitle>新建文件夹</NativeDialogTitle>
           <NativeDialogDescription>
-            默认创建在当前选中目录内；如果当前选中的是文件，则创建在它的同级目录；如果还没有选中节点，则创建到工作区根目录。
+            默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。
           </NativeDialogDescription>
         </NativeDialogHeader>
         <NativeDialogPanel>
@@ -527,7 +538,7 @@ function FileTreeNode({
   loadingPaths: Set<string>;
   node: ExplorerNode;
   onContextAction: (
-    action: "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
     node: ExplorerNode,
   ) => void;
   onExpandDirectory: (node: ExplorerNode) => void;
@@ -692,7 +703,6 @@ export function FileExplorerSidebar({
 }: FileExplorerSidebarProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [createMarkdownDialogOpen, setCreateMarkdownDialogOpen] = useState(false);
   const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 
   useEffect(() => {
@@ -750,10 +760,18 @@ export function FileExplorerSidebar({
   const canPasteToRoot = useMemo(() => Boolean(root && clipboard), [clipboard, root]);
 
   const handleContextAction = async (
-    action: "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
     node: ExplorerNode | null,
   ) => {
-    if (!node && action !== "createDirectory" && action !== "paste") {
+    if (!node && action !== "createMarkdown" && action !== "createDirectory" && action !== "paste") {
+      return;
+    }
+
+    if (action === "createMarkdown") {
+      setPendingAction({
+        targetPath: node?.path ?? null,
+        type: "createMarkdown",
+      });
       return;
     }
 
@@ -814,7 +832,12 @@ export function FileExplorerSidebar({
                   type: "createDirectory",
                 })
               }
-              onCreateMarkdown={() => setCreateMarkdownDialogOpen(true)}
+              onCreateMarkdown={() =>
+                setPendingAction({
+                  targetPath: selectedPath,
+                  type: "createMarkdown",
+                })
+              }
             />
             <Button
               aria-label="刷新当前文件夹"
@@ -892,9 +915,19 @@ export function FileExplorerSidebar({
 
       <CreateMarkdownDialog
         busy={createBusy}
-        onOpenChange={setCreateMarkdownDialogOpen}
-        onCreateMarkdown={onCreateMarkdown}
-        open={createMarkdownDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingAction(null);
+          }
+        }}
+        onCreateMarkdown={async (fileName) => {
+          if (pendingAction?.type !== "createMarkdown") {
+            return;
+          }
+
+          await onCreateMarkdown(fileName, pendingAction.targetPath);
+        }}
+        open={pendingAction?.type === "createMarkdown"}
       />
 
       <CreateDirectoryDialog

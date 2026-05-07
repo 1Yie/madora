@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import packageJson from "../../../../package.json";
 import { AboutStat } from "@/components/system/setting/shared";
+import { ExternalLinkAnchor } from "@/components/ui/external-link";
 
 type AppInfo = {
   identifier: string;
@@ -17,6 +18,9 @@ const FALLBACK_APP_INFO: AppInfo = {
   tauriVersion: "-",
   version: packageJson.version,
 };
+
+const WEBSITE_URL = "https://madora.ichiyo.in";
+const SOURCE_CODE_URL = "https://github.com/1Yie/madora";
 
 async function readAppInfo(): Promise<AppInfo> {
   try {
@@ -60,7 +64,7 @@ export function AboutSettings() {
               </h1>
               <div className="space-y-2">
                 <h1 className="text-4xl font-medium tracking-tight mb-4">
-                  Markdown editing
+                  Markdown editing,
                   <br />
                   <span className="text-muted-foreground">powered by AI</span>
                 </h1>
@@ -70,6 +74,16 @@ export function AboutSettings() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <AboutStat label="Version" value={appInfo.version} />
             <AboutStat label="By" value="ichiyo" />
+            <AboutStat
+              label="Website"
+              value={<ExternalLinkAnchor href={WEBSITE_URL}>{WEBSITE_URL}</ExternalLinkAnchor>}
+            />
+            <AboutStat
+              label="Source Code"
+              value={
+                <ExternalLinkAnchor href={SOURCE_CODE_URL}>{SOURCE_CODE_URL}</ExternalLinkAnchor>
+              }
+            />
           </div>
         </div>
       </section>

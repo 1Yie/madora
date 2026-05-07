@@ -21,7 +21,13 @@ export function SettingsSectionCard({
   );
 }
 
-export function AboutStat({ label, value }: { label: string; value: string }) {
+export function AboutStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div className="rounded-xl border border-border bg-background px-4 py-3">
       <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</div>

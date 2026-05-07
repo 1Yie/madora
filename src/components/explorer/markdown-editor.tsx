@@ -1,33 +1,42 @@
+import type { SaveMode } from "@/components/system/ai-settings-provider";
 import { useEditor } from "@/hooks/use-editor";
 import { Spinner } from "@/components/ui/spinner";
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
+type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 type MarkdownEditorProps = {
   onChange: (value: string) => void;
+  onSave: () => void;
+  saveMode: SaveMode;
   saveStatus: SaveStatus;
   title?: string;
   value: string;
 };
 
-function getSaveStatusText(saveStatus: SaveStatus): string {
+function getSaveStatusText(saveStatus: SaveStatus, saveMode: SaveMode): string {
   switch (saveStatus) {
+    case "dirty":
+      return "未保存，按 Ctrl / Cmd + S 保存";
     case "saving":
       return "正在保存...";
     case "saved":
       return "已保存";
+    case "error":
+      return "保存失败";
     default:
-      return "编辑文本自动保存";
+      return saveMode === "manual" ? "手动保存（Ctrl / Cmd + S）" : "编辑文本自动保存";
   }
 }
 
 export function MarkdownEditor({
   onChange,
+  onSave,
+  saveMode,
   saveStatus,
   title,
   value,
 }: MarkdownEditorProps) {
-  const { editorRef } = useEditor({ onChange, title, value });
+  const { editorRef } = useEditor({ onChange, onSave, title, value });
   const characterCount = Array.from(value).length;
 
   return (
@@ -38,7 +47,7 @@ export function MarkdownEditor({
           {saveStatus === "saving" ? (
             <Spinner className="size-3.5 shrink-0 flex-none text-primary" />
           ) : null}
-          <span className="truncate">{getSaveStatusText(saveStatus)}</span>
+          <span className="truncate">{getSaveStatusText(saveStatus, saveMode)}</span>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-muted-foreground tabular-nums">
           <span>{characterCount} 字符</span>

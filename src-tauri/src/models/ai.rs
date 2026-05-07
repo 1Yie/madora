@@ -36,8 +36,8 @@ pub struct CompletionResult {
 pub struct AiCompletionConfig {
     pub api_key: String,
     pub api_url: Option<String>,
-    pub fim_enabled: bool,
     pub model: Option<String>,
+    pub smart_routing_enabled: bool,
 }
 
 #[derive(Deserialize)]

@@ -64,7 +64,7 @@ function renderPlainText(code: string): string {
 }
 
 export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockProps) {
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
   const [html, setHtml] = useState<string>(renderPlainText(code));
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
       try {
         const nextHtml = await codeToHtml(code, {
           lang: normalizedLanguage,
-          theme: getShikiTheme(theme),
+          theme: getShikiTheme(resolvedTheme),
           transformers: [
             {
               pre(node) {
@@ -110,7 +110,7 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
     return () => {
       cancelled = true;
     };
-  }, [code, language, theme]);
+  }, [code, language, resolvedTheme]);
 
   return (
     <div

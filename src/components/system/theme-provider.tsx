@@ -6,9 +6,13 @@ import {
   type ReactNode,
 } from "react";
 
-export type Theme = "light" | "dark";
+import { useMediaQuery } from "@/hooks/use-media-query";
+
+export type Theme = "system" | "light" | "dark";
+export type ResolvedTheme = "light" | "dark";
 
 type ThemeContextValue = {
+  resolvedTheme: ResolvedTheme;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -20,33 +24,48 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getInitialTheme(): Theme {
   if (typeof window === "undefined") {
-    return "light";
+    return "system";
   }
 
-  return window.localStorage.getItem(THEME_STORAGE_KEY) === "dark"
-    ? "dark"
-    : "light";
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+
+  if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "system") {
+    return storedTheme;
+  }
+
+  return "system";
+}
+
+function resolveTheme(theme: Theme, prefersDark: boolean): ResolvedTheme {
+  if (theme === "system") {
+    return prefersDark ? "dark" : "light";
+  }
+
+  return theme;
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const prefersDark = useMediaQuery("(prefers-color-scheme: dark)");
+  const resolvedTheme = resolveTheme(theme, prefersDark);
 
   useEffect(() => {
     const root = document.documentElement;
 
-    root.classList.toggle("dark", theme === "dark");
-    root.style.colorScheme = theme;
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.style.colorScheme = resolvedTheme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
+  }, [resolvedTheme, theme]);
 
   return (
     <ThemeContext.Provider
       value={{
+        resolvedTheme,
         theme,
         setTheme,
         toggleTheme: () => {
           setTheme((currentTheme) =>
-            currentTheme === "light" ? "dark" : "light",
+            resolveTheme(currentTheme, prefersDark) === "dark" ? "light" : "dark",
           );
         },
       }}

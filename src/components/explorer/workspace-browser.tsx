@@ -7,6 +7,7 @@ import { showErrorToast } from "@/components/ui/toast";
 
 import {
   getParentPath,
+  isSameOrDescendantPath,
   joinExplorerPath,
   remapPathPrefix,
   replacePathBaseName,
@@ -18,6 +19,7 @@ import type {
 } from "./types";
 
 const WORKSPACE_ROOT_STORAGE_KEY = "madora-workspace-root-path";
+const LAST_OPEN_FILE_STORAGE_KEY = "madora-last-open-file-path";
 const SIDEBAR_WIDTH_STORAGE_KEY = "madora-workspace-sidebar-width";
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
@@ -124,6 +126,22 @@ function getPathDepth(path: string): number {
   return path.replace(/\\/g, "/").split("/").filter(Boolean).length;
 }
 
+function getAncestorDirectoryPaths(rootPath: string, targetPath: string): string[] {
+  if (!isSameOrDescendantPath(targetPath, rootPath)) {
+    return [];
+  }
+
+  const paths: string[] = [];
+  let currentPath = getParentPath(targetPath);
+
+  while (currentPath && currentPath !== rootPath) {
+    paths.unshift(currentPath);
+    currentPath = getParentPath(currentPath);
+  }
+
+  return paths;
+}
+
 export function WorkspaceBrowser() {
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
   const [root, setRoot] = useState<ExplorerNode | null>(null);
@@ -160,6 +178,15 @@ export function WorkspaceBrowser() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, selectedFile.path);
+  }, [selectedFile]);
 
   useEffect(() => {
     if (!sidebarError) {
@@ -218,9 +245,14 @@ export function WorkspaceBrowser() {
     nextRoot: ExplorerNode,
     preferredSelectedPath: string | null,
   ) => {
-    const nextSelectedNode = preferredSelectedPath
-      ? findNodeByPath(nextRoot, preferredSelectedPath)
-      : null;
+    const { node: nextSelectedNode, root: resolvedRoot } = await resolveNodeFromPath(
+      nextRoot,
+      preferredSelectedPath,
+    );
+
+    if (resolvedRoot !== nextRoot) {
+      setRoot(resolvedRoot);
+    }
 
     if (!nextSelectedNode) {
       clearSelectionAndPreview();
@@ -234,6 +266,40 @@ export function WorkspaceBrowser() {
 
     setSelectedNodePath(nextSelectedNode.path);
     clearPreviewState();
+  };
+
+  const resolveNodeFromPath = async (
+    nextRoot: ExplorerNode,
+    targetPath: string | null,
+  ): Promise<{ node: ExplorerNode | null; root: ExplorerNode }> => {
+    if (!targetPath || !isSameOrDescendantPath(targetPath, nextRoot.path)) {
+      return {
+        node: null,
+        root: nextRoot,
+      };
+    }
+
+    let resolvedRoot = nextRoot;
+
+    for (const directoryPath of getAncestorDirectoryPaths(nextRoot.path, targetPath)) {
+      const directoryNode = findNodeByPath(resolvedRoot, directoryPath);
+
+      if (!directoryNode || directoryNode.kind !== "directory" || directoryNode.loaded) {
+        continue;
+      }
+
+      const children = await invoke<ExplorerNode[]>("read_workspace_directory", {
+        directoryPath,
+        rootPath: nextRoot.path,
+      });
+
+      resolvedRoot = replaceDirectoryChildren(resolvedRoot, directoryPath, children);
+    }
+
+    return {
+      node: findNodeByPath(resolvedRoot, targetPath),
+      root: resolvedRoot,
+    };
   };
 
   const loadPreview = async (file: ExplorerNode) => {
@@ -340,14 +406,22 @@ export function WorkspaceBrowser() {
       }
 
       setLoadingPaths(new Set());
-      setRoot(nextRoot);
       setClipboard(null);
-      window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
 
-      const firstFile = findFirstFile(nextRoot);
+      const savedLastOpenFilePath = window.localStorage.getItem(LAST_OPEN_FILE_STORAGE_KEY);
+      const { node: nextSelectedFile, root: resolvedRoot } = await resolveNodeFromPath(
+        nextRoot,
+        savedLastOpenFilePath,
+      );
 
-      if (firstFile) {
-        void loadPreview(firstFile);
+      setRoot(resolvedRoot);
+      window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, resolvedRoot.path);
+
+      const fileToOpen =
+        nextSelectedFile?.kind === "file" ? nextSelectedFile : findFirstFile(resolvedRoot);
+
+      if (fileToOpen) {
+        void loadPreview(fileToOpen);
       } else {
         clearSelectionAndPreview();
       }
@@ -383,13 +457,13 @@ export function WorkspaceBrowser() {
     }
   };
 
-  const createMarkdownDocument = async (fileName: string) => {
+  const createMarkdownDocument = async (fileName: string, targetPath: string | null) => {
     if (!root) {
       return;
     }
 
     const rootPath = root.path;
-    const destinationDirectory = resolveDestinationDirectory(selectedNodePath) ?? rootPath;
+    const destinationDirectory = resolveDestinationDirectory(targetPath) ?? rootPath;
     const selectedDirectory = resolveDestinationDirectory(selectedNodePath);
     const trimmedFileName = fileName.trim();
     const createdPath = joinExplorerPath(
@@ -404,7 +478,7 @@ export function WorkspaceBrowser() {
       await invoke<ExplorerNode>("create_markdown_file", {
         fileName,
         rootPath,
-        selectedPath: selectedNodePath,
+        selectedPath: targetPath,
       });
       const nextRoot = await refreshDirectories(root, [destinationDirectory, selectedDirectory]);
 
@@ -489,6 +563,12 @@ export function WorkspaceBrowser() {
         });
       }
 
+      if (nextSelectedPath) {
+        window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, nextSelectedPath);
+      } else {
+        window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+      }
+
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
     } catch (error) {
       const message = getErrorMessage(error);
@@ -524,6 +604,12 @@ export function WorkspaceBrowser() {
 
       if (clipboard && nextClipboardPath === null) {
         setClipboard(null);
+      }
+
+      if (nextSelectedPath) {
+        window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, nextSelectedPath);
+      } else {
+        window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
       }
 
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
@@ -583,6 +669,13 @@ export function WorkspaceBrowser() {
       setLoadingPaths(new Set());
       setRoot(nextRoot);
       setClipboard(null);
+
+      if (nextSelectedPath) {
+        window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, nextSelectedPath);
+      } else {
+        window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+      }
+
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
     } catch (error) {
       const message = getErrorMessage(error);
@@ -633,6 +726,7 @@ export function WorkspaceBrowser() {
 
   useEffect(() => {
     const savedRootPath = window.localStorage.getItem(WORKSPACE_ROOT_STORAGE_KEY);
+    const savedLastOpenFilePath = window.localStorage.getItem(LAST_OPEN_FILE_STORAGE_KEY);
 
     if (!savedRootPath) {
       return;
@@ -654,14 +748,24 @@ export function WorkspaceBrowser() {
         }
 
         setLoadingPaths(new Set());
-        setRoot(nextRoot);
         setClipboard(null);
-        window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
+        const { node: nextSelectedFile, root: resolvedRoot } = await resolveNodeFromPath(
+          nextRoot,
+          savedLastOpenFilePath,
+        );
 
-        const firstFile = findFirstFile(nextRoot);
+        if (!active) {
+          return;
+        }
 
-        if (firstFile) {
-          void loadPreview(firstFile);
+        setRoot(resolvedRoot);
+        window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, resolvedRoot.path);
+
+        const fileToOpen =
+          nextSelectedFile?.kind === "file" ? nextSelectedFile : findFirstFile(resolvedRoot);
+
+        if (fileToOpen) {
+          void loadPreview(fileToOpen);
         } else {
           clearSelectionAndPreview();
         }
@@ -670,6 +774,7 @@ export function WorkspaceBrowser() {
           return;
         }
 
+        window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
         window.localStorage.removeItem(WORKSPACE_ROOT_STORAGE_KEY);
         setRoot(null);
         setClipboard(null);
