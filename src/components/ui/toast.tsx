@@ -9,6 +9,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import type React from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -51,6 +52,49 @@ function upsertReplayClassName(toast: {
   return isEven ? "animate-toast-success-even" : "animate-toast-success-odd";
 }
 
+function getTopNativeDialogHost(): HTMLDialogElement | null {
+  const dialogs = Array.from(
+    document.querySelectorAll<HTMLDialogElement>("dialog[data-native-dialog-host='true']"),
+  );
+
+  for (let index = dialogs.length - 1; index >= 0; index -= 1) {
+    const dialog = dialogs[index];
+
+    if (dialog.open) {
+      return dialog;
+    }
+  }
+
+  return null;
+}
+
+function useToastPortalContainer() {
+  const [container, setContainer] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const syncContainer = () => {
+      setContainer(getTopNativeDialogHost());
+    };
+
+    syncContainer();
+
+    const observer = new MutationObserver(syncContainer);
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["open"],
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return container;
+}
+
 function Toasts({
   position,
   portalProps,
@@ -60,9 +104,10 @@ function Toasts({
 }): React.ReactElement {
   const { toasts } = Toast.useToastManager();
   const swipeDirection = getSwipeDirection(position);
+  const container = useToastPortalContainer();
 
   return (
-    <Toast.Portal data-slot="toast-portal" {...portalProps}>
+    <Toast.Portal container={container} data-slot="toast-portal" {...portalProps}>
       <Toast.Viewport
         className={cn(
           "fixed z-60 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",

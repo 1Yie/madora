@@ -82,12 +82,6 @@ function findNodeByPath(node: ExplorerNode, path: string): ExplorerNode | null {
   return null;
 }
 
-function findFileByPath(node: ExplorerNode, path: string): ExplorerNode | null {
-  const match = findNodeByPath(node, path);
-
-  return match?.kind === "file" ? match : null;
-}
-
 function replaceDirectoryChildren(
   node: ExplorerNode,
   directoryPath: string,
@@ -126,9 +120,14 @@ function getErrorMessage(error: unknown): string {
   return "发生了未知错误";
 }
 
+function getPathDepth(path: string): number {
+  return path.replace(/\\/g, "/").split("/").filter(Boolean).length;
+}
+
 export function WorkspaceBrowser() {
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
   const [root, setRoot] = useState<ExplorerNode | null>(null);
+  const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<ExplorerNode | null>(null);
   const [preview, setPreview] = useState<FilePreviewData | null>(null);
   const [sidebarError, setSidebarError] = useState<string | null>(null);
@@ -147,10 +146,15 @@ export function WorkspaceBrowser() {
 
   const clearPreviewState = () => {
     previewRequestId.current += 1;
-    setSelectedFile(null);
     setPreview(null);
     setPreviewError(null);
     setPreviewLoading(false);
+    setSelectedFile(null);
+  };
+
+  const clearSelectionAndPreview = () => {
+    setSelectedNodePath(null);
+    clearPreviewState();
   };
 
   useEffect(() => {
@@ -214,21 +218,28 @@ export function WorkspaceBrowser() {
     nextRoot: ExplorerNode,
     preferredSelectedPath: string | null,
   ) => {
-    const nextSelectedFile = preferredSelectedPath
-      ? findFileByPath(nextRoot, preferredSelectedPath)
+    const nextSelectedNode = preferredSelectedPath
+      ? findNodeByPath(nextRoot, preferredSelectedPath)
       : null;
 
-    if (nextSelectedFile) {
-      await loadPreview(nextSelectedFile);
+    if (!nextSelectedNode) {
+      clearSelectionAndPreview();
       return;
     }
 
+    if (nextSelectedNode.kind === "file") {
+      await loadPreview(nextSelectedNode);
+      return;
+    }
+
+    setSelectedNodePath(nextSelectedNode.path);
     clearPreviewState();
   };
 
   const loadPreview = async (file: ExplorerNode) => {
     const requestId = previewRequestId.current + 1;
     previewRequestId.current = requestId;
+    setSelectedNodePath(file.path);
     setSelectedFile(file);
     setPreview(null);
     setPreviewError(null);
@@ -257,6 +268,16 @@ export function WorkspaceBrowser() {
     }
   };
 
+  const selectNode = async (node: ExplorerNode) => {
+    if (node.kind === "directory") {
+      setSelectedNodePath(node.path);
+      clearPreviewState();
+      return;
+    }
+
+    await loadPreview(node);
+  };
+
   const resolveDestinationDirectory = (targetPath: string | null): string | null => {
     if (!root) {
       return null;
@@ -277,6 +298,34 @@ export function WorkspaceBrowser() {
     }
 
     return getParentPath(targetNode.path) ?? root.path;
+  };
+
+  const refreshDirectories = async (
+    currentRoot: ExplorerNode,
+    directoryPaths: Array<string | null>,
+  ) => {
+    let nextRoot = currentRoot;
+    const rootPath = currentRoot.path;
+    const pathsToRefresh = [...new Set(directoryPaths.filter((path): path is string => Boolean(path)))].sort(
+      (left, right) => getPathDepth(left) - getPathDepth(right),
+    );
+
+    for (const directoryPath of pathsToRefresh) {
+      const directoryNode = findNodeByPath(nextRoot, directoryPath);
+
+      if (!directoryNode || directoryNode.kind !== "directory") {
+        continue;
+      }
+
+      const children = await invoke<ExplorerNode[]>("read_workspace_directory", {
+        directoryPath,
+        rootPath,
+      });
+
+      nextRoot = replaceDirectoryChildren(nextRoot, directoryPath, children);
+    }
+
+    return nextRoot;
   };
 
   const openFolder = async () => {
@@ -300,7 +349,7 @@ export function WorkspaceBrowser() {
       if (firstFile) {
         void loadPreview(firstFile);
       } else {
-        clearPreviewState();
+        clearSelectionAndPreview();
       }
     } catch (error) {
       setSidebarError(getErrorMessage(error));
@@ -326,7 +375,7 @@ export function WorkspaceBrowser() {
       setRoot(nextRoot);
       setSidebarError(null);
       window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
-      void syncSelectionWithRoot(nextRoot, selectedFile?.path ?? null);
+      void syncSelectionWithRoot(nextRoot, selectedNodePath);
     } catch (error) {
       setSidebarError(getErrorMessage(error));
     } finally {
@@ -340,7 +389,8 @@ export function WorkspaceBrowser() {
     }
 
     const rootPath = root.path;
-    const destinationDirectory = resolveDestinationDirectory(selectedFile?.path ?? null) ?? rootPath;
+    const destinationDirectory = resolveDestinationDirectory(selectedNodePath) ?? rootPath;
+    const selectedDirectory = resolveDestinationDirectory(selectedNodePath);
     const trimmedFileName = fileName.trim();
     const createdPath = joinExplorerPath(
       destinationDirectory,
@@ -354,15 +404,44 @@ export function WorkspaceBrowser() {
       await invoke<ExplorerNode>("create_markdown_file", {
         fileName,
         rootPath,
-        selectedPath: selectedFile?.path ?? null,
+        selectedPath: selectedNodePath,
       });
-      const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
-        rootPath,
-      });
+      const nextRoot = await refreshDirectories(root, [destinationDirectory, selectedDirectory]);
 
-      setLoadingPaths(new Set());
       setRoot(nextRoot);
       await syncSelectionWithRoot(nextRoot, createdPath);
+    } catch (error) {
+      const message = getErrorMessage(error);
+
+      setSidebarError(message);
+      throw new Error(message);
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const createDirectory = async (directoryName: string, targetPath: string | null) => {
+    if (!root) {
+      return;
+    }
+
+    const rootPath = root.path;
+    const destinationDirectory = resolveDestinationDirectory(targetPath) ?? rootPath;
+    const selectedDirectory = resolveDestinationDirectory(selectedNodePath);
+
+    setCreateBusy(true);
+    setSidebarError(null);
+
+    try {
+      await invoke<ExplorerNode>("create_workspace_directory", {
+        directoryName,
+        rootPath,
+        selectedPath: destinationDirectory,
+      });
+      const nextRoot = await refreshDirectories(root, [destinationDirectory, selectedDirectory]);
+
+      setRoot(nextRoot);
+      await syncSelectionWithRoot(nextRoot, selectedNodePath);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -379,7 +458,7 @@ export function WorkspaceBrowser() {
     }
 
     const renamedPath = replacePathBaseName(targetPath, newName.trim());
-    const nextSelectedPath = remapPathPrefix(selectedFile?.path ?? null, targetPath, renamedPath);
+    const nextSelectedPath = remapPathPrefix(selectedNodePath, targetPath, renamedPath);
     const nextClipboardPath = remapPathPrefix(clipboard?.item.path ?? null, targetPath, renamedPath);
 
     setOperationBusy("rename");
@@ -426,7 +505,8 @@ export function WorkspaceBrowser() {
       return;
     }
 
-    const nextSelectedPath = remapPathPrefix(selectedFile?.path ?? null, targetPath, null);
+    const parentDirectory = getParentPath(targetPath) ?? root.path;
+    const nextSelectedPath = remapPathPrefix(selectedNodePath, targetPath, null);
     const nextClipboardPath = remapPathPrefix(clipboard?.item.path ?? null, targetPath, null);
 
     setOperationBusy("delete");
@@ -438,11 +518,8 @@ export function WorkspaceBrowser() {
         targetPath,
       });
 
-      const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
-        rootPath: root.path,
-      });
+      const nextRoot = await refreshDirectories(root, [parentDirectory]);
 
-      setLoadingPaths(new Set());
       setRoot(nextRoot);
 
       if (clipboard && nextClipboardPath === null) {
@@ -484,7 +561,7 @@ export function WorkspaceBrowser() {
 
     const movedPath = joinExplorerPath(destinationDirectory, clipboard.item.name);
     const nextSelectedPath = remapPathPrefix(
-      selectedFile?.path ?? null,
+      selectedNodePath,
       clipboard.item.path,
       movedPath,
     );
@@ -586,7 +663,7 @@ export function WorkspaceBrowser() {
         if (firstFile) {
           void loadPreview(firstFile);
         } else {
-          clearPreviewState();
+          clearSelectionAndPreview();
         }
       } catch (error) {
         if (!active) {
@@ -596,7 +673,7 @@ export function WorkspaceBrowser() {
         window.localStorage.removeItem(WORKSPACE_ROOT_STORAGE_KEY);
         setRoot(null);
         setClipboard(null);
-        clearPreviewState();
+        clearSelectionAndPreview();
         setSidebarError(getErrorMessage(error));
       } finally {
         if (active) {
@@ -621,6 +698,7 @@ export function WorkspaceBrowser() {
           clipboard={clipboard}
           createBusy={createBusy}
           loadingPaths={loadingPaths}
+          onCreateDirectory={createDirectory}
           onCreateMarkdown={createMarkdownDocument}
           onCutNode={cutNode}
           onDeleteNode={deleteNode}
@@ -629,10 +707,10 @@ export function WorkspaceBrowser() {
           onRefresh={refreshFolder}
           onRenameNode={renameNode}
           onExpandDirectory={expandDirectory}
-          onSelectFile={loadPreview}
+          onSelectNode={selectNode}
           operationBusy={operationBusy}
           root={root}
-          selectedPath={selectedFile?.path ?? null}
+          selectedPath={selectedNodePath}
         />
         <div
           aria-label="调整侧边栏宽度"

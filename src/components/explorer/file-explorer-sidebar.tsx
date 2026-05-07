@@ -5,6 +5,7 @@ import {
   FilePenLine,
   FileText,
   Folder,
+  FolderPlus,
   FolderOpen,
   LoaderCircle,
   Plus,
@@ -22,6 +23,12 @@ import {
   MenuItem,
   MenuSeparator,
 } from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/menu";
 import {
   Empty,
   EmptyDescription,
@@ -44,6 +51,7 @@ import { showErrorToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 import { explorerTopSectionHeightClassName } from "./layout";
+import { getParentPath } from "./path-utils";
 import type { ExplorerClipboardItem, ExplorerNode } from "./types";
 
 type WorkspaceOperation = "create" | "rename" | "delete" | "move" | null;
@@ -60,6 +68,7 @@ type FileExplorerSidebarProps = {
   } | null;
   loadingPaths: Set<string>;
   onCreateMarkdown: (fileName: string) => Promise<void>;
+  onCreateDirectory: (directoryName: string, targetPath: string | null) => Promise<void>;
   onCutNode: (node: ExplorerNode) => void;
   onDeleteNode: (targetPath: string) => Promise<void>;
   onOpenFolder: () => void;
@@ -67,10 +76,11 @@ type FileExplorerSidebarProps = {
   onRefresh: () => void;
   onRenameNode: (targetPath: string, newName: string) => Promise<void>;
   onExpandDirectory: (node: ExplorerNode) => void;
-  onSelectFile: (node: ExplorerNode) => void;
+  onSelectNode: (node: ExplorerNode) => void;
 };
 
 type PendingAction =
+  | { type: "createDirectory"; node: ExplorerNode | null; targetPath: string | null }
   | { type: "rename"; node: ExplorerNode }
   | { type: "delete"; node: ExplorerNode }
   | null;
@@ -97,26 +107,54 @@ function collectAncestorPaths(root: ExplorerNode, targetPath: string): string[] 
   return ancestors;
 }
 
-function collectExpandedDirectoriesNeedingLoad(
-  node: ExplorerNode,
-  expandedPaths: Set<string>,
-): ExplorerNode[] {
-  if (node.kind === "file") {
-    return [];
-  }
-
-  const directories: ExplorerNode[] = [];
-
-  if (expandedPaths.has(node.path) && node.hasChildren && !node.loaded) {
-    directories.push(node);
-    return directories;
+function findNodeByPath(node: ExplorerNode, path: string): ExplorerNode | null {
+  if (node.path === path) {
+    return node;
   }
 
   for (const child of node.children) {
-    directories.push(...collectExpandedDirectoriesNeedingLoad(child, expandedPaths));
+    if (child.path === path) {
+      return child;
+    }
+
+    if (child.kind === "directory") {
+      const match = findNodeByPath(child, path);
+
+      if (match) {
+        return match;
+      }
+    }
   }
 
-  return directories;
+  return null;
+}
+
+function resolveCreateTargetNode(root: ExplorerNode | null, selectedPath: string | null) {
+  if (!root) {
+    return null;
+  }
+
+  if (!selectedPath) {
+    return root;
+  }
+
+  const selectedNode = findNodeByPath(root, selectedPath);
+
+  if (!selectedNode) {
+    return root;
+  }
+
+  if (selectedNode.kind === "directory") {
+    return selectedNode;
+  }
+
+  const parentPath = getParentPath(selectedNode.path);
+
+  if (!parentPath) {
+    return root;
+  }
+
+  return findNodeByPath(root, parentPath) ?? root;
 }
 
 function ContextMenuContent({
@@ -128,14 +166,22 @@ function ContextMenuContent({
 }: {
   clipboard: FileExplorerSidebarProps["clipboard"];
   includeNodeActions?: boolean;
-  onAction: (action: "cut" | "delete" | "rename" | "paste") => void;
+  onAction: (action: "createDirectory" | "cut" | "delete" | "rename" | "paste") => void;
   pasteDisabled: boolean;
   target: ExplorerNode | null;
 }) {
+  const canCreateDirectory = target === null || target.kind === "directory";
+
   return (
     <ContextMenuPopup align="start" sideOffset={6}>
       {target && includeNodeActions ? (
         <>
+          {canCreateDirectory ? (
+            <MenuItem onClick={() => onAction("createDirectory")}>
+              <FolderPlus />
+              新建文件夹
+            </MenuItem>
+          ) : null}
           <MenuItem onClick={() => onAction("rename")}>
             <FilePenLine />
             重命名
@@ -155,10 +201,16 @@ function ContextMenuContent({
           </MenuItem>
         </>
       ) : (
-        <MenuItem disabled={pasteDisabled} onClick={() => onAction("paste")}>
-          <Clipboard />
-          粘贴到当前目录
-        </MenuItem>
+        <>
+          <MenuItem onClick={() => onAction("createDirectory")}>
+            <FolderPlus />
+            新建文件夹
+          </MenuItem>
+          <MenuItem disabled={pasteDisabled} onClick={() => onAction("paste")}>
+            <Clipboard />
+            粘贴到当前目录
+          </MenuItem>
+        </>
       )}
       {clipboard ? (
         <div className="px-2 py-1.5 text-muted-foreground text-xs">
@@ -171,14 +223,15 @@ function ContextMenuContent({
 
 function CreateMarkdownDialog({
   busy,
-  disabled,
+  onOpenChange,
   onCreateMarkdown,
+  open,
 }: {
   busy: boolean;
-  disabled: boolean;
+  onOpenChange: (open: boolean) => void;
   onCreateMarkdown: (fileName: string) => Promise<void>;
+  open: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
 
   const reset = () => {
@@ -186,7 +239,7 @@ function CreateMarkdownDialog({
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
+    onOpenChange(nextOpen);
 
     if (!nextOpen) {
       reset();
@@ -206,21 +259,11 @@ function CreateMarkdownDialog({
     try {
       await onCreateMarkdown(trimmedFileName);
       handleOpenChange(false);
-    } catch {
-    }
+    } catch {}
   };
 
   return (
     <>
-      <Button
-        aria-label="新建 Markdown 文档"
-        disabled={disabled}
-        onClick={() => handleOpenChange(true)}
-        size="icon-sm"
-        variant="ghost"
-      >
-        <Plus className="size-4" />
-      </Button>
       <NativeDialog onOpenChange={handleOpenChange} open={open}>
         <form className="flex min-h-0 flex-col" onSubmit={handleSubmit}>
           <NativeDialogClose
@@ -230,7 +273,7 @@ function CreateMarkdownDialog({
           <NativeDialogHeader>
             <NativeDialogTitle>新建 Markdown 文档</NativeDialogTitle>
             <NativeDialogDescription>
-              默认创建在当前选中文件的同级目录；如果还没选中文件，则创建到工作区根目录。
+              默认创建在当前选中目录内；如果当前选中的是文件，则创建在它的同级目录；如果还没有选中节点，则创建到工作区根目录。
             </NativeDialogDescription>
           </NativeDialogHeader>
           <NativeDialogPanel>
@@ -245,11 +288,7 @@ function CreateMarkdownDialog({
             </div>
           </NativeDialogPanel>
           <NativeDialogFooter>
-            <Button
-              disabled={busy}
-              onClick={() => handleOpenChange(false)}
-              variant="outline"
-            >
+            <Button disabled={busy} onClick={() => handleOpenChange(false)} variant="outline">
               取消
             </Button>
             <Button loading={busy} type="submit">
@@ -259,6 +298,106 @@ function CreateMarkdownDialog({
         </form>
       </NativeDialog>
     </>
+  );
+}
+
+function CreateEntryMenu({
+  busy,
+  disabled,
+  onCreateDirectory,
+  onCreateMarkdown,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  onCreateDirectory: () => void;
+  onCreateMarkdown: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button aria-label="新建" size="icon-sm" variant="ghost" />}
+        disabled={disabled}
+      >
+        <Plus className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center" sideOffset={6}>
+        <DropdownMenuItem disabled={busy} onClick={onCreateMarkdown}>
+          <FileText />
+          新建 Markdown 文档
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={busy} onClick={onCreateDirectory}>
+          <FolderPlus />
+          新建文件夹
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function CreateDirectoryDialog({
+  busy,
+  node,
+  onClose,
+  onConfirm,
+}: {
+  busy: boolean;
+  node: ExplorerNode | null | undefined;
+  onClose: () => void;
+  onConfirm: (directoryName: string) => Promise<void>;
+}) {
+  const [directoryName, setDirectoryName] = useState("");
+
+  useEffect(() => {
+    setDirectoryName("");
+  }, [node]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedDirectoryName = directoryName.trim();
+
+    if (!trimmedDirectoryName) {
+      showErrorToast("创建失败", "请输入文件夹名称");
+      return;
+    }
+
+    try {
+      await onConfirm(trimmedDirectoryName);
+      onClose();
+    } catch {}
+  };
+
+  return (
+    <NativeDialog onOpenChange={(open) => !open && onClose()} open={node !== undefined}>
+      <form className="flex min-h-0 flex-col" onSubmit={handleSubmit}>
+        <NativeDialogClose className="absolute end-2 top-2" onClick={onClose} />
+        <NativeDialogHeader>
+          <NativeDialogTitle>新建文件夹</NativeDialogTitle>
+          <NativeDialogDescription>
+            默认创建在当前选中目录内；如果当前选中的是文件，则创建在它的同级目录；如果还没有选中节点，则创建到工作区根目录。
+          </NativeDialogDescription>
+        </NativeDialogHeader>
+        <NativeDialogPanel>
+          <div className="space-y-3">
+            <Input
+              autoFocus
+              nativeInput
+              onChange={(event) => setDirectoryName(event.target.value)}
+              placeholder="new-folder"
+              value={directoryName}
+            />
+          </div>
+        </NativeDialogPanel>
+        <NativeDialogFooter>
+          <Button disabled={busy} onClick={onClose} variant="outline">
+            取消
+          </Button>
+          <Button loading={busy} type="submit">
+            创建
+          </Button>
+        </NativeDialogFooter>
+      </form>
+    </NativeDialog>
   );
 }
 
@@ -292,8 +431,7 @@ function RenameNodeDialog({
     try {
       await onConfirm(trimmedName);
       onClose();
-    } catch {
-    }
+    } catch {}
   };
 
   return (
@@ -308,14 +446,14 @@ function RenameNodeDialog({
         </NativeDialogHeader>
         <NativeDialogPanel>
           <div className="space-y-3">
-              <Input
-                autoFocus
-                nativeInput
-                onChange={(event) => setName(event.target.value)}
-                value={name}
-              />
-            </div>
-          </NativeDialogPanel>
+            <Input
+              autoFocus
+              nativeInput
+              onChange={(event) => setName(event.target.value)}
+              value={name}
+            />
+          </div>
+        </NativeDialogPanel>
         <NativeDialogFooter>
           <Button disabled={busy} onClick={onClose} variant="outline">
             取消
@@ -379,7 +517,7 @@ function FileTreeNode({
   node,
   onContextAction,
   onExpandDirectory,
-  onSelectFile,
+  onSelectNode,
   selectedPath,
   toggleDirectory,
 }: {
@@ -388,55 +526,70 @@ function FileTreeNode({
   expandedPaths: Set<string>;
   loadingPaths: Set<string>;
   node: ExplorerNode;
-  onContextAction: (action: "cut" | "delete" | "rename" | "paste", node: ExplorerNode) => void;
+  onContextAction: (
+    action: "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    node: ExplorerNode,
+  ) => void;
   onExpandDirectory: (node: ExplorerNode) => void;
-  onSelectFile: (node: ExplorerNode) => void;
+  onSelectNode: (node: ExplorerNode) => void;
   selectedPath: string | null;
   toggleDirectory: (path: string) => void;
 }) {
   const isDirectory = node.kind === "directory";
+  const isSelected = selectedPath === node.path;
   const isExpanded = isDirectory && expandedPaths.has(node.path);
   const pasteDisabled = !clipboard || clipboard.item.path === node.path;
 
   if (isDirectory) {
     const isLoading = loadingPaths.has(node.path);
-    const canExpand = node.hasChildren;
 
     return (
       <div>
         <ContextMenuRoot>
           <ContextMenuTrigger>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={() => {
-                if (canExpand) {
+            <div className="flex w-full items-center gap-1" style={{ paddingLeft: `${depth * 14 + 8}px` }}>
+              <button
+                aria-label={isExpanded ? `收起 ${node.name}` : `展开 ${node.name}`}
+                type="button"
+                className={cn(
+                  "flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors",
+                  isSelected
+                    ? "text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                )}
+                onClick={() => {
                   const nextExpanded = !isExpanded;
                   toggleDirectory(node.path);
 
                   if (nextExpanded && !node.loaded && !isLoading) {
                     onExpandDirectory(node);
                   }
-                }
-              }}
-              style={{ paddingLeft: `${depth * 14 + 10}px` }}
-            >
-              {canExpand ? (
+                }}
+              >
                 <ChevronRight
                   className={cn("size-4 shrink-0 transition-transform", isExpanded && "rotate-90")}
                 />
-              ) : (
-                <span className="size-4 shrink-0" />
-              )}
-              {isLoading ? (
-                <LoaderCircle className="size-4 shrink-0 animate-spin" />
-              ) : isExpanded ? (
-                <FolderOpen className="size-4 shrink-0" />
-              ) : (
-                <Folder className="size-4 shrink-0" />
-              )}
-              <span className="truncate">{node.name}</span>
-            </button>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                  isSelected
+                    ? "bg-sidebar-accent/70 text-sidebar-accent-foreground ring-1 ring-inset ring-sidebar-border"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                )}
+                onClick={() => onSelectNode(node)}
+              >
+                {isLoading ? (
+                  <LoaderCircle className="size-4 shrink-0 animate-spin" />
+                ) : isExpanded ? (
+                  <FolderOpen className="size-4 shrink-0" />
+                ) : (
+                  <Folder className="size-4 shrink-0" />
+                )}
+                <span className="truncate">{node.name}</span>
+              </button>
+            </div>
           </ContextMenuTrigger>
           <ContextMenuContent
             clipboard={clipboard}
@@ -460,7 +613,7 @@ function FileTreeNode({
                     node={child}
                     onContextAction={onContextAction}
                     onExpandDirectory={onExpandDirectory}
-                    onSelectFile={onSelectFile}
+                    onSelectNode={onSelectNode}
                     selectedPath={selectedPath}
                     toggleDirectory={toggleDirectory}
                   />
@@ -470,7 +623,7 @@ function FileTreeNode({
                   className="rounded-md px-2 py-3 text-muted-foreground text-xs"
                   style={{ paddingLeft: `${depth * 14 + 44}px` }}
                 >
-                  此文件夹为空
+                  未找到文件
                 </div>
               )
             ) : (
@@ -488,7 +641,6 @@ function FileTreeNode({
     );
   }
 
-  const isSelected = selectedPath === node.path;
   const Icon = node.fileKind === "image" ? FileImage : FileText;
 
   return (
@@ -502,7 +654,7 @@ function FileTreeNode({
               ? "bg-sidebar-primary text-sidebar-primary-foreground"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           )}
-          onClick={() => onSelectFile(node)}
+          onClick={() => onSelectNode(node)}
           style={{ paddingLeft: `${depth * 14 + 32}px` }}
         >
           <Icon className="size-4 shrink-0" />
@@ -528,6 +680,7 @@ export function FileExplorerSidebar({
   clipboard,
   loadingPaths,
   onCreateMarkdown,
+  onCreateDirectory,
   onCutNode,
   onDeleteNode,
   onOpenFolder,
@@ -535,10 +688,12 @@ export function FileExplorerSidebar({
   onRefresh,
   onRenameNode,
   onExpandDirectory,
-  onSelectFile,
+  onSelectNode,
 }: FileExplorerSidebarProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [createMarkdownDialogOpen, setCreateMarkdownDialogOpen] = useState(false);
+  const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 
   useEffect(() => {
     if (!root) {
@@ -561,18 +716,6 @@ export function FileExplorerSidebar({
     });
   }, [root, selectedPath]);
 
-  useEffect(() => {
-    if (!root) {
-      return;
-    }
-
-    for (const directory of collectExpandedDirectoriesNeedingLoad(root, expandedPaths)) {
-      if (!loadingPaths.has(directory.path)) {
-        onExpandDirectory(directory);
-      }
-    }
-  }, [expandedPaths, loadingPaths, onExpandDirectory, root]);
-
   const toggleDirectory = (path: string) => {
     setExpandedPaths((currentPaths) => {
       const nextPaths = new Set(currentPaths);
@@ -590,10 +733,19 @@ export function FileExplorerSidebar({
   const canPasteToRoot = useMemo(() => Boolean(root && clipboard), [clipboard, root]);
 
   const handleContextAction = async (
-    action: "cut" | "delete" | "rename" | "paste",
+    action: "createDirectory" | "cut" | "delete" | "rename" | "paste",
     node: ExplorerNode | null,
   ) => {
-    if (!node && action !== "paste") {
+    if (!node && action !== "createDirectory" && action !== "paste") {
+      return;
+    }
+
+    if (action === "createDirectory") {
+      setPendingAction({
+        node: node?.kind === "directory" ? node : null,
+        targetPath: node?.kind === "directory" ? node.path : null,
+        type: "createDirectory",
+      });
       return;
     }
 
@@ -614,8 +766,7 @@ export function FileExplorerSidebar({
 
     try {
       await onPasteNode(node?.path ?? null);
-    } catch {
-    }
+    } catch {}
   };
 
   return (
@@ -636,10 +787,17 @@ export function FileExplorerSidebar({
             <Button loading={busy} onClick={onOpenFolder} size="sm" variant="outline">
               <Folder className="size-4" />
             </Button>
-            <CreateMarkdownDialog
+            <CreateEntryMenu
               busy={createBusy}
-              disabled={!root}
-              onCreateMarkdown={onCreateMarkdown}
+              disabled={!root || busy || createBusy || operationBusy !== null}
+              onCreateDirectory={() =>
+                setPendingAction({
+                  node: createTargetNode,
+                  targetPath: selectedPath,
+                  type: "createDirectory",
+                })
+              }
+              onCreateMarkdown={() => setCreateMarkdownDialogOpen(true)}
             />
             <Button
               aria-label="刷新当前文件夹"
@@ -667,14 +825,14 @@ export function FileExplorerSidebar({
                     expandedPaths={expandedPaths}
                     loadingPaths={loadingPaths}
                     node={root}
-                    onContextAction={(action, node) => {
-                      void handleContextAction(action, node);
-                    }}
-                    onExpandDirectory={onExpandDirectory}
-                    onSelectFile={onSelectFile}
-                    selectedPath={selectedPath}
-                    toggleDirectory={toggleDirectory}
-                  />
+                   onContextAction={(action, node) => {
+                     void handleContextAction(action, node);
+                   }}
+                   onExpandDirectory={onExpandDirectory}
+                   onSelectNode={onSelectNode}
+                   selectedPath={selectedPath}
+                   toggleDirectory={toggleDirectory}
+                 />
                 </div>
               ) : (
                 <Empty className="px-4 py-10">
@@ -712,6 +870,32 @@ export function FileExplorerSidebar({
           }
 
           await onRenameNode(pendingAction.node.path, newName);
+        }}
+      />
+
+      <CreateMarkdownDialog
+        busy={createBusy}
+        onOpenChange={setCreateMarkdownDialogOpen}
+        onCreateMarkdown={onCreateMarkdown}
+        open={createMarkdownDialogOpen}
+      />
+
+      <CreateDirectoryDialog
+        busy={createBusy}
+        node={pendingAction?.type === "createDirectory" ? pendingAction.node : undefined}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async (directoryName) => {
+          if (pendingAction?.type !== "createDirectory") {
+            return;
+          }
+
+          const targetNode = pendingAction.node;
+
+          if (targetNode) {
+            setExpandedPaths((currentPaths) => new Set(currentPaths).add(targetNode.path));
+          }
+
+          await onCreateDirectory(directoryName, pendingAction.targetPath);
         }}
       />
 

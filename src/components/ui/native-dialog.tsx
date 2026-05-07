@@ -182,6 +182,7 @@ export function NativeDialog({
         "m-auto max-h-[85vh] min-h-0 w-full max-w-lg overflow-hidden rounded-2xl border bg-popover p-0 text-popover-foreground shadow-lg outline-none backdrop:bg-black/32 backdrop:backdrop-blur-sm",
         className,
       )}
+      data-native-dialog-host="true"
       onClick={handleBackdropClick}
       onClose={handleClose}
     >
