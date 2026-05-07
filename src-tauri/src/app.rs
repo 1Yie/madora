@@ -1,6 +1,9 @@
 use std::env;
 
-use crate::commands::{ai, explorer, project, utility};
+use crate::{
+    commands::{ai, explorer, project, utility},
+    services::ai::AiCompletionService,
+};
 
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -10,6 +13,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
             utility::greet,
             explorer::pick_workspace_folder,

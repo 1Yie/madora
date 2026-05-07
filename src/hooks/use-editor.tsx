@@ -8,23 +8,23 @@ import {
   StateEffect,
 } from "@codemirror/state";
 import {
+  Decoration,
   EditorView,
   keymap,
   showTooltip,
   tooltips,
+  WidgetType,
   type Tooltip,
   type TooltipView,
   type ViewUpdate,
 } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import { basicSetup } from "codemirror";
-import { Sparkles } from "lucide-react";
 import { createRoot, type Root } from "react-dom/client";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
 
 type UseEditorOptions = {
   onChange?: (value: string) => void;
@@ -52,9 +52,15 @@ type CompletionTooltipState = {
   tone: CompletionStatusTone;
 };
 
+type CompletionPreviewState = {
+  pos: number;
+  text: string;
+};
+
+const AUTO_COMPLETION_DEBOUNCE_MS = 300;
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
-const EMPTY_COMPLETION_MESSAGE = "暂无建议，按 Tab 重新尝试";
+const DEFAULT_READY_MESSAGE = "AI 自动补全已就绪";
 const COMPLETION_TOOLTIP_EDGE_MARGIN = 12;
 
 function getCompletionTooltipSpace(view: EditorView) {
@@ -89,6 +95,7 @@ function getCompletionTooltipShiftX(
 }
 
 const setCompletionTooltipEffect = StateEffect.define<CompletionTooltipState | null>();
+const setCompletionPreviewEffect = StateEffect.define<CompletionPreviewState | null>();
 
 const completionTooltipField = StateField.define<CompletionTooltipState | null>({
   create() {
@@ -132,6 +139,77 @@ const completionTooltipField = StateField.define<CompletionTooltipState | null>(
     }),
 });
 
+class CompletionPreviewWidget extends WidgetType {
+  constructor(private readonly text: string) {
+    super();
+  }
+
+  eq(other: CompletionPreviewWidget) {
+    return other.text === this.text;
+  }
+
+  toDOM() {
+    const dom = document.createElement("span");
+
+    dom.className = "cm-fim-preview";
+    dom.setAttribute("aria-hidden", "true");
+    dom.textContent = this.text;
+
+    return dom;
+  }
+
+  ignoreEvent() {
+    return true;
+  }
+}
+
+const completionPreviewField = StateField.define<CompletionPreviewState | null>({
+  create() {
+    return null;
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setCompletionPreviewEffect)) {
+        return effect.value;
+      }
+    }
+
+    if (!value) {
+      return null;
+    }
+
+    if (transaction.docChanged) {
+      return null;
+    }
+
+    if (
+      transaction.selection ||
+      transaction.state.selection.ranges.length !== 1 ||
+      !transaction.state.selection.main.empty ||
+      transaction.state.selection.main.head !== value.pos
+    ) {
+      return null;
+    }
+
+    return value;
+  },
+  provide: (field) =>
+    EditorView.decorations.compute([field], (state) => {
+      const preview = state.field(field);
+
+      if (!preview || preview.text.length === 0) {
+        return Decoration.set([]);
+      }
+
+      return Decoration.set([
+        Decoration.widget({
+          side: 1,
+          widget: new CompletionPreviewWidget(preview.text),
+        }).range(preview.pos),
+      ]);
+    }),
+});
+
 const editorTheme = EditorView.theme(
   {
     "&": {
@@ -166,6 +244,17 @@ const editorTheme = EditorView.theme(
     },
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--color-primary)",
+    },
+    ".cm-fim-preview": {
+      color: "var(--color-muted-foreground)",
+      fontStyle: "italic",
+      fontWeight: "100",
+      opacity: "0.6",
+      overflowWrap: "anywhere",
+      pointerEvents: "none",
+      userSelect: "none",
+      verticalAlign: "top",
+      whiteSpace: "pre-wrap",
     },
     ".cm-tooltip.cm-fim-tooltip": {
       border: "none",
@@ -214,7 +303,7 @@ function getDefaultCompletionStatus(
   }
 
   return {
-    message: "按 Tab 触发 AI 补全",
+    message: DEFAULT_READY_MESSAGE,
     tone: "muted",
   };
 }
@@ -241,33 +330,14 @@ function shouldTriggerCompletion(
 function shouldShowCompletionTooltip(
   view: EditorView,
   status: CompletionStatus,
-  enabled: boolean,
-  apiKey: string,
 ): boolean {
-  if (!view.hasFocus) {
-    return false;
-  }
-
-  if (status.tone === "success") {
-    return false;
-  }
-
-  if (status.tone === "error") {
-    return true;
-  }
-
-  return shouldTriggerCompletion(view.state, enabled, apiKey);
+  return view.hasFocus && status.tone === "loading";
 }
 
-function renderCompletionTooltip(
-  view: EditorView,
-  status: CompletionStatus,
-  enabled: boolean,
-  apiKey: string,
-) {
-  const nextTooltip = shouldShowCompletionTooltip(view, status, enabled, apiKey)
+function renderCompletionTooltip(view: EditorView, status: CompletionStatus) {
+  const nextTooltip = shouldShowCompletionTooltip(view, status)
     ? {
-        message: status.message,
+        message: "",
         pos: view.state.selection.main.head,
         tone: status.tone,
       }
@@ -288,39 +358,33 @@ function renderCompletionTooltip(
   });
 }
 
-function CompletionTooltipContent({ status }: { status: CompletionTooltipState }) {
+function renderCompletionPreview(
+  view: EditorView,
+  preview: CompletionPreviewState | null,
+) {
+  const currentPreview = view.state.field(completionPreviewField);
+
+  if (
+    currentPreview?.pos === preview?.pos &&
+    currentPreview?.text === preview?.text
+  ) {
+    return;
+  }
+
+  view.dispatch({
+    effects: setCompletionPreviewEffect.of(preview),
+  });
+}
+
+function CompletionTooltipContent() {
   return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-3 rounded-full border bg-background px-4 py-2 text-sm shadow-lg",
-        status.tone === "error" &&
-          "border-destructive/30 text-destructive",
-        status.tone === "loading" &&
-          "border-primary/20 text-foreground",
-        status.tone === "muted" &&
-          "border-border/70 text-foreground",
-        status.tone === "success" &&
-          "border-emerald-500/30 text-emerald-600 dark:text-emerald-400",
-      )}
-    >
-      {status.tone === "loading" ? (
-        <Spinner className="size-4 shrink-0 text-primary" />
-      ) : (
-        <Sparkles
-          className={cn(
-            "size-4 shrink-0",
-            status.tone === "error" && "text-destructive",
-            status.tone === "muted" && "text-primary",
-            status.tone === "success" && "text-emerald-600 dark:text-emerald-400",
-          )}
-        />
-      )}
-      <span className="whitespace-nowrap">{status.message}</span>
+    <div className="inline-flex items-center justify-center rounded-full border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
+      <Spinner className="size-3 text-primary/85" />
     </div>
   );
 }
 
-function createCompletionTooltipView(status: CompletionTooltipState): TooltipView {
+function createCompletionTooltipView(_status: CompletionTooltipState): TooltipView {
   const dom = document.createElement("div");
   let root: Root | null = createRoot(dom);
   let currentShiftX = 0;
@@ -330,13 +394,13 @@ function createCompletionTooltipView(status: CompletionTooltipState): TooltipVie
   dom.style.border = "none";
   dom.style.boxShadow = "none";
   dom.style.padding = "0";
-  root.render(<CompletionTooltipContent status={status} />);
+  root.render(<CompletionTooltipContent />);
 
   return {
     dom,
     offset: {
       x: 0,
-      y: 12,
+      y: 8,
     },
     positioned(space) {
       if (currentShiftX !== 0) {
@@ -354,6 +418,7 @@ function createCompletionTooltipView(status: CompletionTooltipState): TooltipVie
 }
 
 export function useEditor({ onChange, title, value }: UseEditorOptions) {
+  const autoCompletionTimerRef = useRef<number | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const requestIdRef = useRef(0);
@@ -385,8 +450,6 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
     renderCompletionTooltip(
       view,
       completionStatusRef.current,
-      aiSettingsRef.current.enabled,
-      aiSettingsRef.current.apiKey,
     );
   });
 
@@ -395,94 +458,164 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
     syncTooltip();
   });
 
-  const requestCompletion = useEffectEvent(async (view: EditorView) => {
-    const settings = aiSettingsRef.current;
+  const syncPreview = useEffectEvent((preview: CompletionPreviewState | null) => {
+    const view = viewRef.current;
 
-    if (!shouldTriggerCompletion(view.state, settings.enabled, settings.apiKey)) {
+    if (!view) {
       return;
     }
 
-    const cursor = view.state.selection.main.head;
-    const docText = view.state.doc.toString();
-    const prompt = docText.slice(Math.max(0, cursor - MAX_PREFIX_CHARS), cursor);
-    const suffix = docText.slice(cursor, cursor + MAX_SUFFIX_CHARS);
-    const requestId = requestIdRef.current + 1;
+    renderCompletionPreview(view, preview);
+  });
 
-    requestIdRef.current = requestId;
-    setCompletionStatus({
-      message: "正在生成 AI 补全...",
-      tone: "loading",
-    });
+  const clearScheduledCompletion = useEffectEvent(() => {
+    if (autoCompletionTimerRef.current === null) {
+      return;
+    }
 
-    try {
-      const result = await invoke<CompletionResultData>("generate_completion", {
-        config: {
-          apiKey: settings.apiKey,
-          apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
-          fimEnabled: settings.fimEnabled,
-          model: settings.model.trim().length > 0 ? settings.model : null,
-        },
-        request: {
-          mode: "auto",
-          prefix: prompt,
-          suffix: suffix.length > 0 ? suffix : null,
-          title: title ?? null,
-        },
-      });
-      const completion = result.text;
+    window.clearTimeout(autoCompletionTimerRef.current);
+    autoCompletionTimerRef.current = null;
+  });
 
-      if (requestId !== requestIdRef.current) {
+  const clearCompletionPreview = useEffectEvent(() => {
+    syncPreview(null);
+  });
+
+  const requestCompletion = useEffectEvent(async (view: EditorView) => {
+      const settings = aiSettingsRef.current;
+
+      if (!shouldTriggerCompletion(view.state, settings.enabled, settings.apiKey)) {
         return;
       }
 
-      const currentView = viewRef.current;
+      const currentPreview = view.state.field(completionPreviewField);
 
-      if (!currentView) {
+      if (currentPreview?.pos === view.state.selection.main.head) {
         return;
       }
 
-      const currentState = currentView.state;
+      const cursor = view.state.selection.main.head;
+      const docText = view.state.doc.toString();
+      const prompt = docText.slice(Math.max(0, cursor - MAX_PREFIX_CHARS), cursor);
+      const suffix = docText.slice(cursor, cursor + MAX_SUFFIX_CHARS);
+      const requestId = requestIdRef.current + 1;
 
-      if (
-        currentState.doc.toString() !== docText ||
-        currentState.selection.ranges.length !== 1 ||
-        !currentState.selection.main.empty ||
-        currentState.selection.main.head !== cursor
-      ) {
-        setCompletionStatus({
-          message: "补全结果已过期，请重新按 Tab",
-          tone: "muted",
-        });
-        return;
-      }
-
-      if (completion.length === 0) {
-        setCompletionStatus({
-          message: EMPTY_COMPLETION_MESSAGE,
-          tone: "muted",
-        });
-        return;
-      }
-
-      currentView.dispatch({
-        changes: {
-          from: cursor,
-          insert: completion,
-        },
-        selection: EditorSelection.cursor(cursor + completion.length),
-      });
-
-      setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
-    } catch (error) {
-      if (requestId !== requestIdRef.current) {
-        return;
-      }
+      requestIdRef.current = requestId;
+      clearScheduledCompletion();
+      clearCompletionPreview();
 
       setCompletionStatus({
-        message: getErrorMessage(error),
-        tone: "error",
+        message: "正在生成 AI 建议...",
+        tone: "loading",
       });
+
+      try {
+        const result = await invoke<CompletionResultData>("generate_completion", {
+          config: {
+            apiKey: settings.apiKey,
+            apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
+            fimEnabled: settings.fimEnabled,
+            model: settings.model.trim().length > 0 ? settings.model : null,
+          },
+          request: {
+            mode: "auto",
+            prefix: prompt,
+            suffix: suffix.length > 0 ? suffix : null,
+            title: title ?? null,
+          },
+        });
+        const completion = result.text;
+
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        const currentView = viewRef.current;
+
+        if (!currentView || !currentView.hasFocus) {
+          return;
+        }
+
+        const currentState = currentView.state;
+
+        if (
+          currentState.doc.toString() !== docText ||
+          currentState.selection.ranges.length !== 1 ||
+          !currentState.selection.main.empty ||
+          currentState.selection.main.head !== cursor
+        ) {
+          return;
+        }
+
+        if (completion.length === 0) {
+          clearCompletionPreview();
+          setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
+          return;
+        }
+
+        renderCompletionPreview(currentView, {
+          pos: cursor,
+          text: completion,
+        });
+
+        setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
+      } catch (error) {
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        clearCompletionPreview();
+        setCompletionStatus({
+          message: getErrorMessage(error),
+          tone: "error",
+        });
+      }
+  });
+
+  const scheduleCompletionRequest = useEffectEvent((view: EditorView) => {
+    clearScheduledCompletion();
+
+    const settings = aiSettingsRef.current;
+
+    if (
+      !view.hasFocus ||
+      !shouldTriggerCompletion(view.state, settings.enabled, settings.apiKey) ||
+      view.state.field(completionPreviewField)
+    ) {
+      return;
     }
+
+    autoCompletionTimerRef.current = window.setTimeout(() => {
+      autoCompletionTimerRef.current = null;
+      void requestCompletion(view);
+    }, AUTO_COMPLETION_DEBOUNCE_MS);
+  });
+
+  const acceptCompletionPreview = useEffectEvent((view: EditorView) => {
+    const preview = view.state.field(completionPreviewField);
+    const cursor = view.state.selection.main.head;
+
+    if (!preview || preview.pos !== cursor || preview.text.length === 0) {
+      return false;
+    }
+
+    clearScheduledCompletion();
+    view.dispatch({
+      changes: {
+        from: cursor,
+        insert: preview.text,
+      },
+      effects: setCompletionPreviewEffect.of(null),
+      selection: EditorSelection.cursor(cursor + preview.text.length),
+    });
+    setCompletionStatus(
+      getDefaultCompletionStatus(
+        aiSettingsRef.current.enabled,
+        aiSettingsRef.current.apiKey,
+      ),
+    );
+
+    return true;
   });
 
   useEffect(() => {
@@ -493,10 +626,21 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
       fimEnabled,
       model,
     };
+    clearScheduledCompletion();
     requestIdRef.current += 1;
+    clearCompletionPreview();
     completionStatusRef.current = getDefaultCompletionStatus(enabled, apiKey);
     syncTooltip();
-  }, [apiKey, apiUrl, enabled, fimEnabled, model, syncTooltip]);
+  }, [
+    apiKey,
+    apiUrl,
+    clearCompletionPreview,
+    clearScheduledCompletion,
+    enabled,
+    fimEnabled,
+    model,
+    syncTooltip,
+  ]);
 
   useEffect(() => {
     if (!editorRef.current) {
@@ -517,26 +661,14 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
             tooltipSpace: getCompletionTooltipSpace,
           }),
           editorTheme,
+          completionPreviewField,
           completionTooltipField,
           Prec.high(
             keymap.of([
               {
                 key: "Tab",
                 run: (activeView) => {
-                  const settings = aiSettingsRef.current;
-
-                  if (
-                    !shouldTriggerCompletion(
-                      activeView.state,
-                      settings.enabled,
-                      settings.apiKey,
-                    )
-                  ) {
-                    return false;
-                  }
-
-                  void requestCompletion(activeView);
-                  return true;
+                  return acceptCompletionPreview(activeView);
                 },
               },
               indentWithTab,
@@ -547,14 +679,35 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
               handleChange(update.state.doc.toString());
             }
 
-            if (
-              completionStatusRef.current.message === EMPTY_COMPLETION_MESSAGE &&
-              (update.docChanged || update.selectionSet)
-            ) {
+            if (update.docChanged || update.selectionSet) {
+              requestIdRef.current += 1;
+
+              if (
+                completionStatusRef.current.tone === "error" ||
+                completionStatusRef.current.tone === "loading"
+              ) {
+                completionStatusRef.current = getDefaultCompletionStatus(
+                  aiSettingsRef.current.enabled,
+                  aiSettingsRef.current.apiKey,
+                );
+              }
+            }
+
+            if (update.focusChanged && !update.view.hasFocus) {
+              clearScheduledCompletion();
+              clearCompletionPreview();
               completionStatusRef.current = getDefaultCompletionStatus(
                 aiSettingsRef.current.enabled,
                 aiSettingsRef.current.apiKey,
               );
+            }
+
+            if (
+              update.docChanged ||
+              update.selectionSet ||
+              (update.focusChanged && update.view.hasFocus)
+            ) {
+              scheduleCompletionRequest(update.view);
             }
 
             if (
@@ -566,8 +719,6 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
               renderCompletionTooltip(
                 update.view,
                 completionStatusRef.current,
-                aiSettingsRef.current.enabled,
-                aiSettingsRef.current.apiKey,
               );
             }
           }),
@@ -576,10 +727,16 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
     });
 
     viewRef.current = view;
-    renderCompletionTooltip(view, completionStatusRef.current, enabled, apiKey);
+    renderCompletionTooltip(view, completionStatusRef.current);
 
     return () => {
       requestIdRef.current += 1;
+
+      if (autoCompletionTimerRef.current !== null) {
+        window.clearTimeout(autoCompletionTimerRef.current);
+        autoCompletionTimerRef.current = null;
+      }
+
       view.destroy();
       viewRef.current = null;
     };

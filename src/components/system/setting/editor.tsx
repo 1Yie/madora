@@ -23,7 +23,7 @@ export function EditorSettings() {
   return (
     <div className="space-y-4">
       <SettingsSectionCard
-        description="使用固定的 chat-prefix / FIM 策略为 Markdown 编辑器提供按 Tab 触发的行内补全。"
+        description="使用固定的 chat-prefix / FIM 策略为 Markdown 编辑器提供自动行内补全。"
         title="AI 补全"
       >
         <div className="space-y-4">
@@ -31,14 +31,14 @@ export function EditorSettings() {
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Sparkles className="size-4" />
-                启用 Tab AI 补全
+                启用 AI 自动补全
               </div>
               <p className="text-xs text-muted-foreground">
-                在编辑器中按
+                输入后会自动请求并展示行内建议；有建议时按
                 <KbdGroup className="mx-1 align-middle">
                   <Kbd>Tab</Kbd>
                 </KbdGroup>
-                触发 FIM 补全；没有补全可用时仍保留原生缩进行为。
+                接受补全；没有建议时仍保留原生缩进行为。
               </p>
             </div>
             <Switch checked={enabled} onCheckedChange={setEnabled} />

@@ -1,5 +1,12 @@
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, MutexGuard},
+    time::{Duration, Instant},
+};
+
 use reqwest::Client;
 use serde_json::json;
+use tokio::sync::Notify;
 
 use crate::models::ai::{
     AiCompletionConfig, CompletionMode, CompletionRequest, CompletionResult, CompletionResultMode,
@@ -8,9 +15,185 @@ use crate::models::ai::{
 
 const DEFAULT_API_URL: &str = "https://api.deepseek.com";
 const DEFAULT_MODEL: &str = "deepseek-v4-pro";
+const FIM_CACHE_MAX_ENTRIES: usize = 128;
+const FIM_CACHE_TTL: Duration = Duration::from_secs(15);
 const MAX_COMPLETION_TOKENS: usize = 512;
 const STOP_SEQUENCES: &[&str] = &["\n\n\n", "\n# ", "\n## "];
 const CHAT_PREFIX_SYSTEM_PROMPT: &str = "You are a professional writer continuing a markdown article. Match the existing voice, tone, and formatting exactly. Maintain any frontmatter, heading hierarchy, list styles, code blocks, or tables present. Output ONLY raw continuation text - no explanations, no meta-commentary, no prefixes like 'Here is the continuation:'. Stop naturally at a paragraph or section boundary.";
+
+pub struct AiCompletionService {
+    client: Client,
+    fim_cache: Mutex<HashMap<FimCacheKey, CachedFimCompletion>>,
+    fim_in_flight: Mutex<HashMap<FimCacheKey, Arc<InFlightFimRequest>>>,
+}
+
+#[derive(Clone, Eq, Hash, PartialEq)]
+struct FimCacheKey {
+    api_url: String,
+    model: String,
+    prefix: String,
+    suffix: Option<String>,
+}
+
+#[derive(Clone)]
+struct CachedFimCompletion {
+    expires_at: Instant,
+    last_accessed_at: Instant,
+    text: String,
+}
+
+struct InFlightFimRequest {
+    notify: Notify,
+    result: Mutex<Option<Result<String, String>>>,
+}
+
+impl AiCompletionService {
+    pub fn new() -> Self {
+        Self {
+            client: Client::new(),
+            fim_cache: Mutex::new(HashMap::new()),
+            fim_in_flight: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn cleanup_fim_cache(cache: &mut HashMap<FimCacheKey, CachedFimCompletion>) {
+    let now = Instant::now();
+
+    cache.retain(|_, entry| entry.expires_at > now);
+
+    if cache.len() <= FIM_CACHE_MAX_ENTRIES {
+        return;
+    }
+
+    let mut keys_by_access_time = cache
+        .iter()
+        .map(|(key, entry)| (key.clone(), entry.last_accessed_at))
+        .collect::<Vec<_>>();
+
+    keys_by_access_time.sort_by_key(|(_, last_accessed_at)| *last_accessed_at);
+
+    for (key, _) in keys_by_access_time
+        .into_iter()
+        .take(cache.len().saturating_sub(FIM_CACHE_MAX_ENTRIES))
+    {
+        cache.remove(&key);
+    }
+}
+
+fn build_fim_cache_key(config: &AiCompletionConfig, request: &CompletionRequest) -> FimCacheKey {
+    FimCacheKey {
+        api_url: resolve_beta_api_url(config.api_url.as_deref()),
+        model: resolve_model(config.model.as_deref()).to_string(),
+        prefix: request.prefix.clone(),
+        suffix: request.suffix.clone(),
+    }
+}
+
+async fn wait_for_in_flight_fim_request(
+    request: &Arc<InFlightFimRequest>,
+) -> Result<String, String> {
+    loop {
+        let notified = request.notify.notified();
+
+        {
+            let result = lock_unpoisoned(&request.result);
+
+            if let Some(result) = result.as_ref() {
+                return result.clone();
+            }
+        }
+
+        notified.await;
+    }
+}
+
+fn get_cached_fim_completion(
+    service: &AiCompletionService,
+    cache_key: &FimCacheKey,
+) -> Option<String> {
+    let mut cache = lock_unpoisoned(&service.fim_cache);
+
+    cleanup_fim_cache(&mut cache);
+
+    let now = Instant::now();
+    let entry = cache.get_mut(cache_key)?;
+
+    entry.last_accessed_at = now;
+
+    Some(entry.text.clone())
+}
+
+fn cache_fim_completion(service: &AiCompletionService, cache_key: FimCacheKey, text: String) {
+    let mut cache = lock_unpoisoned(&service.fim_cache);
+    let now = Instant::now();
+
+    cleanup_fim_cache(&mut cache);
+    cache.insert(
+        cache_key,
+        CachedFimCompletion {
+            expires_at: now + FIM_CACHE_TTL,
+            last_accessed_at: now,
+            text,
+        },
+    );
+    cleanup_fim_cache(&mut cache);
+}
+
+async fn request_cached_fim_completion(
+    service: &AiCompletionService,
+    config: &AiCompletionConfig,
+    request: &CompletionRequest,
+) -> Result<String, String> {
+    let cache_key = build_fim_cache_key(config, request);
+
+    if let Some(text) = get_cached_fim_completion(service, &cache_key) {
+        return Ok(text);
+    }
+
+    let (in_flight_request, is_leader) = {
+        let mut in_flight = lock_unpoisoned(&service.fim_in_flight);
+
+        if let Some(in_flight_request) = in_flight.get(&cache_key) {
+            (in_flight_request.clone(), false)
+        } else {
+            let in_flight_request = Arc::new(InFlightFimRequest {
+                notify: Notify::new(),
+                result: Mutex::new(None),
+            });
+
+            in_flight.insert(cache_key.clone(), in_flight_request.clone());
+
+            (in_flight_request, true)
+        }
+    };
+
+    if !is_leader {
+        return wait_for_in_flight_fim_request(&in_flight_request).await;
+    }
+
+    let result = request_fim_completion(&service.client, config, request).await;
+
+    if let Ok(text) = result.as_ref() {
+        cache_fim_completion(service, cache_key.clone(), text.clone());
+    }
+
+    {
+        let mut shared_result = lock_unpoisoned(&in_flight_request.result);
+        *shared_result = Some(result.clone());
+    }
+
+    in_flight_request.notify.notify_waiters();
+
+    let mut in_flight = lock_unpoisoned(&service.fim_in_flight);
+    in_flight.remove(&cache_key);
+
+    result
+}
 
 fn trim_trailing_slash(url: &str) -> &str {
     url.trim_end_matches('/')
@@ -188,18 +371,17 @@ async fn request_chat_prefix_completion(
 }
 
 pub async fn generate_completion(
+    service: &AiCompletionService,
     config: &AiCompletionConfig,
     request: &CompletionRequest,
 ) -> Result<CompletionResult, String> {
-    let client = Client::new();
-
     match request.mode.unwrap_or(CompletionMode::Auto) {
         CompletionMode::Fim => {
             if !config.fim_enabled {
                 return Err("FIM 补全已在 AI 设置中关闭".to_string());
             }
 
-            let text = request_fim_completion(&client, config, request).await?;
+            let text = request_cached_fim_completion(service, config, request).await?;
 
             Ok(CompletionResult {
                 mode: CompletionResultMode::Fim,
@@ -207,7 +389,7 @@ pub async fn generate_completion(
             })
         }
         CompletionMode::ChatPrefix => {
-            let text = request_chat_prefix_completion(&client, config, request).await?;
+            let text = request_chat_prefix_completion(&service.client, config, request).await?;
 
             Ok(CompletionResult {
                 mode: CompletionResultMode::ChatPrefix,
@@ -216,7 +398,7 @@ pub async fn generate_completion(
         }
         CompletionMode::Auto => {
             if has_suffix(request) && config.fim_enabled {
-                let text = request_fim_completion(&client, config, request).await?;
+                let text = request_cached_fim_completion(service, config, request).await?;
 
                 return Ok(CompletionResult {
                     mode: CompletionResultMode::Fim,
@@ -224,7 +406,7 @@ pub async fn generate_completion(
                 });
             }
 
-            let text = request_chat_prefix_completion(&client, config, request).await?;
+            let text = request_chat_prefix_completion(&service.client, config, request).await?;
 
             Ok(CompletionResult {
                 mode: CompletionResultMode::ChatPrefix,
