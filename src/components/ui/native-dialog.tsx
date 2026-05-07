@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, type HTMLAttributes } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nativeDialogOpenAttr = "data-native-dialog-open";
 const nativeDialogCountAttr = "data-native-dialog-count";
@@ -25,10 +24,7 @@ function lockNativeDialogScrollbars(dialog: HTMLDialogElement | null) {
     );
 
     scrollEls.forEach((el) => {
-      if (dialog?.contains(el)) {
-        return;
-      }
-
+      if (dialog?.contains(el)) return;
       el.setAttribute(nativeDialogPrevOverflowAttr, el.style.overflow);
       el.style.overflow = "hidden";
     });
@@ -83,8 +79,6 @@ export function NativeDialog({
     if (!dialog) return;
 
     if (open && !dialog.open) {
-      // hide document scrollbars while modal is open so the platform scrollbar
-      // doesn't visually overlap the dialog
       try {
         prevOverflowRef.current = document.documentElement.style.overflow || "";
         prevBodyOverflowRef.current = document.body.style.overflow || "";
@@ -96,15 +90,12 @@ export function NativeDialog({
       dialog.showModal();
       requestAnimationFrame(() => {
         const autofocusEl = dialog.querySelector<HTMLElement>("[autofocus]");
-        if (autofocusEl) {
-          autofocusEl.focus();
-        }
+        if (autofocusEl) autofocusEl.focus();
       });
     } else if (!open && dialog.open) {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
-      // restore document overflow
       try {
         if (prevOverflowRef.current !== null) {
           document.documentElement.style.overflow = prevOverflowRef.current;
@@ -157,7 +148,6 @@ export function NativeDialog({
     dialog.addEventListener("cancel", handleCancel);
     return () => {
       dialog.removeEventListener("cancel", handleCancel);
-      // cleanup overflow if dialog is unmounted while open
       try {
         if (prevOverflowRef.current !== null) {
           document.documentElement.style.overflow = prevOverflowRef.current;
@@ -179,7 +169,7 @@ export function NativeDialog({
     <dialog
       ref={dialogRef}
       className={cn(
-        "m-auto max-h-[85vh] min-h-0 w-full max-w-lg overflow-hidden rounded-2xl border bg-popover p-0 text-popover-foreground shadow-lg outline-none backdrop:bg-black/32 backdrop:backdrop-blur-sm",
+        "m-auto max-h-[85vh] min-h-0 w-full max-w-lg overflow-hidden rounded-2xl border bg-popover p-0 text-popover-foreground shadow-lg outline-none backdrop:bg-black/40",
         className,
       )}
       data-native-dialog-host="true"
@@ -197,10 +187,7 @@ export function NativeDialogHeader({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        "flex flex-col gap-2 p-6 max-sm:pb-4",
-        className,
-      )}
+      className={cn("flex flex-col gap-2 p-6 max-sm:pb-4", className)}
       {...props}
     />
   );
@@ -212,10 +199,7 @@ export function NativeDialogTitle({
 }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
-      className={cn(
-        "font-heading font-semibold text-xl leading-none",
-        className,
-      )}
+      className={cn("font-heading font-semibold text-xl leading-none", className)}
       {...props}
     />
   );
@@ -226,10 +210,7 @@ export function NativeDialogDescription({
   ...props
 }: HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p
-      className={cn("text-muted-foreground text-sm", className)}
-      {...props}
-    />
+    <p className={cn("text-muted-foreground text-sm", className)} {...props} />
   );
 }
 
@@ -239,14 +220,11 @@ export function NativeDialogPanel({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <ScrollArea scrollFade>
-      <div
-        className={cn("p-6 pt-1", className)}
-        {...props}
-      >
+    <div className="overflow-y-auto overscroll-contain will-change-transform" style={{ maxHeight: "calc(85vh - 8rem)" }}>
+      <div className={cn("p-6 pt-1", className)} {...props}>
         {children}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -257,7 +235,7 @@ export function NativeDialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end rounded-b-[calc(var(--radius-2xl)-1px)] border-t bg-muted/72 py-4",
+        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end rounded-b-[calc(var(--radius-2xl)-1px)] border-t bg-muted py-4",
         className,
       )}
       {...props}

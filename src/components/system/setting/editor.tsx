@@ -1,30 +1,10 @@
 import { Sparkles } from "lucide-react";
-import { type ReactNode } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
+import { SettingsSectionCard } from "@/components/system/setting/shared";
 import { Input } from "@/components/ui/input";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Switch } from "@/components/ui/switch";
-
-function SettingsSectionCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border bg-card/80 p-4 shadow-xs sm:p-5">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-foreground sm:text-base">{title}</h3>
-        <p className="text-xs text-muted-foreground sm:text-sm">{description}</p>
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
 
 export function EditorSettings() {
   const {
@@ -47,7 +27,7 @@ export function EditorSettings() {
         title="AI 补全"
       >
         <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <Sparkles className="size-4" />
@@ -63,7 +43,7 @@ export function EditorSettings() {
             </div>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
             <div className="space-y-1">
               <div className="text-sm font-medium text-foreground">自动模式启用 FIM</div>
               <p className="text-xs text-muted-foreground">
@@ -93,9 +73,7 @@ export function EditorSettings() {
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Key 仅保存在本机。
-            </p>
+            <p className="text-xs text-muted-foreground">Key 仅保存在本机。</p>
           </label>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-foreground">Model</span>

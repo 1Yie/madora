@@ -716,6 +716,23 @@ export function FileExplorerSidebar({
     });
   }, [root, selectedPath]);
 
+  useEffect(() => {
+    if (!root) {
+      return;
+    }
+
+    // Refresh rebuilds directory nodes as unloaded placeholders; hydrate expanded folders again.
+    for (const path of expandedPaths) {
+      const node = findNodeByPath(root, path);
+
+      if (!node || node.kind !== "directory" || node.loaded || loadingPaths.has(path)) {
+        continue;
+      }
+
+      void onExpandDirectory(node);
+    }
+  }, [expandedPaths, loadingPaths, onExpandDirectory, root]);
+
   const toggleDirectory = (path: string) => {
     setExpandedPaths((currentPaths) => {
       const nextPaths = new Set(currentPaths);

@@ -2,6 +2,7 @@ import { getIdentifier, getName, getTauriVersion, getVersion } from "@tauri-apps
 import { useEffect, useState } from "react";
 
 import packageJson from "../../../../package.json";
+import { AboutStat } from "@/components/system/setting/shared";
 
 type AppInfo = {
   identifier: string;
@@ -17,57 +18,6 @@ const FALLBACK_APP_INFO: AppInfo = {
   version: packageJson.version,
 };
 
-// function SettingsSectionCard({
-//   title,
-//   description,
-//   children,
-// }: {
-//   title: string;
-//   description: string;
-//   children: ReactNode;
-// }) {
-//   return (
-//     <section className="rounded-2xl border bg-card/80 p-4 shadow-xs sm:p-5">
-//       <div className="space-y-1">
-//         <h3 className="text-sm font-semibold text-foreground sm:text-base">{title}</h3>
-//         <p className="text-xs text-muted-foreground sm:text-sm">{description}</p>
-//       </div>
-//       <div className="mt-4">{children}</div>
-//     </section>
-//   );
-// }
-
-function AboutStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
-      <div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
-      <div className="mt-2 break-all text-sm font-medium text-foreground sm:text-base">{value}</div>
-    </div>
-  );
-}
-
-// function CapabilityCard({
-//   icon: Icon,
-//   title,
-//   description,
-// }: {
-//   icon: typeof FileText;
-//   title: string;
-//   description: string;
-// }) {
-//   return (
-//     <div className="rounded-xl border border-border/70 bg-background/70 p-4">
-//       <div className="flex items-center gap-3 text-foreground">
-//         <span className="rounded-lg border border-border/70 bg-muted/40 p-2">
-//           <Icon className="size-4" />
-//         </span>
-//         <h4 className="text-sm font-medium">{title}</h4>
-//       </div>
-//       <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
-//     </div>
-//   );
-// }
-
 async function readAppInfo(): Promise<AppInfo> {
   try {
     const [name, version, tauriVersion, identifier] = await Promise.all([
@@ -77,12 +27,7 @@ async function readAppInfo(): Promise<AppInfo> {
       getIdentifier(),
     ]);
 
-    return {
-      identifier,
-      name,
-      tauriVersion,
-      version,
-    };
+    return { identifier, name, tauriVersion, version };
   } catch {
     return FALLBACK_APP_INFO;
   }
@@ -95,10 +40,7 @@ export function AboutSettings() {
     let active = true;
 
     void readAppInfo().then((nextInfo) => {
-      if (!active) {
-        return;
-      }
-
+      if (!active) return;
       setAppInfo(nextInfo);
     });
 
@@ -125,7 +67,6 @@ export function AboutSettings() {
               </div>
             </div>
           </div>
-
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <AboutStat label="Version" value={appInfo.version} />
             <AboutStat label="By" value="ichiyo" />
