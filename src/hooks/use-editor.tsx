@@ -11,6 +11,7 @@ import {
   EditorView,
   keymap,
   showTooltip,
+  tooltips,
   type Tooltip,
   type TooltipView,
   type ViewUpdate,
@@ -54,6 +55,38 @@ type CompletionTooltipState = {
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
 const EMPTY_COMPLETION_MESSAGE = "暂无建议，按 Tab 重新尝试";
+const COMPLETION_TOOLTIP_EDGE_MARGIN = 12;
+
+function getCompletionTooltipSpace(view: EditorView) {
+  const rect = view.dom.getBoundingClientRect();
+
+  return {
+    bottom: rect.bottom,
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+  };
+}
+
+function getCompletionTooltipShiftX(
+  dom: HTMLElement,
+  space: {
+    left: number;
+    right: number;
+  },
+): number {
+  const rect = dom.getBoundingClientRect();
+  const rightGap = space.right - rect.right;
+  const leftGap = rect.left - space.left;
+
+  if (rightGap >= COMPLETION_TOOLTIP_EDGE_MARGIN || leftGap <= 0) {
+    return 0;
+  }
+
+  const shiftLeft = Math.min(COMPLETION_TOOLTIP_EDGE_MARGIN - rightGap, leftGap);
+
+  return Math.round(-shiftLeft);
+}
 
 const setCompletionTooltipEffect = StateEffect.define<CompletionTooltipState | null>();
 
@@ -91,7 +124,7 @@ const completionTooltipField = StateField.define<CompletionTooltipState | null>(
         above: false,
         arrow: false,
         pos: tooltipState.pos,
-        strictSide: true,
+        strictSide: false,
         create() {
           return createCompletionTooltipView(tooltipState);
         },
@@ -259,15 +292,15 @@ function CompletionTooltipContent({ status }: { status: CompletionTooltipState }
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-3 rounded-full border px-4 py-2 text-sm shadow-lg backdrop-blur-sm",
+        "inline-flex items-center gap-3 rounded-full border bg-background px-4 py-2 text-sm shadow-lg",
         status.tone === "error" &&
-          "border-destructive/20 bg-destructive/8 text-destructive",
+          "border-destructive/30 text-destructive",
         status.tone === "loading" &&
-          "border-primary/20 bg-background/95 text-foreground",
+          "border-primary/20 text-foreground",
         status.tone === "muted" &&
-          "border-border/70 bg-background/95 text-foreground",
+          "border-border/70 text-foreground",
         status.tone === "success" &&
-          "border-emerald-500/20 bg-background/95 text-emerald-600 dark:text-emerald-400",
+          "border-emerald-500/30 text-emerald-600 dark:text-emerald-400",
       )}
     >
       {status.tone === "loading" ? (
@@ -290,6 +323,7 @@ function CompletionTooltipContent({ status }: { status: CompletionTooltipState }
 function createCompletionTooltipView(status: CompletionTooltipState): TooltipView {
   const dom = document.createElement("div");
   let root: Root | null = createRoot(dom);
+  let currentShiftX = 0;
 
   dom.className = "cm-fim-tooltip";
   dom.style.backgroundColor = "transparent";
@@ -303,6 +337,14 @@ function createCompletionTooltipView(status: CompletionTooltipState): TooltipVie
     offset: {
       x: 0,
       y: 12,
+    },
+    positioned(space) {
+      if (currentShiftX !== 0) {
+        dom.style.transform = "";
+      }
+
+      currentShiftX = getCompletionTooltipShiftX(dom, space);
+      dom.style.transform = currentShiftX === 0 ? "" : `translateX(${currentShiftX}px)`;
     },
     destroy() {
       root?.unmount();
@@ -471,6 +513,9 @@ export function useEditor({ onChange, title, value }: UseEditorOptions) {
           basicSetup,
           markdown(),
           EditorView.lineWrapping,
+          tooltips({
+            tooltipSpace: getCompletionTooltipSpace,
+          }),
           editorTheme,
           completionTooltipField,
           Prec.high(
