@@ -169,7 +169,9 @@ async fn request_chat_prefix_completion(
             .await
             .unwrap_or_else(|_| "无法读取错误详情".to_string());
 
-        return Err(format!("Chat prefix completion API error ({status}): {body}"));
+        return Err(format!(
+            "Chat prefix completion API error ({status}): {body}"
+        ));
     }
 
     let payload = response
