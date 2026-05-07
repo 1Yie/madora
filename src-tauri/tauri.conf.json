@@ -12,13 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "Madora AI",
+        "title": "Madora",
         "width": 1000,
         "height": 800,
         "minWidth": 600,
         "minHeight": 400,
         "decorations": false,
-        "transparent": true
+        "transparent": false
       }
     ],
     "security": {
