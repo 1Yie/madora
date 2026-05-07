@@ -1,5 +1,5 @@
 import { Window } from "@tauri-apps/api/window";
-import { X, Square, Minus, Sparkles } from "lucide-react";
+import { X, Square, Minus } from "lucide-react";
 
 import { SettingsDialog } from "@/components/system/settings-dialog";
 
@@ -12,7 +12,6 @@ export default function Titlebar() {
       className="flex h-9 items-center justify-between border-b border-border bg-muted/80 text-foreground select-none"
     >
       <div className="flex items-center ml-4 gap-2 pointer-events-none">
-        <Sparkles size={14} className="text-primary" />
         <span className="text-sm font-medium text-muted-foreground">Madora</span>
       </div>
       <div className="flex items-center h-full">
