@@ -72,6 +72,22 @@ pub async fn create_markdown_file(
 }
 
 #[tauri::command]
+pub async fn create_workspace_directory(
+    root_path: String,
+    selected_path: Option<String>,
+    directory_name: String,
+) -> Result<ExplorerNode, String> {
+    let root_path = PathBuf::from(root_path);
+    let selected_path = selected_path.map(PathBuf::from);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::create_workspace_directory(&root_path, selected_path.as_deref(), &directory_name)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn write_workspace_file(path: String, content: String) -> Result<(), String> {
     let file_path = PathBuf::from(path);
 

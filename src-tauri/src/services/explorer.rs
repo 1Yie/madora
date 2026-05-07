@@ -120,6 +120,20 @@ fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
     Ok(format!("{trimmed_file_name}.md"))
 }
 
+fn normalize_directory_name(directory_name: &str) -> Result<String, String> {
+    let trimmed_directory_name = directory_name.trim();
+
+    if trimmed_directory_name.is_empty() {
+        return Err("请输入文件夹名称".to_string());
+    }
+
+    if trimmed_directory_name.contains('/') || trimmed_directory_name.contains('\\') {
+        return Err("文件夹名称不能包含路径分隔符".to_string());
+    }
+
+    Ok(trimmed_directory_name.to_string())
+}
+
 fn resolve_create_directory(root: &Path, selected_path: Option<&Path>) -> Result<PathBuf, String> {
     let candidate_directory = match selected_path {
         Some(path) if path.is_dir() => path.to_path_buf(),
@@ -249,6 +263,29 @@ pub fn create_markdown_file(
         &file_path,
         ExplorerFileKind::Markdown,
     ))
+}
+
+pub fn create_workspace_directory(
+    root_path: &Path,
+    selected_path: Option<&Path>,
+    directory_name: &str,
+) -> Result<ExplorerNode, String> {
+    let target_directory = resolve_create_directory(root_path, selected_path)?;
+    let normalized_directory_name = normalize_directory_name(directory_name)?;
+    let directory_path = target_directory.join(normalized_directory_name);
+
+    fs::create_dir(&directory_path).map_err(|error| error.to_string())?;
+
+    Ok(ExplorerNode {
+        name: path_name(&directory_path),
+        path: directory_path.to_string_lossy().into_owned(),
+        relative_path: relative_path(root_path, &directory_path),
+        kind: ExplorerNodeKind::Directory,
+        file_kind: None,
+        has_children: false,
+        loaded: false,
+        children: Vec::new(),
+    })
 }
 
 fn ensure_existing_path(path: &Path) -> Result<(), String> {
