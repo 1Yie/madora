@@ -40,6 +40,7 @@ import {
   NativeDialogTitle,
 } from "@/components/ui/native-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { showErrorToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 import { explorerTopSectionHeightClassName } from "./layout";
@@ -73,18 +74,6 @@ type PendingAction =
   | { type: "rename"; node: ExplorerNode }
   | { type: "delete"; node: ExplorerNode }
   | null;
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
-  return "发生了未知错误";
-}
 
 function collectAncestorPaths(root: ExplorerNode, targetPath: string): string[] {
   const ancestors: string[] = [];
@@ -191,10 +180,8 @@ function CreateMarkdownDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
-    setError(null);
     setFileName("");
   };
 
@@ -212,17 +199,14 @@ function CreateMarkdownDialog({
     const trimmedFileName = fileName.trim();
 
     if (!trimmedFileName) {
-      setError("请输入文件名");
+      showErrorToast("创建失败", "请输入文件名");
       return;
     }
-
-    setError(null);
 
     try {
       await onCreateMarkdown(trimmedFileName);
       handleOpenChange(false);
-    } catch (nextError) {
-      setError(getErrorMessage(nextError));
+    } catch {
     }
   };
 
@@ -254,14 +238,10 @@ function CreateMarkdownDialog({
               <Input
                 autoFocus
                 nativeInput
-                onChange={(event) => {
-                  setError(null);
-                  setFileName(event.target.value);
-                }}
+                onChange={(event) => setFileName(event.target.value)}
                 placeholder="untitled.md"
                 value={fileName}
               />
-              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
           </NativeDialogPanel>
           <NativeDialogFooter>
@@ -294,11 +274,9 @@ function RenameNodeDialog({
   onConfirm: (newName: string) => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setName(node?.name ?? "");
-    setError(null);
   }, [node]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -307,15 +285,14 @@ function RenameNodeDialog({
     const trimmedName = name.trim();
 
     if (!trimmedName) {
-      setError("请输入名称");
+      showErrorToast("重命名失败", "请输入名称");
       return;
     }
 
     try {
       await onConfirm(trimmedName);
       onClose();
-    } catch (nextError) {
-      setError(getErrorMessage(nextError));
+    } catch {
     }
   };
 
@@ -331,18 +308,14 @@ function RenameNodeDialog({
         </NativeDialogHeader>
         <NativeDialogPanel>
           <div className="space-y-3">
-            <Input
-              autoFocus
-              nativeInput
-              onChange={(event) => {
-                setError(null);
-                setName(event.target.value);
-              }}
-              value={name}
-            />
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          </div>
-        </NativeDialogPanel>
+              <Input
+                autoFocus
+                nativeInput
+                onChange={(event) => setName(event.target.value)}
+                value={name}
+              />
+            </div>
+          </NativeDialogPanel>
         <NativeDialogFooter>
           <Button disabled={busy} onClick={onClose} variant="outline">
             取消
@@ -383,7 +356,13 @@ function DeleteNodeDialog({
           <Button disabled={busy} onClick={onClose} variant="outline">
             取消
           </Button>
-          <Button loading={busy} onClick={() => void onConfirm()} variant="destructive">
+          <Button
+            loading={busy}
+            onClick={() => {
+              void onConfirm().catch(() => {});
+            }}
+            variant="destructive"
+          >
             删除
           </Button>
         </NativeDialogFooter>
@@ -633,7 +612,10 @@ export function FileExplorerSidebar({
       return;
     }
 
-    await onPasteNode(node?.path ?? null);
+    try {
+      await onPasteNode(node?.path ?? null);
+    } catch {
+    }
   };
 
   return (

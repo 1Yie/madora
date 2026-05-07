@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FileExplorerSidebar } from "@/components/explorer/file-explorer-sidebar";
 import { FilePreview } from "@/components/explorer/file-preview";
+import { showErrorToast } from "@/components/ui/toast";
 
 import {
   getParentPath,
@@ -155,6 +156,22 @@ export function WorkspaceBrowser() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!sidebarError) {
+      return;
+    }
+
+    showErrorToast("工作区操作失败", sidebarError);
+  }, [sidebarError]);
+
+  useEffect(() => {
+    if (!previewError) {
+      return;
+    }
+
+    showErrorToast("文件读取失败", previewError);
+  }, [previewError]);
 
   const handleSidebarResizeStart = (event: React.PointerEvent<HTMLDivElement>) => {
     dragStartWidthRef.current = sidebarWidth;
@@ -627,13 +644,7 @@ export function WorkspaceBrowser() {
         </div>
       </div>
       <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-        {sidebarError && (
-          <div className="rounded-xl border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive-foreground">
-            {sidebarError}
-          </div>
-        )}
         <FilePreview
-          error={previewError}
           loading={previewLoading}
           onOpenFolder={openFolder}
           preview={preview}

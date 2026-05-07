@@ -266,6 +266,18 @@ export const toastManager: ReturnType<typeof Toast.createToastManager> =
 export const anchoredToastManager: ReturnType<typeof Toast.createToastManager> =
   Toast.createToastManager();
 
+export function showErrorToast(
+  title: React.ReactNode,
+  description?: React.ReactNode,
+): string {
+  return toastManager.add({
+    description,
+    priority: "high",
+    title,
+    type: "error",
+  });
+}
+
 export type ToastPosition =
   | "top-left"
   | "top-center"

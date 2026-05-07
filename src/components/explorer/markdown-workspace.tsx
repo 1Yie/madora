@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 
+import { showErrorToast } from "@/components/ui/toast";
+
 import { MarkdownEditor } from "./markdown-editor";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -38,6 +40,7 @@ export function MarkdownWorkspace({ content, filePath }: MarkdownWorkspaceProps)
   const saveTimerRef = useRef<number | null>(null);
   const saveRequestIdRef = useRef(0);
   const lastSavedValueRef = useRef(content);
+  const syncingFromPropsRef = useRef(false);
 
   useEffect(() => {
     if (saveTimerRef.current !== null) {
@@ -47,12 +50,18 @@ export function MarkdownWorkspace({ content, filePath }: MarkdownWorkspaceProps)
 
     saveRequestIdRef.current += 1;
     lastSavedValueRef.current = content;
+    syncingFromPropsRef.current = true;
     setValue(content);
     setSaveError(null);
     setSaveStatus("idle");
   }, [content, filePath]);
 
   useEffect(() => {
+    if (syncingFromPropsRef.current) {
+      syncingFromPropsRef.current = false;
+      return;
+    }
+
     if (value === lastSavedValueRef.current) {
       return;
     }
@@ -99,10 +108,19 @@ export function MarkdownWorkspace({ content, filePath }: MarkdownWorkspaceProps)
     };
   }, [filePath, value]);
 
+  useEffect(() => {
+    if (!saveError) {
+      return;
+    }
+
+    showErrorToast("保存失败", saveError);
+    setSaveError(null);
+    setSaveStatus("idle");
+  }, [saveError]);
+
   return (
     <MarkdownEditor
       onChange={setValue}
-      saveError={saveError}
       saveStatus={saveStatus}
       title={getFileTitle(filePath)}
       value={value}

@@ -1,4 +1,4 @@
-import { FileImage, FileText, FolderOpen, ScrollText } from "lucide-react";
+import { FileImage, FileText, FolderOpen } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +60,6 @@ function inferLanguage(fileName: string): string | undefined {
 }
 
 type FilePreviewProps = {
-  error: string | null;
   loading: boolean;
   onOpenFolder: () => void;
   preview: FilePreviewData | null;
@@ -94,7 +93,13 @@ function renderPreviewBody(selectedFile: ExplorerNode, preview: FilePreviewData)
   }
 
   if (preview.fileKind === "markdown") {
-    return <MarkdownWorkspace content={preview.content ?? ""} filePath={selectedFile.path} />;
+    return (
+      <MarkdownWorkspace
+        key={selectedFile.path}
+        content={preview.content ?? ""}
+        filePath={selectedFile.path}
+      />
+    );
   }
 
   return (
@@ -128,12 +133,10 @@ function PreviewHeader({
 }
 
 function PreviewState({
-  error,
   loading,
   preview,
   selectedFile,
 }: {
-  error: string | null;
   loading: boolean;
   preview: FilePreviewData | null;
   selectedFile: ExplorerNode;
@@ -148,20 +151,6 @@ function PreviewState({
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-4 w-1/2" />
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <ScrollText className="size-4" />
-          </EmptyMedia>
-          <EmptyTitle>文件读取失败</EmptyTitle>
-          <EmptyDescription>{error}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
     );
   }
 
@@ -195,7 +184,6 @@ function PreviewState({
 }
 
 export function FilePreview({
-  error,
   loading,
   onOpenFolder,
   preview,
@@ -243,7 +231,6 @@ export function FilePreview({
       </div>
       <div className="min-h-0 flex-1">
         <PreviewState
-          error={error}
           loading={loading}
           preview={preview}
           selectedFile={selectedFile}
