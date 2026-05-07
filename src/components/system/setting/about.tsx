@@ -109,7 +109,7 @@ export function AboutSettings() {
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden rounded-3xl border bg-linear-to-br from-primary/12 via-background to-background shadow-xs">
+      <section className="overflow-hidden rounded-2xl border bg-linear-to-br from-primary/12 via-background to-background shadow-xs">
         <div className="flex flex-col gap-6 p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-3">
