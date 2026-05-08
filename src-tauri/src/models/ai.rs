@@ -1,5 +1,41 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum AiProvider {
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    #[serde(rename = "custom")]
+    Custom,
+    #[serde(rename = "deepseek")]
+    DeepSeek,
+    #[serde(rename = "kimi")]
+    Kimi,
+    #[serde(rename = "openai")]
+    OpenAi,
+}
+
+impl AiProvider {
+    pub fn as_key(self) -> &'static str {
+        match self {
+            Self::Anthropic => "anthropic",
+            Self::Custom => "custom",
+            Self::DeepSeek => "deepseek",
+            Self::Kimi => "kimi",
+            Self::OpenAi => "openai",
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Anthropic => "Anthropic",
+            Self::Custom => "Custom",
+            Self::DeepSeek => "DeepSeek",
+            Self::Kimi => "Kimi",
+            Self::OpenAi => "OpenAI",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CompletionMode {
@@ -37,30 +73,6 @@ pub struct AiCompletionConfig {
     pub api_key: String,
     pub api_url: Option<String>,
     pub model: Option<String>,
+    pub provider: Option<AiProvider>,
     pub smart_routing_enabled: bool,
-}
-
-#[derive(Deserialize)]
-pub struct DeepSeekTextCompletionChoice {
-    pub text: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct DeepSeekTextCompletionResponse {
-    pub choices: Option<Vec<DeepSeekTextCompletionChoice>>,
-}
-
-#[derive(Deserialize)]
-pub struct DeepSeekChatCompletionMessage {
-    pub content: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct DeepSeekChatCompletionChoice {
-    pub message: Option<DeepSeekChatCompletionMessage>,
-}
-
-#[derive(Deserialize)]
-pub struct DeepSeekChatCompletionResponse {
-    pub choices: Option<Vec<DeepSeekChatCompletionChoice>>,
 }

@@ -1,7 +1,10 @@
 import { Sparkles } from "lucide-react";
 
-import { useAiSettings } from "@/components/system/ai-settings-provider";
-import { SettingsSectionCard } from "@/components/system/setting/shared";
+import {
+  getProviderDefinitions,
+  useAiSettings,
+} from "@/components/system/ai-settings-provider";
+import { SettingsSectionCard, ThemeOption } from "@/components/system/setting/shared";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
@@ -11,15 +14,18 @@ export function EditorSettings() {
     apiUrl,
     enabled,
     model,
+    provider,
     saveMode,
     smartRoutingEnabled,
     setApiKey,
     setApiUrl,
     setEnabled,
     setModel,
+    setProvider,
     setSaveMode,
     setSmartRoutingEnabled,
   } = useAiSettings();
+  const selectedProvider = getProviderDefinitions().find((item) => item.key === provider);
 
   return (
     <div className="space-y-4">
@@ -50,22 +56,38 @@ export function EditorSettings() {
           <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
             <div className="space-y-1">
               <div className="text-sm font-medium text-foreground">启用智能路由</div>
-              <p className="text-xs text-muted-foreground">自动模式始终优先走 FIM。</p>
               <p className="text-xs text-muted-foreground">
                 开启后光标后方还有文本时走 FIM，否则走 chat-prefix。
               </p>
             </div>
             <Switch checked={smartRoutingEnabled} onCheckedChange={setSmartRoutingEnabled} />
           </div>
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-foreground">Provider</span>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {getProviderDefinitions().map((item) => (
+                <ThemeOption
+                  key={item.key}
+                  active={provider === item.key}
+                  description={item.description}
+                  label={item.label}
+                  onClick={() => setProvider(item.key)}
+                />
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              当前配置会按 provider 单独保存，切换后不会覆盖其他供应商的 Key 和模型。
+            </p>
+          </div>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-foreground">API URL</span>
             <Input
               autoComplete="off"
-              placeholder="https://api.deepseek.com"
+              placeholder={selectedProvider?.defaultApiUrl || "https://api.example.com"}
               value={apiUrl}
               onChange={(event) => setApiUrl(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">模型地址。</p>
+            <p className="text-xs text-muted-foreground">当前 provider 的接口地址。</p>
           </label>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-foreground">API Key</span>
@@ -77,7 +99,7 @@ export function EditorSettings() {
               onChange={(event) => setApiKey(event.target.value)}
             />
             <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">模型 API Key。</p>
+              <p className="text-xs text-muted-foreground">当前 provider 的 API Key。</p>
               <p className="text-xs text-muted-foreground">
                 API Key 仅保存在本机，通过后端请求使用。
               </p>
@@ -87,7 +109,7 @@ export function EditorSettings() {
             <span className="text-sm font-medium text-foreground">Model</span>
             <Input
               autoComplete="off"
-              placeholder="deepseek-v4-pro"
+              placeholder={selectedProvider?.defaultModel || "model-name"}
               value={model}
               onChange={(event) => setModel(event.target.value)}
             />

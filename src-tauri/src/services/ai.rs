@@ -5,28 +5,25 @@ use std::{
 };
 
 use reqwest::Client;
-use serde_json::json;
 use tokio::sync::Notify;
 
-use crate::models::ai::{
-    AiCompletionConfig, CompletionMode, CompletionRequest, CompletionResult, CompletionResultMode,
-    DeepSeekChatCompletionResponse, DeepSeekTextCompletionResponse,
+use crate::{
+    models::ai::{
+        AiCompletionConfig, AiProvider, CompletionMode, CompletionRequest, CompletionResult,
+        CompletionResultMode,
+    },
+    prompt::PromptManager,
+    providers::{default_api_url, default_model, get_provider},
 };
 
-const DEFAULT_API_URL: &str = "https://api.deepseek.com";
-const DEFAULT_MODEL: &str = "deepseek-v4-pro";
 const COMPLETION_CACHE_MAX_ENTRIES: usize = 128;
 const COMPLETION_CACHE_TTL: Duration = Duration::from_secs(15);
-const MAX_COMPLETION_TOKENS: usize = 512;
-const MAX_CHAT_PREFIX_CHARS: usize = 4_000;
-const MAX_CHAT_SUFFIX_CHARS: usize = 1_500;
-const STOP_SEQUENCES: &[&str] = &["\n\n\n", "\n# ", "\n## "];
-const CHAT_PREFIX_SYSTEM_PROMPT: &str = "You are a professional writer continuing a markdown article. Match the existing voice, tone, and formatting exactly. Maintain any frontmatter, heading hierarchy, list styles, code blocks, or tables present. Output ONLY raw continuation text - no explanations, no meta-commentary, no prefixes like 'Here is the continuation:'. Stop naturally at a paragraph or section boundary.";
 
 pub struct AiCompletionService {
     client: Client,
     completion_cache: Mutex<HashMap<CompletionCacheKey, CachedCompletion>>,
     completion_in_flight: Mutex<HashMap<CompletionCacheKey, Arc<InFlightCompletionRequest>>>,
+    prompt_manager: PromptManager,
 }
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
@@ -37,10 +34,11 @@ enum CompletionCacheKind {
 
 #[derive(Clone, Eq, Hash, PartialEq)]
 struct CompletionCacheKey {
-    kind: CompletionCacheKind,
     api_url: String,
+    kind: CompletionCacheKind,
     model: String,
     prefix: String,
+    provider: AiProvider,
     suffix: Option<String>,
 }
 
@@ -62,6 +60,7 @@ impl AiCompletionService {
             client: Client::new(),
             completion_cache: Mutex::new(HashMap::new()),
             completion_in_flight: Mutex::new(HashMap::new()),
+            prompt_manager: PromptManager::new(),
         }
     }
 }
@@ -94,16 +93,23 @@ fn cleanup_completion_cache(cache: &mut HashMap<CompletionCacheKey, CachedComple
     }
 }
 
+fn resolve_provider(config: &AiCompletionConfig) -> AiProvider {
+    config.provider.unwrap_or(AiProvider::DeepSeek)
+}
+
 fn build_completion_cache_key(
     config: &AiCompletionConfig,
     request: &CompletionRequest,
     kind: CompletionCacheKind,
 ) -> CompletionCacheKey {
+    let provider = resolve_provider(config);
+
     CompletionCacheKey {
+        api_url: resolve_cache_api_url(provider, config),
         kind,
-        api_url: resolve_beta_api_url(config.api_url.as_deref()),
-        model: resolve_model(config.model.as_deref()).to_string(),
+        model: resolve_cache_model(provider, config),
         prefix: request.prefix.clone(),
+        provider,
         suffix: request.suffix.clone(),
     }
 }
@@ -190,7 +196,10 @@ async fn request_cached_fim_completion(
         return wait_for_in_flight_completion_request(&in_flight_request).await;
     }
 
-    let result = request_fim_completion(&service.client, config, request).await;
+    let provider = get_provider(resolve_provider(config));
+    let result = provider
+        .request_fim_completion(&service.client, &service.prompt_manager, config, request)
+        .await;
 
     if let Ok(text) = result.as_ref() {
         cache_completion(service, cache_key.clone(), text.clone());
@@ -241,7 +250,10 @@ async fn request_cached_chat_prefix_completion(
         return wait_for_in_flight_completion_request(&in_flight_request).await;
     }
 
-    let result = request_chat_prefix_completion(&service.client, config, request).await;
+    let provider = get_provider(resolve_provider(config));
+    let result = provider
+        .request_chat_prefix_completion(&service.client, &service.prompt_manager, config, request)
+        .await;
 
     if let Ok(text) = result.as_ref() {
         cache_completion(service, cache_key.clone(), text.clone());
@@ -260,46 +272,6 @@ async fn request_cached_chat_prefix_completion(
     result
 }
 
-fn trim_trailing_slash(url: &str) -> &str {
-    url.trim_end_matches('/')
-}
-
-fn resolve_api_url(api_url: Option<&str>) -> String {
-    let normalized = api_url
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_API_URL);
-
-    trim_trailing_slash(normalized).to_string()
-}
-
-fn resolve_beta_api_url(api_url: Option<&str>) -> String {
-    let base_url = resolve_api_url(api_url);
-
-    if base_url.ends_with("/beta") {
-        return base_url;
-    }
-
-    format!("{base_url}/beta")
-}
-
-fn resolve_model(model: Option<&str>) -> &str {
-    model
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(DEFAULT_MODEL)
-}
-
-fn ensure_api_key(config: &AiCompletionConfig) -> Result<&str, String> {
-    let trimmed_api_key = config.api_key.trim();
-
-    if trimmed_api_key.is_empty() {
-        return Err("请先在设置中填写 API Key".to_string());
-    }
-
-    Ok(trimmed_api_key)
-}
-
 fn has_suffix(request: &CompletionRequest) -> bool {
     request
         .suffix
@@ -308,167 +280,33 @@ fn has_suffix(request: &CompletionRequest) -> bool {
         .is_some_and(|value| !value.is_empty())
 }
 
-fn build_suffix_hint(suffix: Option<&str>) -> String {
-    let trimmed_suffix = suffix.map(str::trim).unwrap_or_default();
-
-    if trimmed_suffix.is_empty() {
-        return String::new();
-    }
-
-    format!(
-        "\n\nThe following text appears AFTER the cursor. Your continuation must connect naturally to it without repeating it:\n\n{trimmed_suffix}\n\nGenerate only the missing content between the cursor and the text above."
-    )
-}
-
-fn take_last_chars(value: &str, max_chars: usize) -> &str {
-    if max_chars == 0 {
-        return "";
-    }
-
-    let total_chars = value.chars().count();
-
-    if total_chars <= max_chars {
-        return value;
-    }
-
-    let start_char_index = total_chars - max_chars;
-    let start_byte_index = value
-        .char_indices()
-        .nth(start_char_index)
-        .map(|(index, _)| index)
-        .unwrap_or(0);
-
-    &value[start_byte_index..]
-}
-
-fn take_first_chars(value: &str, max_chars: usize) -> &str {
-    if max_chars == 0 {
-        return "";
-    }
-
-    match value.char_indices().nth(max_chars) {
-        Some((index, _)) => &value[..index],
-        None => value,
-    }
-}
-
-async fn request_fim_completion(
-    client: &Client,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-) -> Result<String, String> {
-    let api_key = ensure_api_key(config)?;
-    let api_url = resolve_beta_api_url(config.api_url.as_deref());
-    let response = client
-        .post(format!("{api_url}/completions"))
-        .bearer_auth(api_key)
-        .json(&json!({
-            "model": resolve_model(config.model.as_deref()),
-            "prompt": request.prefix.as_str(),
-            "suffix": request.suffix.as_deref(),
-            "max_tokens": MAX_COMPLETION_TOKENS,
-            "temperature": 0.3,
-            "frequency_penalty": 0.3,
-            "presence_penalty": 0.1,
-            "stop": STOP_SEQUENCES,
-        }))
-        .send()
-        .await
-        .map_err(|error| format!("调用 FIM completion 失败: {error}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "无法读取错误详情".to_string());
-
-        return Err(format!("FIM completion API error ({status}): {body}"));
-    }
-
-    let payload = response
-        .json::<DeepSeekTextCompletionResponse>()
-        .await
-        .map_err(|error| format!("解析 FIM completion 响应失败: {error}"))?;
-
-    Ok(payload
-        .choices
-        .and_then(|choices| choices.into_iter().next())
-        .and_then(|choice| choice.text)
-        .unwrap_or_default())
-}
-
-async fn request_chat_prefix_completion(
-    client: &Client,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-) -> Result<String, String> {
-    let api_key = ensure_api_key(config)?;
-    let api_url = resolve_beta_api_url(config.api_url.as_deref());
-    let title = request.title.as_deref().unwrap_or("Untitled");
-    let prefix = take_last_chars(&request.prefix, MAX_CHAT_PREFIX_CHARS);
-    let suffix = request
-        .suffix
+fn resolve_cache_api_url(provider: AiProvider, config: &AiCompletionConfig) -> String {
+    let api_url = config
+        .api_url
         .as_deref()
-        .map(|value| take_first_chars(value, MAX_CHAT_SUFFIX_CHARS));
-    let user_content = format!(
-        "Title: {title}\n\nRecent context before the cursor:\n{prefix}\n\n⟐ Continue writing from the cursor. Flow naturally into the next sentence. Do not repeat existing content.{}",
-        build_suffix_hint(suffix)
-    );
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| default_api_url(provider))
+        .unwrap_or_default()
+        .trim_end_matches('/')
+        .to_string();
 
-    let response = client
-        .post(format!("{api_url}/chat/completions"))
-        .bearer_auth(api_key)
-        .json(&json!({
-            "model": resolve_model(config.model.as_deref()),
-            "messages": [
-                {
-                    "role": "system",
-                    "content": CHAT_PREFIX_SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": user_content,
-                },
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "prefix": true,
-                }
-            ],
-            "max_tokens": MAX_COMPLETION_TOKENS,
-            "temperature": 0.5,
-            "frequency_penalty": 0.3,
-            "presence_penalty": 0.2,
-            "stop": STOP_SEQUENCES,
-        }))
-        .send()
-        .await
-        .map_err(|error| format!("调用 chat-prefix completion 失败: {error}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "无法读取错误详情".to_string());
-
-        return Err(format!(
-            "Chat prefix completion API error ({status}): {body}"
-        ));
+    if provider == AiProvider::DeepSeek && !api_url.is_empty() && !api_url.ends_with("/beta") {
+        return format!("{api_url}/beta");
     }
 
-    let payload = response
-        .json::<DeepSeekChatCompletionResponse>()
-        .await
-        .map_err(|error| format!("解析 chat-prefix 响应失败: {error}"))?;
+    api_url
+}
 
-    Ok(payload
-        .choices
-        .and_then(|choices| choices.into_iter().next())
-        .and_then(|choice| choice.message)
-        .and_then(|message| message.content)
-        .unwrap_or_default())
+fn resolve_cache_model(provider: AiProvider, config: &AiCompletionConfig) -> String {
+    config
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .or_else(|| default_model(provider))
+        .unwrap_or_default()
+        .to_string()
 }
 
 pub async fn generate_completion(

@@ -491,6 +491,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     apiUrl: "",
     enabled: true,
     model: "",
+    provider: "deepseek",
     smartRoutingEnabled: false,
   });
   const completionStatusRef = useRef<CompletionStatus>({
@@ -498,7 +499,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     tone: "muted",
   });
 
-  const { apiKey, apiUrl, enabled, model, smartRoutingEnabled } = useAiSettings();
+  const { apiKey, apiUrl, enabled, model, provider, smartRoutingEnabled } = useAiSettings();
   const { resolvedTheme } = useTheme();
 
   const handleChange = useEffectEvent((nextValue: string) => {
@@ -651,6 +652,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
             apiKey: settings.apiKey,
             apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
             model: settings.model.trim().length > 0 ? settings.model : null,
+            provider: settings.provider,
             smartRoutingEnabled: settings.smartRoutingEnabled,
           },
           request: {
@@ -803,7 +805,14 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
 
   // AI 设置变化时清空缓存与进行中的请求
   useEffect(() => {
-    aiSettingsRef.current = { apiKey, apiUrl, enabled, model, smartRoutingEnabled };
+    aiSettingsRef.current = {
+      apiKey,
+      apiUrl,
+      enabled,
+      model,
+      provider,
+      smartRoutingEnabled,
+    };
     completionCacheRef.current = null;
 
     if (!viewRef.current) return;
@@ -813,7 +822,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     clearCompletionPreview();
     completionStatusRef.current = getDefaultCompletionStatus(enabled, apiKey);
     syncTooltip();
-  }, [apiKey, apiUrl, enabled, model, smartRoutingEnabled]);
+  }, [apiKey, apiUrl, enabled, model, provider, smartRoutingEnabled]);
 
   // resolvedTheme 变化时热更新编辑器主题
   useEffect(() => {
