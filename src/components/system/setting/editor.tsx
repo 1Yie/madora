@@ -1,9 +1,6 @@
 import { Sparkles } from "lucide-react";
 
-import {
-  getProviderDefinitions,
-  useAiSettings,
-} from "@/components/system/ai-settings-provider";
+import { getProviderDefinitions, useAiSettings } from "@/components/system/ai-settings-provider";
 import { SettingsSectionCard, ThemeOption } from "@/components/system/setting/shared";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +13,7 @@ export function EditorSettings() {
     model,
     provider,
     saveMode,
+    showHiddenFiles,
     smartRoutingEnabled,
     setApiKey,
     setApiUrl,
@@ -23,6 +21,7 @@ export function EditorSettings() {
     setModel,
     setProvider,
     setSaveMode,
+    setShowHiddenFiles,
     setSmartRoutingEnabled,
   } = useAiSettings();
   const selectedProvider = getProviderDefinitions().find((item) => item.key === provider);
@@ -30,15 +29,26 @@ export function EditorSettings() {
   return (
     <div className="space-y-4">
       <SettingsSectionCard description="配置编辑区域的相关功能" title="输入行为">
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
-          <div className="space-y-1">
-            <div className="text-sm font-medium text-foreground">自动保存</div>
-            <p className="text-xs text-muted-foreground">开启后编辑内容会自动写入文件。</p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">自动保存</div>
+              <p className="text-xs text-muted-foreground">开启后编辑内容会自动写入文件。</p>
+            </div>
+            <Switch
+              checked={saveMode === "auto"}
+              onCheckedChange={(checked) => setSaveMode(checked ? "auto" : "manual")}
+            />
           </div>
-          <Switch
-            checked={saveMode === "auto"}
-            onCheckedChange={(checked) => setSaveMode(checked ? "auto" : "manual")}
-          />
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">显示隐藏文件</div>
+              <p className="text-xs text-muted-foreground">
+                控制工作区侧栏是否显示以 <code>.</code> 开头的文件和目录。
+              </p>
+            </div>
+            <Switch checked={showHiddenFiles} onCheckedChange={setShowHiddenFiles} />
+          </div>
         </div>
       </SettingsSectionCard>
       <SettingsSectionCard description="配置 AI 相关功能" title="AI 补全">

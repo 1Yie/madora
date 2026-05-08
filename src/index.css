@@ -6,7 +6,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
-  html, body, #root {
+  html,
+  body,
+  #root {
     @apply h-screen overflow-hidden bg-background text-foreground;
     margin: 0;
   }
@@ -44,7 +46,7 @@
   --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
   --animate-toast-error-even: toast-error-even 0.28s cubic-bezier(0.5, 1, 0.89, 1);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Noto Sans CJK SC", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -91,78 +93,81 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   @keyframes skeleton {
-  to {
-    background-position: -200% 0;
+    to {
+      background-position: -200% 0;
     }
   }
   @keyframes caret-blink {
-  0%, 70%, to {
-    opacity: 1;
+    0%,
+    70%,
+    to {
+      opacity: 1;
     }
-  20%, 50% {
-    opacity: 0;
+    20%,
+    50% {
+      opacity: 0;
     }
   }
   @keyframes toast-success-odd {
-  0% {
-    scale: 1;
+    0% {
+      scale: 1;
     }
-  30% {
-    scale: 1.025;
+    30% {
+      scale: 1.025;
     }
-  60% {
-    scale: 0.99;
+    60% {
+      scale: 0.99;
     }
-  100% {
-    scale: 1;
+    100% {
+      scale: 1;
     }
   }
   @keyframes toast-error-odd {
-  0% {
-    translate: 0 0;
+    0% {
+      translate: 0 0;
     }
-  25% {
-    translate: -3px 0;
+    25% {
+      translate: -3px 0;
     }
-  50% {
-    translate: 3px 0;
+    50% {
+      translate: 3px 0;
     }
-  75% {
-    translate: -3px 0;
+    75% {
+      translate: -3px 0;
     }
-  100% {
-    translate: 0 0;
+    100% {
+      translate: 0 0;
     }
   }
   @keyframes toast-success-even {
-  0% {
-    scale: 1;
+    0% {
+      scale: 1;
     }
-  30% {
-    scale: 1.025;
+    30% {
+      scale: 1.025;
     }
-  60% {
-    scale: 0.99;
+    60% {
+      scale: 0.99;
     }
-  100% {
-    scale: 1;
+    100% {
+      scale: 1;
     }
   }
   @keyframes toast-error-even {
-  0% {
-    translate: 0 0;
+    0% {
+      translate: 0 0;
     }
-  25% {
-    translate: -3px 0;
+    25% {
+      translate: -3px 0;
     }
-  50% {
-    translate: 3px 0;
+    50% {
+      translate: 3px 0;
     }
-  75% {
-    translate: -3px 0;
+    75% {
+      translate: -3px 0;
     }
-  100% {
-    translate: 0 0;
+    100% {
+      translate: 0 0;
     }
   }
 }
@@ -254,7 +259,9 @@
 
 .madora-code-block {
   background-color: transparent !important;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.875rem;
   line-height: 1.7;
   margin: 0;
@@ -269,7 +276,9 @@
 }
 
 .madora-markdown .shiki {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.875rem;
   line-height: 1.7;
   margin: 0;
@@ -280,6 +289,184 @@
 .madora-markdown .shiki code {
   display: block;
   font-family: inherit;
+}
+
+/* 优化后的 Markdown 预览样式 */
+.prose-custom {
+  /* 基础文本优化 */
+  line-height: 1.8;
+  word-wrap: break-word;
+}
+
+/* 移除首个元素的顶部间距 */
+.prose-custom > *:first-child {
+  margin-top: 0 !important;
+}
+
+/* 标题层级优化 */
+.prose-custom h1 {
+  font-size: 2rem; /* 略微放大，突出主旨 */
+  font-weight: 800;
+  line-height: 1.25;
+  margin-top: 2.5rem;
+  margin-bottom: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.prose-custom h2 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border); /* 增加横线，提升扫描感 */
+}
+
+.prose-custom h3 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom h4,
+.prose-custom h5,
+.prose-custom h6 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* 段落与列表间距 */
+.prose-custom p {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.prose-custom ul,
+.prose-custom ol {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding-left: 1.75rem; /* 增加缩进，使列表更明显 */
+}
+
+.prose-custom li {
+  margin-top: 0.5rem; /* 增加列表项之间的间距 */
+  margin-bottom: 0.5rem;
+}
+
+/* 针对嵌套列表的优化 */
+.prose-custom li > ul,
+.prose-custom li > ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+/* 引用块优化 */
+.prose-custom blockquote {
+  border-left: 4px solid var(--border); /* 加粗左边框 */
+  padding: 0.5rem 0 0.5rem 1.25rem;
+  margin: 1.5rem 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+  opacity: 0.9;
+}
+
+/* 行内代码 */
+.prose-custom code {
+  font-family:
+    "JetBrains Mono", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Monaco, Consolas,
+    monospace;
+  font-size: 0.9em;
+  background-color: var(--muted);
+  border-radius: 0.375rem;
+  padding: 0.2rem 0.4rem;
+  letter-spacing: -0.01em;
+}
+
+/* 代码块 */
+.prose-custom pre {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background-color: var(--muted);
+  padding: 1.25rem;
+}
+
+.prose-custom pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* 链接 */
+.prose-custom a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 500;
+  transition: opacity 0.2s ease;
+}
+
+.prose-custom a:hover {
+  opacity: 0.7;
+}
+
+/* 分隔线 */
+.prose-custom hr {
+  margin: 2.5rem 0;
+  border: 0;
+  border-top: 2px solid var(--border);
+  width: 50%;
+  margin-left: auto;
+  margin-right: auto;
+  opacity: 0.5;
+}
+
+/* 表格优化 */
+.prose-custom table {
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.prose-custom th,
+.prose-custom td {
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.prose-custom th {
+  background-color: var(--muted);
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+/* 图片 */
+.prose-custom img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  margin: 2rem auto;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 任务列表 */
+.prose-custom input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
+  vertical-align: middle;
 }
 
 .dark .madora-markdown .shiki,

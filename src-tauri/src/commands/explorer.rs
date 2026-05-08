@@ -5,7 +5,8 @@ use crate::models::explorer::{ExplorerNode, FilePreview};
 use crate::services::explorer;
 
 #[tauri::command]
-pub async fn pick_workspace_folder() -> Result<Option<ExplorerNode>, String> {
+pub async fn pick_workspace_folder(show_hidden_files: Option<bool>) -> Result<Option<ExplorerNode>, String> {
+    let show_hidden_files = show_hidden_files.unwrap_or(false);
     let selected_directory =
         tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
             .await
@@ -15,32 +16,42 @@ pub async fn pick_workspace_folder() -> Result<Option<ExplorerNode>, String> {
         return Ok(None);
     };
 
-    let root = tauri::async_runtime::spawn_blocking(move || explorer::build_workspace_root(&path))
-        .await
-        .map_err(|error| error.to_string())??;
+    let root = tauri::async_runtime::spawn_blocking(move || {
+        explorer::build_workspace_root(&path, show_hidden_files)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
 
     Ok(Some(root))
 }
 
 #[tauri::command]
-pub async fn scan_workspace_folder(root_path: String) -> Result<ExplorerNode, String> {
+pub async fn scan_workspace_folder(
+    root_path: String,
+    show_hidden_files: Option<bool>,
+) -> Result<ExplorerNode, String> {
     let root_path = PathBuf::from(root_path);
+    let show_hidden_files = show_hidden_files.unwrap_or(false);
 
-    tauri::async_runtime::spawn_blocking(move || explorer::build_workspace_root(&root_path))
-        .await
-        .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::build_workspace_root(&root_path, show_hidden_files)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
 pub async fn read_workspace_directory(
     root_path: String,
     directory_path: String,
+    show_hidden_files: Option<bool>,
 ) -> Result<Vec<ExplorerNode>, String> {
     let root_path = PathBuf::from(root_path);
     let directory_path = PathBuf::from(directory_path);
+    let show_hidden_files = show_hidden_files.unwrap_or(false);
 
     tauri::async_runtime::spawn_blocking(move || {
-        explorer::read_directory_children(&root_path, &directory_path)
+        explorer::read_directory_children(&root_path, &directory_path, show_hidden_files)
     })
     .await
     .map_err(|error| error.to_string())?

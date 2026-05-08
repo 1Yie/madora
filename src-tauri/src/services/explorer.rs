@@ -47,11 +47,20 @@ fn image_mime_type(path: &Path) -> &'static str {
     }
 }
 
-fn sorted_directory_entries(directory: &Path) -> Result<Vec<fs::DirEntry>, String> {
+fn sorted_directory_entries(directory: &Path, show_hidden_files: bool) -> Result<Vec<fs::DirEntry>, String> {
     let mut entries = fs::read_dir(directory)
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
+
+    if !show_hidden_files {
+        entries.retain(|entry| {
+            !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with('.')
+        });
+    }
 
     entries.sort_by(|left, right| {
         let left_is_dir = left
@@ -151,8 +160,12 @@ fn resolve_create_directory(root: &Path, selected_path: Option<&Path>) -> Result
     Ok(candidate_directory)
 }
 
-pub fn read_directory_children(root: &Path, directory: &Path) -> Result<Vec<ExplorerNode>, String> {
-    let entries = sorted_directory_entries(directory)?;
+pub fn read_directory_children(
+    root: &Path,
+    directory: &Path,
+    show_hidden_files: bool,
+) -> Result<Vec<ExplorerNode>, String> {
+    let entries = sorted_directory_entries(directory, show_hidden_files)?;
     let mut children = Vec::new();
 
     for entry in entries {
@@ -189,12 +202,12 @@ pub fn read_directory_children(root: &Path, directory: &Path) -> Result<Vec<Expl
     Ok(children)
 }
 
-pub fn build_workspace_root(root: &Path) -> Result<ExplorerNode, String> {
+pub fn build_workspace_root(root: &Path, show_hidden_files: bool) -> Result<ExplorerNode, String> {
     if !root.is_dir() {
         return Err("Selected path is not a directory".to_string());
     }
 
-    let children = read_directory_children(root, root)?;
+    let children = read_directory_children(root, root, show_hidden_files)?;
 
     Ok(ExplorerNode {
         name: path_name(root),

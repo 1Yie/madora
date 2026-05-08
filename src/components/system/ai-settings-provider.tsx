@@ -20,6 +20,7 @@ type AiSettingsContextValue = ProviderConfig & {
   enabled: boolean;
   provider: AiProvider;
   saveMode: SaveMode;
+  showHiddenFiles: boolean;
   smartRoutingEnabled: boolean;
   setApiKey: (apiKey: string) => void;
   setApiUrl: (apiUrl: string) => void;
@@ -27,6 +28,7 @@ type AiSettingsContextValue = ProviderConfig & {
   setModel: (model: string) => void;
   setProvider: (provider: AiProvider) => void;
   setSaveMode: (saveMode: SaveMode) => void;
+  setShowHiddenFiles: (showHiddenFiles: boolean) => void;
   setSmartRoutingEnabled: (smartRoutingEnabled: boolean) => void;
 };
 
@@ -83,6 +85,7 @@ const AI_COMPLETION_API_KEY_STORAGE_KEY = "madora-ai-completion-api-key";
 const AI_COMPLETION_API_URL_STORAGE_KEY = "madora-ai-completion-api-url";
 const AI_COMPLETION_MODEL_STORAGE_KEY = "madora-ai-completion-model";
 const EDITOR_SAVE_MODE_STORAGE_KEY = "madora-editor-save-mode";
+const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY = "madora-explorer-show-hidden-files";
 const AI_COMPLETION_SMART_ROUTING_STORAGE_KEY = "madora-ai-completion-smart-routing-enabled";
 
 const AiSettingsContext = createContext<AiSettingsContextValue | null>(null);
@@ -149,6 +152,16 @@ function getInitialSaveMode(): SaveMode {
   const storedValue = getStoredValue(EDITOR_SAVE_MODE_STORAGE_KEY);
 
   return storedValue === "manual" ? "manual" : "auto";
+}
+
+function getInitialShowHiddenFiles(): boolean {
+  const storedValue = getStoredValue(EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY);
+
+  if (storedValue === null) {
+    return false;
+  }
+
+  return storedValue === "true";
 }
 
 function getDefaultProviderConfig(provider: AiProvider): ProviderConfig {
@@ -223,6 +236,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
     readInitialProviderConfigs,
   );
   const [saveMode, setSaveMode] = useState<SaveMode>(getInitialSaveMode);
+  const [showHiddenFiles, setShowHiddenFiles] = useState<boolean>(getInitialShowHiddenFiles);
   const [smartRoutingEnabled, setSmartRoutingEnabled] = useState<boolean>(
     getInitialSmartRoutingEnabled,
   );
@@ -269,6 +283,13 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(EDITOR_SAVE_MODE_STORAGE_KEY, saveMode);
   }, [saveMode]);
 
+  useEffect(() => {
+    window.localStorage.setItem(
+      EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY,
+      String(showHiddenFiles),
+    );
+  }, [showHiddenFiles]);
+
   const currentConfig = providerConfigs[provider];
 
   const value = useMemo<AiSettingsContextValue>(
@@ -279,6 +300,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
       model: currentConfig.model,
       provider,
       saveMode,
+      showHiddenFiles,
       smartRoutingEnabled,
       setApiKey: (apiKey) => {
         setProviderConfigs((prev) => ({
@@ -301,9 +323,19 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
       },
       setProvider,
       setSaveMode,
+      setShowHiddenFiles,
       setSmartRoutingEnabled,
     }),
-    [currentConfig.apiKey, currentConfig.apiUrl, currentConfig.model, enabled, provider, saveMode, smartRoutingEnabled],
+    [
+      currentConfig.apiKey,
+      currentConfig.apiUrl,
+      currentConfig.model,
+      enabled,
+      provider,
+      saveMode,
+      showHiddenFiles,
+      smartRoutingEnabled,
+    ],
   );
 
   return <AiSettingsContext.Provider value={value}>{children}</AiSettingsContext.Provider>;

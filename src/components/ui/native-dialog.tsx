@@ -220,10 +220,11 @@ export function NativeDialogPanel({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className="overflow-y-auto overscroll-contain will-change-transform" style={{ maxHeight: "calc(85vh - 8rem)" }}>
-      <div className={cn("p-6 pt-1", className)} {...props}>
-        {children}
-      </div>
+    <div
+      className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pt-1 will-change-transform", className)}
+      {...props}
+    >
+      {children}
     </div>
   );
 }

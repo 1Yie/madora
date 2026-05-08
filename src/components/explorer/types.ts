@@ -7,6 +7,7 @@ export type ExplorerNode = {
   relativePath: string;
   kind: ExplorerNodeKind;
   fileKind: ExplorerFileKind | null;
+  isMissing?: boolean;
   hasChildren: boolean;
   loaded: boolean;
   children: ExplorerNode[];

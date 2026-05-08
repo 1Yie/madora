@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 
+import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { FileExplorerSidebar } from "@/components/explorer/file-explorer-sidebar";
 import { FilePreview } from "@/components/explorer/file-preview";
 import { showErrorToast } from "@/components/ui/toast";
@@ -9,6 +10,7 @@ import {
   getParentPath,
   isSameOrDescendantPath,
   joinExplorerPath,
+  normalizeExplorerPath,
   remapPathPrefix,
   replacePathBaseName,
 } from "./path-utils";
@@ -17,6 +19,7 @@ import type {
   ExplorerNode,
   FilePreview as FilePreviewData,
 } from "./types";
+import type { GitStatus } from "./git-types";
 
 const WORKSPACE_ROOT_STORAGE_KEY = "madora-workspace-root-path";
 const LAST_OPEN_FILE_STORAGE_KEY = "madora-last-open-file-path";
@@ -143,6 +146,7 @@ function getAncestorDirectoryPaths(rootPath: string, targetPath: string): string
 }
 
 export function WorkspaceBrowser() {
+  const { showHiddenFiles } = useAiSettings();
   const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
   const [root, setRoot] = useState<ExplorerNode | null>(null);
   const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
@@ -151,6 +155,8 @@ export function WorkspaceBrowser() {
   const [sidebarError, setSidebarError] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [sidebarBusy, setSidebarBusy] = useState(false);
+  const [gitBusy, setGitBusy] = useState(false);
+  const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [operationBusy, setOperationBusy] = useState<WorkspaceOperation>(null);
   const [clipboard, setClipboard] = useState<{
@@ -288,6 +294,7 @@ export function WorkspaceBrowser() {
       const children = await invoke<ExplorerNode[]>("read_workspace_directory", {
         directoryPath,
         rootPath: nextRoot.path,
+        showHiddenFiles,
       });
 
       resolvedRoot = replaceDirectoryChildren(resolvedRoot, directoryPath, children);
@@ -338,7 +345,48 @@ export function WorkspaceBrowser() {
       return;
     }
 
+    if (node.isMissing) {
+      setSelectedNodePath(node.path);
+      setSelectedFile(node);
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
+
     await loadPreview(node);
+  };
+
+  const restoreDeletedNode = async (targetPath: string) => {
+    if (!root) {
+      return;
+    }
+
+    setOperationBusy("move");
+    setSidebarError(null);
+
+    try {
+      const nextStatus = await invoke<GitStatus>("git_restore_file", {
+        path: targetPath,
+        rootPath: root.path,
+      });
+      const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
+        rootPath: root.path,
+        showHiddenFiles,
+      });
+
+      setLoadingPaths(new Set());
+      setRoot(nextRoot);
+      setGitStatus(nextStatus);
+      await syncSelectionWithRoot(nextRoot, targetPath);
+    } catch (error) {
+      const message = getErrorMessage(error);
+
+      setSidebarError(message);
+      throw new Error(message);
+    } finally {
+      setOperationBusy(null);
+    }
   };
 
   const resolveDestinationDirectory = (targetPath: string | null): string | null => {
@@ -383,6 +431,7 @@ export function WorkspaceBrowser() {
       const children = await invoke<ExplorerNode[]>("read_workspace_directory", {
         directoryPath,
         rootPath,
+        showHiddenFiles,
       });
 
       nextRoot = replaceDirectoryChildren(nextRoot, directoryPath, children);
@@ -396,7 +445,9 @@ export function WorkspaceBrowser() {
     setSidebarError(null);
 
     try {
-      const nextRoot = await invoke<ExplorerNode | null>("pick_workspace_folder");
+      const nextRoot = await invoke<ExplorerNode | null>("pick_workspace_folder", {
+        showHiddenFiles,
+      });
 
       if (!nextRoot) {
         return;
@@ -412,6 +463,7 @@ export function WorkspaceBrowser() {
       );
 
       setRoot(resolvedRoot);
+      setGitStatus(null);
       window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, resolvedRoot.path);
 
       const fileToOpen =
@@ -440,6 +492,7 @@ export function WorkspaceBrowser() {
     try {
       const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
         rootPath: root.path,
+        showHiddenFiles,
       });
 
       setLoadingPaths(new Set());
@@ -461,7 +514,6 @@ export function WorkspaceBrowser() {
 
     const rootPath = root.path;
     const destinationDirectory = resolveDestinationDirectory(targetPath) ?? rootPath;
-    const selectedDirectory = resolveDestinationDirectory(selectedNodePath);
     const trimmedFileName = fileName.trim();
     const createdPath = joinExplorerPath(
       destinationDirectory,
@@ -477,10 +529,17 @@ export function WorkspaceBrowser() {
         rootPath,
         selectedPath: targetPath,
       });
-      const nextRoot = await refreshDirectories(root, [destinationDirectory, selectedDirectory]);
 
+      // Re-scan the whole workspace to ensure the new file appears immediately.
+      const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", { rootPath });
+
+      setLoadingPaths(new Set());
       setRoot(nextRoot);
       await syncSelectionWithRoot(nextRoot, createdPath);
+
+      // Refresh git status after updating the tree so newly created files are
+      // immediately reflected as untracked (N) in the git panel / badges.
+      void refreshGitStatus(nextRoot.path);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -498,7 +557,6 @@ export function WorkspaceBrowser() {
 
     const rootPath = root.path;
     const destinationDirectory = resolveDestinationDirectory(targetPath) ?? rootPath;
-    const selectedDirectory = resolveDestinationDirectory(selectedNodePath);
 
     setCreateBusy(true);
     setSidebarError(null);
@@ -509,10 +567,17 @@ export function WorkspaceBrowser() {
         rootPath,
         selectedPath: destinationDirectory,
       });
-      const nextRoot = await refreshDirectories(root, [destinationDirectory, selectedDirectory]);
 
+      // Re-scan the whole workspace to ensure the new directory appears immediately.
+      const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", { rootPath });
+
+      setLoadingPaths(new Set());
       setRoot(nextRoot);
       await syncSelectionWithRoot(nextRoot, selectedNodePath);
+
+      // Make sure git status is refreshed so the new directory shows up as
+      // untracked (N) immediately.
+      void refreshGitStatus(nextRoot.path);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -567,6 +632,7 @@ export function WorkspaceBrowser() {
       }
 
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
+      void refreshGitStatus(nextRoot.path);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -610,6 +676,7 @@ export function WorkspaceBrowser() {
       }
 
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
+      void refreshGitStatus(nextRoot.path);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -674,6 +741,7 @@ export function WorkspaceBrowser() {
       }
 
       await syncSelectionWithRoot(nextRoot, nextSelectedPath);
+      void refreshGitStatus(nextRoot.path);
     } catch (error) {
       const message = getErrorMessage(error);
 
@@ -701,6 +769,7 @@ export function WorkspaceBrowser() {
       const children = await invoke<ExplorerNode[]>("read_workspace_directory", {
         rootPath: workspaceRootPath,
         directoryPath: directory.path,
+        showHiddenFiles,
       });
 
       setRoot((currentRoot) => {
@@ -738,6 +807,7 @@ export function WorkspaceBrowser() {
       try {
         const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
           rootPath: savedRootPath,
+          showHiddenFiles,
         });
 
         if (!active) {
@@ -789,7 +859,88 @@ export function WorkspaceBrowser() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showHiddenFiles]);
+
+  const refreshGitStatus = async (targetRootPath?: string | null) => {
+    const nextRootPath = targetRootPath ?? root?.path ?? null;
+
+    if (!nextRootPath) {
+      setGitStatus(null);
+      return;
+    }
+
+    setGitBusy(true);
+
+    try {
+      const nextStatus = await invoke<GitStatus>("git_status", {
+        rootPath: nextRootPath,
+      });
+      setGitStatus(nextStatus);
+    } catch (error) {
+      setGitStatus(null);
+      showErrorToast("Git 状态读取失败", getErrorMessage(error));
+    } finally {
+      setGitBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!root?.path) {
+      setGitStatus(null);
+      return;
+    }
+
+    void refreshGitStatus(root.path);
+  }, [root?.path]);
+
+  useEffect(() => {
+    const handleWorkspaceFileSaved = (event: Event) => {
+      const customEvent = event as CustomEvent<{ filePath?: string }>;
+
+      if (!root?.path) {
+        return;
+      }
+
+      const savedPath = customEvent.detail?.filePath;
+
+      if (!savedPath || !isSameOrDescendantPath(savedPath, root.path)) {
+        return;
+      }
+
+      void refreshGitStatus(root.path);
+    };
+
+    window.addEventListener("workspace-file-saved", handleWorkspaceFileSaved as EventListener);
+
+    return () => {
+      window.removeEventListener("workspace-file-saved", handleWorkspaceFileSaved as EventListener);
+    };
+  }, [root?.path]);
+
+  useEffect(() => {
+    if (!selectedFile?.isMissing) {
+      return;
+    }
+
+    const normalizedSelectedPath = normalizeExplorerPath(selectedFile.path);
+    const isStillDeleted = (gitStatus?.files ?? []).some(
+      (file) =>
+        file.status === "deleted" && normalizeExplorerPath(file.path) === normalizedSelectedPath,
+    );
+
+    if (isStillDeleted) {
+      return;
+    }
+
+    window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+
+    if (!root) {
+      clearSelectionAndPreview();
+      return;
+    }
+
+    void syncSelectionWithRoot(root, selectedFile.path);
+  }, [gitStatus, root, selectedFile]);
 
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground">
@@ -799,14 +950,19 @@ export function WorkspaceBrowser() {
           busy={sidebarBusy}
           clipboard={clipboard}
           createBusy={createBusy}
+          gitBusy={gitBusy}
+          gitStatus={gitStatus}
           loadingPaths={loadingPaths}
           onCreateDirectory={createDirectory}
           onCreateMarkdown={createMarkdownDocument}
           onCutNode={cutNode}
           onDeleteNode={deleteNode}
+          onRestoreDeletedNode={restoreDeletedNode}
           onOpenFolder={openFolder}
           onPasteNode={pasteNode}
           onRefresh={refreshFolder}
+          onGitRefresh={async () => refreshGitStatus()}
+          onGitStatusChange={setGitStatus}
           onRenameNode={renameNode}
           onExpandDirectory={expandDirectory}
           onSelectNode={selectNode}
@@ -825,6 +981,7 @@ export function WorkspaceBrowser() {
       </div>
       <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
         <FilePreview
+          conflictedFilePaths={gitStatus?.conflictedFiles ?? []}
           loading={previewLoading}
           onOpenFolder={openFolder}
           preview={preview}

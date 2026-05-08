@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Scissors,
   Trash2,
 } from "lucide-react";
@@ -50,8 +51,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { showErrorToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import { explorerTopSectionHeightClassName } from "./layout";
-import { getParentPath } from "./path-utils";
+import type { GitStatus } from "./git-types";
+import { GitPanel } from "./git-panel";
+import {
+  explorerSidebarStatusBarClassName,
+  explorerTopSectionHeightClassName,
+} from "./layout";
+import {
+  getParentPath,
+  getPathName,
+  isSameOrDescendantPath,
+  joinExplorerPath,
+  normalizeExplorerPath,
+} from "./path-utils";
 import type { ExplorerClipboardItem, ExplorerNode } from "./types";
 
 type WorkspaceOperation = "create" | "rename" | "delete" | "move" | null;
@@ -61,6 +73,8 @@ type FileExplorerSidebarProps = {
   selectedPath: string | null;
   busy: boolean;
   createBusy: boolean;
+  gitBusy: boolean;
+  gitStatus: GitStatus | null;
   operationBusy: WorkspaceOperation;
   clipboard: {
     item: ExplorerClipboardItem;
@@ -71,9 +85,12 @@ type FileExplorerSidebarProps = {
   onCreateDirectory: (directoryName: string, targetPath: string | null) => Promise<void>;
   onCutNode: (node: ExplorerNode) => void;
   onDeleteNode: (targetPath: string) => Promise<void>;
+  onRestoreDeletedNode: (targetPath: string) => Promise<void>;
   onOpenFolder: () => void;
   onPasteNode: (destinationPath: string | null) => Promise<void>;
   onRefresh: () => void;
+  onGitRefresh: () => Promise<void>;
+  onGitStatusChange: (status: GitStatus) => void;
   onRenameNode: (targetPath: string, newName: string) => Promise<void>;
   onExpandDirectory: (node: ExplorerNode) => void;
   onSelectNode: (node: ExplorerNode) => void;
@@ -84,7 +101,242 @@ type PendingAction =
   | { type: "createDirectory"; node: ExplorerNode | null; targetPath: string | null }
   | { type: "rename"; node: ExplorerNode }
   | { type: "delete"; node: ExplorerNode }
+  | { type: "restoreDeleted"; node: ExplorerNode }
   | null;
+
+type GitFileEntry = NonNullable<GitStatus["files"]>[number];
+
+const gitFileStatePriority = {
+  conflicted: 7,
+  modified: 6,
+  untracked: 5,
+  added: 4,
+  deleted: 3,
+  renamed: 2,
+  typechange: 1,
+} as const;
+
+function getGitBadgeText(file: GitFileEntry): string {
+  switch (file.status) {
+    case "modified":
+      return file.staged && !file.unstaged ? "S" : "M";
+    case "untracked":
+      return "N";
+    case "added":
+      return "A";
+    case "deleted":
+      return "D";
+    case "conflicted":
+      return "!";
+    case "renamed":
+      return "R";
+    case "typechange":
+      return "T";
+    default:
+      return "";
+  }
+}
+
+function getGitBadgeClassName(file: GitFileEntry): string {
+  const baseClassName = "min-w-[1ch] text-center";
+
+  switch (file.status) {
+    case "conflicted":
+      return `${baseClassName} text-destructive`;
+    case "modified":
+      // Show modified files as warning (yellow) when not staged, similar to VS Code.
+      if (file.staged && file.unstaged) {
+        return `${baseClassName} text-warning`;
+      }
+
+      return file.staged ? `${baseClassName} text-success` : `${baseClassName} text-warning`;
+    case "untracked":
+    case "added":
+      return `${baseClassName} text-success`;
+    case "deleted":
+      return `${baseClassName} text-destructive`;
+    case "renamed":
+    case "typechange":
+      return `${baseClassName} text-info`;
+    default:
+      return `${baseClassName} text-muted-foreground`;
+  }
+}
+
+
+function getGitFilePriority(file: GitFileEntry): number {
+  return gitFileStatePriority[file.status] * 10 + Number(file.unstaged);
+}
+
+function sortExplorerChildren(children: ExplorerNode[]): ExplorerNode[] {
+  return [...children].sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === "directory" ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  });
+}
+
+function buildGitStatusMap(status: GitStatus | null): Map<string, GitFileEntry> {
+  const nextMap = new Map<string, GitFileEntry>();
+
+  for (const file of status?.files ?? []) {
+    nextMap.set(normalizeExplorerPath(file.path), file);
+  }
+
+  return nextMap;
+}
+
+function getAggregatedDirectoryGitState(
+  node: ExplorerNode,
+  gitStatusMap: Map<string, GitFileEntry>,
+): GitFileEntry | null {
+  // Aggregate git states for the given directory. We examine the git status map
+  // for any entries that are equal to or are descendants of the directory's
+  // path. This also covers cases where a tracked file has been deleted from
+  // disk (so it no longer exists in the explorer tree) but still appears in
+  // git status (e.g. deleted/ staged deletions). In that case we want the
+  // directory to reflect the highest-priority git state found under it.
+  let bestState: GitFileEntry | null = null;
+  let bestPriority = -1;
+
+  const nodePath = normalizeExplorerPath(node.path);
+
+  for (const [filePath, fileState] of gitStatusMap.entries()) {
+    // If filePath is the node itself or a descendant of the node path.
+    if (filePath === nodePath || filePath.startsWith(`${nodePath}/`)) {
+      const priority = getGitFilePriority(fileState);
+
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestState = fileState;
+      }
+    }
+  }
+
+  return bestState;
+}
+
+function buildSyntheticDeletedNode(rootPath: string, deletedPath: string): ExplorerNode {
+  const fileName = getPathName(deletedPath);
+  const normalizedRootPath = normalizeExplorerPath(rootPath);
+  const normalizedDeletedPath = normalizeExplorerPath(deletedPath);
+
+  return {
+    children: [],
+    fileKind: null,
+    hasChildren: false,
+    isMissing: true,
+    kind: "file",
+    loaded: true,
+    name: fileName,
+    path: deletedPath,
+    relativePath:
+      normalizedDeletedPath === normalizedRootPath
+        ? ""
+        : normalizedDeletedPath.slice(normalizedRootPath.length + 1),
+  };
+}
+
+function buildSyntheticDeletedDirectoryNode(rootPath: string, directoryPath: string): ExplorerNode {
+  const fileName = getPathName(directoryPath);
+  const normalizedRootPath = normalizeExplorerPath(rootPath);
+  const normalizedDirectoryPath = normalizeExplorerPath(directoryPath);
+
+  return {
+    children: [],
+    fileKind: null,
+    hasChildren: false,
+    isMissing: true,
+    kind: "directory",
+    loaded: true,
+    name: fileName,
+    path: directoryPath,
+    relativePath:
+      normalizedDirectoryPath === normalizedRootPath
+        ? ""
+        : normalizedDirectoryPath.slice(normalizedRootPath.length + 1),
+  };
+}
+
+function mergeDeletedGitNodes(root: ExplorerNode, gitStatusMap: Map<string, GitFileEntry>): ExplorerNode {
+  const deletedEntries = [...gitStatusMap.entries()].filter(([, file]) => file.status === "deleted");
+
+  if (deletedEntries.length === 0) {
+    return root;
+  }
+
+  const insertDeletedPath = (node: ExplorerNode, deletedPath: string): ExplorerNode => {
+    if (node.kind === "file" || !isSameOrDescendantPath(deletedPath, node.path)) {
+      return node;
+    }
+
+    const normalizedNodePath = normalizeExplorerPath(node.path);
+    const normalizedDeletedPath = normalizeExplorerPath(deletedPath);
+
+    if (normalizedNodePath === normalizedDeletedPath) {
+      return node;
+    }
+
+    const relativeSegments = normalizedDeletedPath
+      .slice(normalizedNodePath.length + 1)
+      .split("/")
+      .filter(Boolean);
+
+    if (relativeSegments.length === 0) {
+      return node;
+    }
+
+    const [nextSegment, ...remainingSegments] = relativeSegments;
+    const childPath = joinExplorerPath(node.path, nextSegment);
+    const normalizedChildPath = normalizeExplorerPath(childPath);
+    const nextChildren = [...node.children];
+    const existingChildIndex = nextChildren.findIndex(
+      (child) => normalizeExplorerPath(child.path) === normalizedChildPath,
+    );
+
+    if (remainingSegments.length === 0) {
+      if (existingChildIndex === -1) {
+        nextChildren.push(buildSyntheticDeletedNode(root.path, deletedPath));
+      }
+
+      return {
+        ...node,
+        children: sortExplorerChildren(nextChildren),
+        hasChildren: nextChildren.length > 0,
+      };
+    }
+
+    const currentChild =
+      existingChildIndex >= 0
+        ? nextChildren[existingChildIndex]
+        : buildSyntheticDeletedDirectoryNode(root.path, childPath);
+
+    if (currentChild.kind === "file") {
+      return node;
+    }
+
+    const nextChild = insertDeletedPath(currentChild, deletedPath);
+
+    if (existingChildIndex >= 0) {
+      nextChildren[existingChildIndex] = nextChild;
+    } else {
+      nextChildren.push(nextChild);
+    }
+
+    return {
+      ...node,
+      children: sortExplorerChildren(nextChildren),
+      hasChildren: nextChildren.length > 0,
+    };
+  };
+
+  return deletedEntries.reduce(
+    (nextRoot, [filePath]) => insertDeletedPath(nextRoot, filePath),
+    root,
+  );
+}
 
 function collectAncestorPaths(root: ExplorerNode, targetPath: string): string[] {
   const ancestors: string[] = [];
@@ -161,14 +413,23 @@ function resolveCreateTargetNode(root: ExplorerNode | null, selectedPath: string
 function ContextMenuContent({
   clipboard,
   includeNodeActions = true,
+  isDeletedGitEntry = false,
   onAction,
   pasteDisabled,
   target,
 }: {
   clipboard: FileExplorerSidebarProps["clipboard"];
   includeNodeActions?: boolean;
+  isDeletedGitEntry?: boolean;
   onAction: (
-    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    action:
+      | "createMarkdown"
+      | "createDirectory"
+      | "cut"
+      | "delete"
+      | "rename"
+      | "paste"
+      | "restoreDeleted",
   ) => void;
   pasteDisabled: boolean;
   target: ExplorerNode | null;
@@ -178,35 +439,42 @@ function ContextMenuContent({
   return (
     <ContextMenuPopup align="start" sideOffset={6}>
       {target && includeNodeActions ? (
-        <>
-          <MenuItem onClick={() => onAction("createMarkdown")}>
-            <FileText />
-            新建 Markdown 文档
+        isDeletedGitEntry ? (
+          <MenuItem onClick={() => onAction("restoreDeleted")}>
+            <RotateCcw />
+            恢复文件
           </MenuItem>
-          {canCreateDirectory ? (
-            <MenuItem onClick={() => onAction("createDirectory")}>
-              <FolderPlus />
-              新建文件夹
+        ) : (
+          <>
+            <MenuItem onClick={() => onAction("createMarkdown")}>
+              <FileText />
+              新建 Markdown 文档
             </MenuItem>
-          ) : null}
-          <MenuItem onClick={() => onAction("rename")}>
-            <FilePenLine />
-            重命名
-          </MenuItem>
-          <MenuItem onClick={() => onAction("cut")}>
-            <Scissors />
-            剪切
-          </MenuItem>
-          <MenuItem disabled={pasteDisabled} onClick={() => onAction("paste")}>
-            <Clipboard />
-            粘贴到此处
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem onClick={() => onAction("delete")} variant="destructive">
-            <Trash2 />
-            删除
-          </MenuItem>
-        </>
+            {canCreateDirectory ? (
+              <MenuItem onClick={() => onAction("createDirectory")}>
+                <FolderPlus />
+                新建文件夹
+              </MenuItem>
+            ) : null}
+            <MenuItem onClick={() => onAction("rename")}>
+              <FilePenLine />
+              重命名
+            </MenuItem>
+            <MenuItem onClick={() => onAction("cut")}>
+              <Scissors />
+              剪切
+            </MenuItem>
+            <MenuItem disabled={pasteDisabled} onClick={() => onAction("paste")}>
+              <Clipboard />
+              粘贴到此处
+            </MenuItem>
+            <MenuSeparator />
+            <MenuItem onClick={() => onAction("delete")} variant="destructive">
+              <Trash2 />
+              删除
+            </MenuItem>
+          </>
+        )
       ) : (
         <>
           <MenuItem onClick={() => onAction("createMarkdown")}>
@@ -524,6 +792,7 @@ function FileTreeNode({
   clipboard,
   depth,
   expandedPaths,
+  gitStatusMap,
   loadingPaths,
   node,
   onContextAction,
@@ -535,10 +804,18 @@ function FileTreeNode({
   clipboard: FileExplorerSidebarProps["clipboard"];
   depth: number;
   expandedPaths: Set<string>;
+  gitStatusMap: Map<string, GitFileEntry>;
   loadingPaths: Set<string>;
   node: ExplorerNode;
   onContextAction: (
-    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    action:
+      | "createMarkdown"
+      | "createDirectory"
+      | "cut"
+      | "delete"
+      | "rename"
+      | "paste"
+      | "restoreDeleted",
     node: ExplorerNode,
   ) => void;
   onExpandDirectory: (node: ExplorerNode) => void;
@@ -550,12 +827,16 @@ function FileTreeNode({
   const isSelected = selectedPath === node.path;
   const isExpanded = isDirectory && expandedPaths.has(node.path);
   const pasteDisabled = !clipboard || clipboard.item.path === node.path;
+  const gitState = isDirectory
+    ? getAggregatedDirectoryGitState(node, gitStatusMap)
+    : (gitStatusMap.get(normalizeExplorerPath(node.path)) ?? null);
+  const isDeletedGitEntry = !isDirectory && gitState?.status === "deleted";
 
   if (isDirectory) {
     const isLoading = loadingPaths.has(node.path);
 
     return (
-      <div>
+      <div className="py-0.5">
         <ContextMenuRoot>
           <ContextMenuTrigger>
             <div className="flex w-full items-center gap-1" style={{ paddingLeft: `${depth * 14 + 8}px` }}>
@@ -599,12 +880,25 @@ function FileTreeNode({
                   <Folder className="size-4 shrink-0" />
                 )}
                 <span className="truncate">{node.name}</span>
+                {gitState ? (
+                  <span
+                    className={cn(
+                      "ml-auto shrink-0 font-mono text-[11px] font-semibold uppercase",
+                      // Always use the standard git badge style so selection doesn't add a
+                      // background; this keeps the badge color consistent like VS Code.
+                      getGitBadgeClassName(gitState),
+                    )}
+                  >
+                    {getGitBadgeText(gitState)}
+                  </span>
+                ) : null}
               </button>
             </div>
           </ContextMenuTrigger>
           <ContextMenuContent
             clipboard={clipboard}
             includeNodeActions={depth > 0}
+            isDeletedGitEntry={false}
             onAction={(action) => onContextAction(action, node)}
             pasteDisabled={pasteDisabled}
             target={node}
@@ -615,12 +909,13 @@ function FileTreeNode({
             {node.loaded ? (
               node.children.length > 0 ? (
                 node.children.map((child) => (
-                  <FileTreeNode
-                    clipboard={clipboard}
-                    depth={depth + 1}
-                    expandedPaths={expandedPaths}
-                    key={child.path}
-                    loadingPaths={loadingPaths}
+                    <FileTreeNode
+                      clipboard={clipboard}
+                      depth={depth + 1}
+                      expandedPaths={expandedPaths}
+                      gitStatusMap={gitStatusMap}
+                      key={child.path}
+                      loadingPaths={loadingPaths}
                     node={child}
                     onContextAction={onContextAction}
                     onExpandDirectory={onExpandDirectory}
@@ -655,30 +950,44 @@ function FileTreeNode({
   const Icon = node.fileKind === "image" ? FileImage : FileText;
 
   return (
-    <ContextMenuRoot>
-      <ContextMenuTrigger>
-        <button
-          type="button"
-          className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-            isSelected
-              ? "bg-sidebar-primary text-sidebar-primary-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-          )}
-          onClick={() => onSelectNode(node)}
-          style={{ paddingLeft: `${depth * 14 + 32}px` }}
-        >
-          <Icon className="size-4 shrink-0" />
-          <span className="truncate">{node.name}</span>
-        </button>
-      </ContextMenuTrigger>
-      <ContextMenuContent
-        clipboard={clipboard}
-        onAction={(action) => onContextAction(action, node)}
-        pasteDisabled={!clipboard}
-        target={node}
-      />
-    </ContextMenuRoot>
+    <div className="py-0.5">
+      <ContextMenuRoot>
+        <ContextMenuTrigger>
+          <button
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+              isSelected
+                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            )}
+            onClick={() => void onSelectNode(node)}
+            style={{ paddingLeft: `${depth * 14 + 32}px` }}
+          >
+            <Icon className="size-4 shrink-0" />
+            <span className={cn("truncate", isDeletedGitEntry && "line-through")}>{node.name}</span>
+            {gitState ? (
+              <span
+                className={cn(
+                  "ml-auto shrink-0 font-mono text-[11px] font-semibold uppercase",
+                  // Keep badge appearance unchanged on selection (no added bg).
+                  getGitBadgeClassName(gitState),
+                )}
+              >
+                {getGitBadgeText(gitState)}
+              </span>
+            ) : null}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent
+          clipboard={clipboard}
+          isDeletedGitEntry={isDeletedGitEntry}
+          onAction={(action) => onContextAction(action, node)}
+          pasteDisabled={!clipboard}
+          target={node}
+        />
+      </ContextMenuRoot>
+    </div>
   );
 }
 
@@ -687,6 +996,8 @@ export function FileExplorerSidebar({
   selectedPath,
   busy,
   createBusy,
+  gitBusy,
+  gitStatus,
   operationBusy,
   clipboard,
   loadingPaths,
@@ -694,9 +1005,12 @@ export function FileExplorerSidebar({
   onCreateDirectory,
   onCutNode,
   onDeleteNode,
+  onRestoreDeletedNode,
   onOpenFolder,
   onPasteNode,
   onRefresh,
+  onGitRefresh,
+  onGitStatusChange,
   onRenameNode,
   onExpandDirectory,
   onSelectNode,
@@ -704,36 +1018,41 @@ export function FileExplorerSidebar({
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const createTargetNode = resolveCreateTargetNode(root, selectedPath);
+  const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
+  const mergedRoot = useMemo(
+    () => (root ? mergeDeletedGitNodes(root, gitStatusMap) : null),
+    [gitStatusMap, root],
+  );
 
   useEffect(() => {
-    if (!root) {
+    if (!mergedRoot) {
       setExpandedPaths(new Set());
       return;
     }
 
     setExpandedPaths((currentPaths) => {
-      const nextPaths = new Set<string>(currentPaths.size > 0 ? currentPaths : [root.path]);
+        const nextPaths = new Set<string>(currentPaths.size > 0 ? currentPaths : [mergedRoot.path]);
 
-      nextPaths.add(root.path);
+      nextPaths.add(mergedRoot.path);
 
       if (selectedPath) {
-        for (const ancestor of collectAncestorPaths(root, selectedPath)) {
+        for (const ancestor of collectAncestorPaths(mergedRoot, selectedPath)) {
           nextPaths.add(ancestor);
         }
       }
 
       return nextPaths;
     });
-  }, [root, selectedPath]);
+  }, [mergedRoot, selectedPath]);
 
   useEffect(() => {
-    if (!root) {
+    if (!mergedRoot) {
       return;
     }
 
     // Refresh rebuilds directory nodes as unloaded placeholders; hydrate expanded folders again.
     for (const path of expandedPaths) {
-      const node = findNodeByPath(root, path);
+      const node = findNodeByPath(mergedRoot, path);
 
       if (!node || node.kind !== "directory" || node.loaded || loadingPaths.has(path)) {
         continue;
@@ -741,7 +1060,7 @@ export function FileExplorerSidebar({
 
       void onExpandDirectory(node);
     }
-  }, [expandedPaths, loadingPaths, onExpandDirectory, root]);
+  }, [expandedPaths, loadingPaths, mergedRoot, onExpandDirectory]);
 
   const toggleDirectory = (path: string) => {
     setExpandedPaths((currentPaths) => {
@@ -760,7 +1079,14 @@ export function FileExplorerSidebar({
   const canPasteToRoot = useMemo(() => Boolean(root && clipboard), [clipboard, root]);
 
   const handleContextAction = async (
-    action: "createMarkdown" | "createDirectory" | "cut" | "delete" | "rename" | "paste",
+    action:
+      | "createMarkdown"
+      | "createDirectory"
+      | "cut"
+      | "delete"
+      | "rename"
+      | "paste"
+      | "restoreDeleted",
     node: ExplorerNode | null,
   ) => {
     if (!node && action !== "createMarkdown" && action !== "createDirectory" && action !== "paste") {
@@ -796,6 +1122,11 @@ export function FileExplorerSidebar({
 
     if (action === "delete" && node) {
       setPendingAction({ node, type: "delete" });
+      return;
+    }
+
+    if (action === "restoreDeleted" && node) {
+      setPendingAction({ node, type: "restoreDeleted" });
       return;
     }
 
@@ -857,17 +1188,18 @@ export function FileExplorerSidebar({
               className="min-h-0 h-full flex-1 overflow-auto px-2 pb-3"
               data-native-dialog-scroll-lock
             >
-              {root ? (
+              {mergedRoot ? (
                 <div className="space-y-1 py-2">
                   <FileTreeNode
                     clipboard={clipboard}
                     depth={0}
                     expandedPaths={expandedPaths}
+                    gitStatusMap={gitStatusMap}
                     loadingPaths={loadingPaths}
-                    node={root}
-                   onContextAction={(action, node) => {
-                     void handleContextAction(action, node);
-                   }}
+                    node={mergedRoot}
+                    onContextAction={(action, node) => {
+                      void handleContextAction(action, node);
+                    }}
                    onExpandDirectory={onExpandDirectory}
                    onSelectNode={onSelectNode}
                    selectedPath={selectedPath}
@@ -898,6 +1230,17 @@ export function FileExplorerSidebar({
             target={null}
           />
         </ContextMenuRoot>
+
+        <div className={explorerSidebarStatusBarClassName}>
+          <GitPanel
+            busy={gitBusy}
+            disabled={!root || busy || createBusy || operationBusy !== null}
+            onRefresh={onGitRefresh}
+            onStatusChange={onGitStatusChange}
+            rootPath={root?.path ?? null}
+            status={gitStatus}
+          />
+        </div>
       </aside>
 
       <RenameNodeDialog
@@ -962,6 +1305,42 @@ export function FileExplorerSidebar({
           setPendingAction(null);
         }}
       />
+
+      <NativeDialog
+        onOpenChange={(open) => !open && setPendingAction(null)}
+        open={pendingAction?.type === "restoreDeleted"}
+      >
+        <div className="flex min-h-0 flex-col">
+          <NativeDialogClose className="absolute end-2 top-2" onClick={() => setPendingAction(null)} />
+          <NativeDialogHeader>
+            <NativeDialogTitle>恢复已删除文件</NativeDialogTitle>
+            <NativeDialogDescription>
+              确认从 Git 恢复文件 “{pendingAction?.type === "restoreDeleted" ? pendingAction.node.name : ""}”？
+            </NativeDialogDescription>
+          </NativeDialogHeader>
+          <NativeDialogFooter>
+            <Button disabled={operationBusy === "delete" || operationBusy === "move" || operationBusy === "rename"} onClick={() => setPendingAction(null)} variant="outline">
+              取消
+            </Button>
+            <Button
+              disabled={operationBusy !== null}
+              onClick={() => {
+                if (pendingAction?.type !== "restoreDeleted") {
+                  return;
+                }
+
+                void onRestoreDeletedNode(pendingAction.node.path)
+                  .then(() => {
+                    setPendingAction(null);
+                  })
+                  .catch(() => {});
+              }}
+            >
+              恢复
+            </Button>
+          </NativeDialogFooter>
+        </div>
+      </NativeDialog>
     </>
   );
 }

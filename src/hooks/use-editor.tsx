@@ -278,7 +278,7 @@ function createEditorTheme(dark: boolean) {
       },
       ".cm-scroller": {
         fontFamily:
-          '"Geist Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         lineHeight: "1.7",
       },
       ".cm-content": {
