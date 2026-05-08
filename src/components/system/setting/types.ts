@@ -13,19 +13,19 @@ export const settingsSections: SettingsSection[] = [
   {
     id: "appearance",
     label: "外观",
-    description: "主题与界面显示",
+    description: "主题与界面",
     icon: Palette,
   },
   {
     id: "editor",
     label: "编辑器",
-    description: "AI 补全与输入行为",
+    description: "输入与编辑",
     icon: Keyboard,
   },
   {
     id: "about",
     label: "关于",
-    description: "产品信息与方向",
+    description: "产品与方向",
     icon: Settings2,
   },
 ];

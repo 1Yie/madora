@@ -25,7 +25,7 @@ export function SettingsDialog() {
     <>
       <Button
         aria-label="打开设置"
-        className="h-full rounded-none border-transparent px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        className="h-full rounded-full border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         size="sm"
         variant="ghost"
         onClick={() => setOpen(true)}

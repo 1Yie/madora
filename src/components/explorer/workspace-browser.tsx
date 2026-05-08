@@ -180,12 +180,9 @@ export function WorkspaceBrowser() {
   }, [sidebarWidth]);
 
   useEffect(() => {
-    if (!selectedFile) {
-      window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
-      return;
+    if (selectedFile) {
+      window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, selectedFile.path);
     }
-
-    window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, selectedFile.path);
   }, [selectedFile]);
 
   useEffect(() => {

@@ -3,7 +3,6 @@ import { Sparkles } from "lucide-react";
 import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { SettingsSectionCard } from "@/components/system/setting/shared";
 import { Input } from "@/components/ui/input";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Switch } from "@/components/ui/switch";
 
 export function EditorSettings() {
@@ -24,18 +23,11 @@ export function EditorSettings() {
 
   return (
     <div className="space-y-4">
-      <SettingsSectionCard
-        description="为 Markdown 编辑器选择默认保存方式。手动保存模式下，草稿仍会先保存在本地。"
-        title="保存"
-      >
+      <SettingsSectionCard description="配置编辑区域的相关功能" title="输入行为">
         <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
           <div className="space-y-1">
             <div className="text-sm font-medium text-foreground">自动保存</div>
-            <p className="text-xs text-muted-foreground">
-              开启后编辑内容会自动写入文件；关闭后仅在按
-              <span className="mx-1 font-medium text-foreground">Ctrl / Cmd + S</span>
-              时保存。
-            </p>
+            <p className="text-xs text-muted-foreground">开启后编辑内容会自动写入文件。</p>
           </div>
           <Switch
             checked={saveMode === "auto"}
@@ -43,10 +35,7 @@ export function EditorSettings() {
           />
         </div>
       </SettingsSectionCard>
-      <SettingsSectionCard
-        description="默认使用全局 FIM；你也可以开启智能路由，在需要时才回退到 chat-prefix。"
-        title="AI 补全"
-      >
+      <SettingsSectionCard description="配置 AI 相关功能" title="AI 补全">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
             <div className="space-y-1">
@@ -54,21 +43,16 @@ export function EditorSettings() {
                 <Sparkles className="size-4" />
                 启用 AI 自动补全
               </div>
-              <p className="text-xs text-muted-foreground">
-                输入后会自动请求并展示行内建议；有建议时按
-                <KbdGroup className="mx-1 align-middle">
-                  <Kbd>Tab</Kbd>
-                </KbdGroup>
-                接受补全；没有建议时仍保留原生缩进行为。
-              </p>
+              <p className="text-xs text-muted-foreground">开启后在输入时会自动向后补全文本。</p>
             </div>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-background px-4 py-3">
             <div className="space-y-1">
               <div className="text-sm font-medium text-foreground">启用智能路由</div>
+              <p className="text-xs text-muted-foreground">自动模式始终优先走 FIM。</p>
               <p className="text-xs text-muted-foreground">
-                默认关闭，自动模式始终优先走 FIM。开启后才恢复当前逻辑：光标后方还有文本时走 FIM，否则走 chat-prefix。
+                开启后光标后方还有文本时走 FIM，否则走 chat-prefix。
               </p>
             </div>
             <Switch checked={smartRoutingEnabled} onCheckedChange={setSmartRoutingEnabled} />
@@ -81,9 +65,7 @@ export function EditorSettings() {
               value={apiUrl}
               onChange={(event) => setApiUrl(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              使用基础地址；后端会自动补齐 Beta 路径并请求 `/chat/completions` 或 `/completions`。
-            </p>
+            <p className="text-xs text-muted-foreground">模型地址。</p>
           </label>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-foreground">API Key</span>
@@ -94,7 +76,12 @@ export function EditorSettings() {
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Key 仅保存在本机。</p>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">模型 API Key。</p>
+              <p className="text-xs text-muted-foreground">
+                API Key 仅保存在本机，通过后端请求使用。
+              </p>
+            </div>
           </label>
           <label className="block space-y-2">
             <span className="text-sm font-medium text-foreground">Model</span>
@@ -104,9 +91,12 @@ export function EditorSettings() {
               value={model}
               onChange={(event) => setModel(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              这里控制 chat-prefix / FIM 请求共用的模型；chat-prefix 现在只会发送最近上下文以降低延迟。
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">模型名称。</p>
+              <p className="text-xs text-muted-foreground">
+                不同模型可能会有不同的功能和表现，具体请参考模型提供方的说明。
+              </p>
+            </div>
           </label>
         </div>
       </SettingsSectionCard>

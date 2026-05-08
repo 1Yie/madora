@@ -1,6 +1,8 @@
 import { indentWithTab } from "@codemirror/commands";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
 import {
+  Compartment,
   EditorSelection,
   EditorState,
   Prec,
@@ -20,11 +22,13 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
+import { tags as t } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { createRoot, type Root } from "react-dom/client";
 import { useEffect, useEffectEvent, useRef } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
+import { useTheme } from "@/components/system/theme-provider";
 import { Spinner } from "@/components/ui/spinner";
 
 type UseEditorOptions = {
@@ -128,9 +132,6 @@ function isSnapshotCurrent(view: EditorView, snapshot: CompletionSnapshot): bool
   );
 }
 
-/**
- * 宽松续接：只要插入点与预览起始位置一致，无论输入什么内容，都只截断被覆盖的部分
- */
 function getContinuedCompletionPreview(
   preview: CompletionPreviewState,
   transaction: Transaction,
@@ -146,24 +147,20 @@ function getContinuedCompletionPreview(
   transaction.changes.iterChanges((fromA, toA, _fromB, toB, inserted) => {
     const insertedText = inserted.toString();
 
-    // 修改完全在预览之前 → 偏移位置
     if (toA <= preview.pos) {
       const offset = insertedText.length - (toA - fromA);
       nextPreview = { pos: preview.pos + offset, text: preview.text };
       return;
     }
-    // 修改完全在预览之后 → 不影响
     if (fromA >= preview.pos + preview.text.length) {
       nextPreview = preview;
       return;
     }
-    // 修改刚好从预览起始位置插入
     if (fromA === preview.pos && toA === preview.pos && insertedText.length > 0) {
       const remainingText = preview.text.slice(insertedText.length);
       nextPreview = remainingText.length === 0 ? null : { pos: toB, text: remainingText };
       return;
     }
-    // 其他重叠 → 保守清除
     nextPreview = null;
   });
 
@@ -239,7 +236,6 @@ const completionPreviewField = StateField.define<CompletionPreviewState | null>(
       return getContinuedCompletionPreview(value, transaction);
     }
 
-    // 选择变化：如果不再是单光标空选择，或光标离开了预览位置，则清除
     if (transaction.selection) {
       const prev = transaction.startState.selection.main;
       const next = transaction.state.selection.main;
@@ -268,57 +264,114 @@ const completionPreviewField = StateField.define<CompletionPreviewState | null>(
     }),
 });
 
-const editorTheme = EditorView.theme(
+const themeCompartment = new Compartment();
+
+function createEditorTheme(dark: boolean) {
+  return EditorView.theme(
+    {
+      "&": {
+        height: "100%",
+        accentColor: "var(--color-primary)",
+        backgroundColor: "transparent",
+        color: "var(--color-foreground)",
+        fontSize: "0.875rem",
+      },
+      ".cm-scroller": {
+        fontFamily:
+          '"Geist Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        lineHeight: "1.7",
+      },
+      ".cm-content": {
+        caretColor: "var(--color-primary)",
+        minHeight: "100%",
+        padding: "1rem 1.25rem",
+      },
+      ".cm-line": { padding: "0" },
+      ".cm-gutters": {
+        borderRight:
+          "1px solid color-mix(in oklab, var(--color-primary) 10%, var(--color-border) 90%)",
+        minHeight: "100%",
+        backgroundColor: "transparent",
+        color: "var(--color-muted-foreground)",
+      },
+      ".cm-selectionBackground, .cm-content ::selection": {
+        backgroundColor: "color-mix(in oklab, var(--color-primary) 20%, transparent)",
+      },
+      ".cm-activeLine": {
+        backgroundColor: "color-mix(in oklab, var(--color-primary) 8%, transparent)",
+      },
+      ".cm-activeLineGutter": {
+        backgroundColor: "color-mix(in oklab, var(--color-primary) 5%, transparent)",
+        color: "var(--color-primary)",
+      },
+      ".cm-focused .cm-selectionBackground": {
+        backgroundColor: "color-mix(in oklab, var(--color-primary) 26%, transparent)",
+      },
+      ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-primary)" },
+      ".cm-fim-preview": {
+        color: "var(--color-muted-foreground)",
+        fontStyle: "italic",
+        fontWeight: "100",
+        opacity: "0.6",
+        overflowWrap: "anywhere",
+        pointerEvents: "none",
+        userSelect: "none",
+        verticalAlign: "top",
+        whiteSpace: "pre-wrap",
+      },
+      ".cm-tooltip.cm-fim-tooltip": {
+        border: "none",
+        backgroundColor: "transparent",
+        boxShadow: "none",
+        padding: "0",
+        maxWidth: "none",
+      },
+      "&.cm-focused": { outline: "none" },
+    },
+    { dark },
+  );
+}
+
+const markdownHighlightStyle = HighlightStyle.define([
   {
-    "&": {
-      height: "100%",
-      backgroundColor: "transparent",
-      color: "var(--color-foreground)",
-      fontSize: "0.875rem",
-    },
-    ".cm-scroller": {
-      fontFamily:
-        '"Geist Variable", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      lineHeight: "1.7",
-    },
-    ".cm-content": {
-      minHeight: "100%",
-      padding: "1rem 1.25rem",
-    },
-    ".cm-line": { padding: "0" },
-    ".cm-gutters": {
-      minHeight: "100%",
-      border: "none",
-      backgroundColor: "transparent",
-      color: "var(--color-muted-foreground)",
-    },
-    ".cm-activeLine": {
-      backgroundColor: "color-mix(in oklab, var(--color-muted) 72%, transparent)",
-    },
-    ".cm-activeLineGutter": { backgroundColor: "transparent" },
-    ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--color-primary)" },
-    ".cm-fim-preview": {
-      color: "var(--color-muted-foreground)",
-      fontStyle: "italic",
-      fontWeight: "100",
-      opacity: "0.6",
-      overflowWrap: "anywhere",
-      pointerEvents: "none",
-      userSelect: "none",
-      verticalAlign: "top",
-      whiteSpace: "pre-wrap",
-    },
-    ".cm-tooltip.cm-fim-tooltip": {
-      border: "none",
-      backgroundColor: "transparent",
-      boxShadow: "none",
-      padding: "0",
-      maxWidth: "none",
-    },
-    "&.cm-focused": { outline: "none" },
+    tag: [t.heading, t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
+    color: "var(--color-primary)",
+    fontWeight: "700",
   },
-  { dark: true },
-);
+  {
+    tag: [t.strong],
+    color: "var(--color-primary)",
+    fontWeight: "700",
+  },
+  {
+    tag: [t.emphasis],
+    color: "color-mix(in oklab, var(--color-primary) 68%, var(--color-foreground))",
+    fontStyle: "italic",
+  },
+  {
+    tag: [t.link, t.url],
+    color: "var(--color-primary)",
+    textDecoration: "underline",
+    textDecorationColor: "color-mix(in oklab, var(--color-primary) 55%, transparent)",
+  },
+  {
+    tag: [t.quote, t.list, t.contentSeparator],
+    color: "color-mix(in oklab, var(--color-primary) 58%, var(--color-muted-foreground))",
+  },
+  {
+    tag: [t.monospace],
+    color: "var(--color-primary)",
+  },
+  {
+    tag: [t.strikethrough],
+    color: "color-mix(in oklab, var(--color-primary) 52%, var(--color-muted-foreground))",
+    textDecoration: "line-through",
+  },
+  {
+    tag: [t.processingInstruction, t.punctuation, t.meta, t.escape],
+    color: "color-mix(in oklab, var(--color-primary) 34%, var(--color-muted-foreground))",
+  },
+]);
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -396,8 +449,8 @@ function renderCompletionPreview(view: EditorView, preview: CompletionPreviewSta
 
 function CompletionTooltipContent() {
   return (
-    <div className="inline-flex items-center justify-center rounded-full border border-border/60 bg-background/90 p-1 shadow-sm backdrop-blur-sm">
-      <Spinner className="size-3 text-primary/85" />
+    <div className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-accent/60 p-1 shadow-sm backdrop-blur-sm">
+      <Spinner className="size-3 text-primary" />
     </div>
   );
 }
@@ -446,6 +499,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
   });
 
   const { apiKey, apiUrl, enabled, model, smartRoutingEnabled } = useAiSettings();
+  const { resolvedTheme } = useTheme();
 
   const handleChange = useEffectEvent((nextValue: string) => {
     onChange?.(nextValue);
@@ -491,7 +545,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     logCompletionDebug("preview-clear");
     syncPreview(null);
 
-    // 主动清除后启动冷却期
     if (cooldownTimerRef.current !== null) window.clearTimeout(cooldownTimerRef.current);
     cooldownTimerRef.current = window.setTimeout(() => {
       cooldownTimerRef.current = null;
@@ -499,22 +552,17 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
   });
 
   const abortAllCompletion = useEffectEvent(() => {
-    // 清除预览
     const view = viewRef.current;
     if (view && view.state.field(completionPreviewField)) {
       syncPreview(null);
     }
-    // 取消定时器
     clearScheduledCompletion("cancel");
-    // 丢弃所有排队和正在进行的请求（通过递增序列号使其失效）
     requestSequenceRef.current += 1;
     pendingRequestRef.current = null;
     queuedRequestRef.current = null;
-    // 重置状态到默认
     setCompletionStatus(
       getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
     );
-    // 进入冷却期避免立刻重新触发
     if (cooldownTimerRef.current !== null) window.clearTimeout(cooldownTimerRef.current);
     cooldownTimerRef.current = window.setTimeout(() => {
       cooldownTimerRef.current = null;
@@ -537,7 +585,9 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
         internalCompletionEffect.of(true),
       ],
     });
-    setCompletionStatus(getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey));
+    setCompletionStatus(
+      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
+    );
     return true;
   });
 
@@ -560,7 +610,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
           docText: view.state.doc.toString(),
         } satisfies CompletionSnapshot);
 
-      // 缓存优先
       if (tryUseCache(view, snapshot)) return;
 
       const { cursor, docText } = snapshot;
@@ -612,9 +661,11 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
           },
         });
 
-        // 检查请求是否已被取消（序列号落后）
         if (requestId !== requestSequenceRef.current) {
-          logCompletionDebug("request-cancelled", { requestId, currentSeq: requestSequenceRef.current });
+          logCompletionDebug("request-cancelled", {
+            requestId,
+            currentSeq: requestSequenceRef.current,
+          });
           return;
         }
 
@@ -634,7 +685,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
           return;
         }
 
-        // 存储到缓存
         completionCacheRef.current = {
           snapshot: { cursor, docText },
           completion,
@@ -649,7 +699,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
 
         setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
       } catch (error) {
-        // 同样检查是否已取消
         if (requestId !== requestSequenceRef.current) return;
         clearCompletionPreview();
         setCompletionStatus({ message: getErrorMessage(error), tone: "error" });
@@ -657,12 +706,14 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
         const wasPending = pendingRequestRef.current?.requestSequence === requestId;
         if (wasPending) pendingRequestRef.current = null;
 
-        // 兜底状态重置
         if (!pendingRequestRef.current && !scheduledSnapshotRef.current) {
           const currentTone = completionStatusRef.current.tone;
           if (currentTone === "loading" || currentTone === "error") {
             setCompletionStatus(
-              getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
+              getDefaultCompletionStatus(
+                aiSettingsRef.current.enabled,
+                aiSettingsRef.current.apiKey,
+              ),
             );
           }
         }
@@ -675,7 +726,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
 
         queuedRequestRef.current = null;
         if (!isSnapshotCurrent(nextView, queuedRequest)) return;
-        // 再次确认未被取消
         if (requestSequenceRef.current !== requestId) return;
         void requestCompletion(nextView, queuedRequest);
       }
@@ -765,6 +815,15 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     syncTooltip();
   }, [apiKey, apiUrl, enabled, model, smartRoutingEnabled]);
 
+  // resolvedTheme 变化时热更新编辑器主题
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: themeCompartment.reconfigure(createEditorTheme(resolvedTheme === "dark")),
+    });
+  }, [resolvedTheme]);
+
   // 初始化编辑器
   useEffect(() => {
     if (!editorRef.current) return;
@@ -778,6 +837,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
         extensions: [
           basicSetup,
           markdown(),
+          syntaxHighlighting(markdownHighlightStyle),
           EditorView.lineWrapping,
           tooltips({ tooltipSpace: getCompletionTooltipSpace }),
           EditorView.domEventHandlers({
@@ -789,7 +849,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
               });
             },
           }),
-          editorTheme,
+          themeCompartment.of(createEditorTheme(resolvedTheme === "dark")),
           completionPreviewField,
           completionTooltipField,
           Prec.high(
@@ -808,7 +868,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
                   if (!onSave) {
                     return false;
                   }
-
                   handleSave();
                   return true;
                 },
@@ -825,7 +884,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
               handleChange(update.state.doc.toString());
             }
 
-            // 光标变化（选择集变化）但不是内部操作、不是外部同步、不是文档变化 → 取消所有补全
             if (
               !internalUpdate &&
               !externalSyncUpdate &&
@@ -833,11 +891,9 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
               !update.docChanged
             ) {
               abortAllCompletion();
-              // 不需要再执行后面的调度/状态渲染（abort 内部已处理）
               return;
             }
 
-            // 文档变化时重置错误/加载状态
             if (
               !internalUpdate &&
               !externalSyncUpdate &&
@@ -861,7 +917,6 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
               queuedRequestRef.current = null;
             }
 
-            // 用户输入触发补全调度（排除 composition）
             if (!internalUpdate && !externalSyncUpdate) {
               const isUserInput = update.transactions.some((tr) => tr.isUserEvent("input"));
               if (isUserInput && !compositionInputUpdate) {
@@ -892,7 +947,8 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     return () => {
       queuedRequestRef.current = null;
       pendingRequestRef.current = null;
-      if (autoCompletionTimerRef.current !== null) window.clearTimeout(autoCompletionTimerRef.current);
+      if (autoCompletionTimerRef.current !== null)
+        window.clearTimeout(autoCompletionTimerRef.current);
       if (cooldownTimerRef.current !== null) window.clearTimeout(cooldownTimerRef.current);
       view.destroy();
       viewRef.current = null;

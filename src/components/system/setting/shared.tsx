@@ -60,7 +60,11 @@ export function ThemeOption({
     >
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{label}</span>
-        <span className={cn("size-2.5 rounded-full transition-colors", active ? "bg-primary" : "bg-border")} />
+        <div className="flex items-center gap-2">
+          <span className={cn("size-2.5 rounded-full transition-colors", active ? "bg-primary" : "bg-border")} />
+          {/* color swatch placeholder; actual color applied via --accent CSS var when used */}
+
+        </div>
       </div>
       <p className="mt-1 text-xs leading-5">{description}</p>
     </button>

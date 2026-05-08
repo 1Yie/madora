@@ -16,6 +16,8 @@ pub fn run() {
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
             utility::greet,
+            // theme
+            crate::commands::theme::get_system_theme,
             explorer::pick_workspace_folder,
             explorer::scan_workspace_folder,
             explorer::read_workspace_directory,
@@ -30,6 +32,7 @@ pub fn run() {
             project::read_file_content,
             project::scan_project
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
