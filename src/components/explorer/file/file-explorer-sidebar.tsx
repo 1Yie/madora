@@ -51,20 +51,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { showErrorToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-import type { GitStatus } from "./git-types";
-import { GitPanel } from "./git-panel";
+import type { GitStatus } from "../git/git-types";
+import { GitPanel } from "../git/git-panel";
 import {
   explorerSidebarStatusBarClassName,
   explorerTopSectionHeightClassName,
-} from "./layout";
+} from "../layout";
 import {
   getParentPath,
   getPathName,
   isSameOrDescendantPath,
   joinExplorerPath,
   normalizeExplorerPath,
-} from "./path-utils";
-import type { ExplorerClipboardItem, ExplorerNode } from "./types";
+} from "../../../lib/path-utils";
+import type { ExplorerClipboardItem, ExplorerNode } from "../types";
 
 type WorkspaceOperation = "create" | "rename" | "delete" | "move" | null;
 
@@ -90,6 +90,7 @@ type FileExplorerSidebarProps = {
   onPasteNode: (destinationPath: string | null) => Promise<void>;
   onRefresh: () => void;
   onGitRefresh: () => Promise<void>;
+  onGitRefreshWorkspace: () => Promise<void>;
   onGitStatusChange: (status: GitStatus) => void;
   onRenameNode: (targetPath: string, newName: string) => Promise<void>;
   onExpandDirectory: (node: ExplorerNode) => void;
@@ -897,7 +898,7 @@ function FileTreeNode({
           </ContextMenuTrigger>
           <ContextMenuContent
             clipboard={clipboard}
-            includeNodeActions={depth > 0}
+            includeNodeActions={depth > 0 && !node.isMissing}
             isDeletedGitEntry={false}
             onAction={(action) => onContextAction(action, node)}
             pasteDisabled={pasteDisabled}
@@ -1010,6 +1011,7 @@ export function FileExplorerSidebar({
   onPasteNode,
   onRefresh,
   onGitRefresh,
+  onGitRefreshWorkspace,
   onGitStatusChange,
   onRenameNode,
   onExpandDirectory,
@@ -1214,7 +1216,7 @@ export function FileExplorerSidebar({
                     </EmptyMedia>
                     <EmptyTitle className="text-base">打开一个本地文件夹</EmptyTitle>
                     <EmptyDescription>
-                      左侧导航会按目录结构展示可预览文件，交互方式接近 VS Code 的资源管理器。
+                      左侧导航会按目录结构展示可预览文件。
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -1236,6 +1238,7 @@ export function FileExplorerSidebar({
             busy={gitBusy}
             disabled={!root || busy || createBusy || operationBusy !== null}
             onRefresh={onGitRefresh}
+            onRefreshWorkspace={onGitRefreshWorkspace}
             onStatusChange={onGitStatusChange}
             rootPath={root?.path ?? null}
             status={gitStatus}

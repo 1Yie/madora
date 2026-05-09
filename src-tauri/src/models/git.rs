@@ -38,6 +38,17 @@ pub enum GitFileState {
     Untracked,
 }
 
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GitRepositoryState {
+    Clean,
+    Merge,
+    Revert,
+    CherryPick,
+    Bisect,
+    Rebase,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitFileStatus {
@@ -45,6 +56,7 @@ pub struct GitFileStatus {
     pub staged: bool,
     pub unstaged: bool,
     pub status: GitFileState,
+    pub has_conflict_markers: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -58,6 +70,7 @@ pub struct GitStatus {
     pub has_untracked_files: bool,
     pub is_merging: bool,
     pub remotes: Vec<GitRemoteInfo>,
+    pub repository_state: GitRepositoryState,
     pub staged_count: usize,
     pub total_changed_count: usize,
     pub unstaged_count: usize,
@@ -79,4 +92,11 @@ pub struct GitSyncResult {
     pub branch: Option<String>,
     pub conflicts: Vec<String>,
     pub message: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchInfo {
+    pub name: String,
+    pub is_head: bool,
 }

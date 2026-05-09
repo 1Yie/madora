@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { cn } from "@/lib/utils";
+import { HighlightedCodeBlock } from "./code-block-highlight";
 
 type MarkdownPreviewProps = {
   className?: string;
@@ -23,6 +24,25 @@ const components: ComponentProps<typeof Markdown>["components"] = {
       {children}
     </a>
   ),
+  ol: ({ start, children, ...props }) => (
+    <ol start={start} {...props}>
+      {children}
+    </ol>
+  ),
+  ul: ({ children, ...props }) => <ul {...props}>{children}</ul>,
+  li: ({ children, ...props }) => <li {...props}>{children}</li>,
+  code: ({ className, children, ...props }) => {
+    const match = /^language-(\w+)/.exec(className || "");
+    if (match) {
+      return <HighlightedCodeBlock code={String(children).replace(/\n$/, "")} lang={match[1]} />;
+    }
+    return (
+      <code className={className} {...props}>
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }) => <div>{children}</div>,
 };
 
 export function MarkdownPreview({ className, content }: MarkdownPreviewProps) {

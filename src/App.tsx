@@ -3,7 +3,6 @@ import { RouterProvider } from "react-router-dom";
 import router from "./router";
 import Titlebar from "./components/system/top-bar";
 
-
 function App() {
   useEffect(() => {
     const handler = (e: MouseEvent) => e.preventDefault();

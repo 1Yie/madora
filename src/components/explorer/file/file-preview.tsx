@@ -16,12 +16,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
-import { CodeBlock } from "./code-block";
-import { explorerTopSectionHeightClassName } from "./layout";
-import { MarkdownWorkspace } from "./markdown-workspace";
-import { normalizeExplorerPath } from "./path-utils";
-import { TextWorkspace } from "./text-workspace";
-import type { ExplorerNode, FilePreview as FilePreviewData } from "./types";
+import { CodeBlock } from "../code-block";
+import { ConflictEditor } from "../git/conflict-editor";
+import { explorerTopSectionHeightClassName } from "../layout";
+import { MarkdownWorkspace } from "../markdown/markdown-workspace";
+import { normalizeExplorerPath } from "../../../lib/path-utils";
+import type { ExplorerNode, FilePreview as FilePreviewData } from "../types";
+import { TextWorkspace } from "../workspace/text-workspace";
 
 function inferLanguage(fileName: string): string | undefined {
   const extension = fileName.split(".").pop()?.toLowerCase();
@@ -80,6 +81,7 @@ type FilePreviewProps = {
   loading: boolean;
   onOpenFolder: () => void;
   preview: FilePreviewData | null;
+  rootPath: string | null;
   selectedFile: ExplorerNode | null;
   workspaceOpen: boolean;
 };
@@ -103,6 +105,7 @@ function renderPreviewBody(
   preview: FilePreviewData,
   isConflicted: boolean,
   markdownMode: EditorMode,
+  rootPath: string | null,
 ) {
   if (preview.fileKind === "image" && preview.imageDataUrl) {
     return (
@@ -116,42 +119,65 @@ function renderPreviewBody(
     );
   }
 
+  const content = preview.content ?? "";
+  const hasConflictMarkers = content.includes("<<<<<<<");
+
+  if (isConflicted && hasConflictMarkers && rootPath && preview.fileKind === "markdown") {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="min-h-0 flex-1 overflow-hidden border-b border-border">
+          <TextWorkspace
+            key={selectedFile.path + "-preview"}
+            content={content}
+            filePath={selectedFile.path}
+            mode={markdownMode}
+          />
+        </div>
+
+        <div className="flex min-h-0 max-h-1/2 flex-col justify-end">
+          <div className="overflow-auto">
+            <ConflictEditor
+              content={content}
+              filePath={selectedFile.path}
+              key={selectedFile.path + "-conflict"}
+              rootPath={rootPath}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 纯冲突文件（非 markdown）
+  if (isConflicted && hasConflictMarkers && rootPath) {
+    return (
+      <ConflictEditor
+        content={content}
+        filePath={selectedFile.path}
+        key={selectedFile.path}
+        rootPath={rootPath}
+      />
+    );
+  }
+
   if (preview.fileKind === "markdown") {
     return (
       <MarkdownWorkspace
         key={selectedFile.path}
-        content={preview.content ?? ""}
+        content={content}
         filePath={selectedFile.path}
         mode={markdownMode}
       />
     );
   }
 
-  if (isConflicted) {
-    return (
-      <TextWorkspace
-        content={preview.content ?? ""}
-        filePath={selectedFile.path}
-        key={selectedFile.path}
-      />
-    );
-  }
-
-  return (
-    <CodeBlock
-      code={preview.content ?? ""}
-      language={inferLanguage(selectedFile.name)}
-      wrapLongLines
-    />
-  );
+  return <CodeBlock code={content} language={inferLanguage(selectedFile.name)} wrapLongLines />;
 }
 
 function PreviewHeader({
-  isConflicted,
   preview,
   selectedFile,
 }: {
-  isConflicted: boolean;
   preview: FilePreviewData | null;
   selectedFile: ExplorerNode;
 }) {
@@ -163,7 +189,7 @@ function PreviewHeader({
 
       <Badge variant="outline">{selectedFile.isMissing ? "deleted" : selectedFile.fileKind}</Badge>
 
-      {isConflicted && <Badge variant="destructive">冲突</Badge>}
+      {/* {isConflicted && <Badge variant="destructive">冲突</Badge>} */}
 
       {preview && <Badge variant="secondary">{formatSize(preview.size)}</Badge>}
 
@@ -177,12 +203,14 @@ function PreviewState({
   loading,
   markdownMode,
   preview,
+  rootPath,
   selectedFile,
 }: {
   isConflicted: boolean;
   loading: boolean;
   markdownMode: EditorMode;
   preview: FilePreviewData | null;
+  rootPath: string | null;
   selectedFile: ExplorerNode;
 }) {
   if (loading) {
@@ -209,7 +237,7 @@ function PreviewState({
           <EmptyTitle>该文件已从工作区删除</EmptyTitle>
 
           <EmptyDescription>
-            它仍保留在 Git 变更列表中。可在左侧右键选择“恢复文件”。
+            它仍保留在 Git 变更列表中。可在左侧右键选择"恢复文件"。
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -218,12 +246,12 @@ function PreviewState({
 
   if (preview) {
     if (preview.fileKind === "markdown") {
-      return renderPreviewBody(selectedFile, preview, isConflicted, markdownMode);
+      return renderPreviewBody(selectedFile, preview, isConflicted, markdownMode, rootPath);
     }
 
     return (
       <ScrollArea className="h-full" scrollFade>
-        {renderPreviewBody(selectedFile, preview, isConflicted, markdownMode)}
+        {renderPreviewBody(selectedFile, preview, isConflicted, markdownMode, rootPath)}
       </ScrollArea>
     );
   }
@@ -252,16 +280,24 @@ export function FilePreview({
   loading,
   onOpenFolder,
   preview,
+  rootPath,
   selectedFile,
   workspaceOpen,
 }: FilePreviewProps) {
   const [markdownMode, setMarkdownMode] = useState<EditorMode>("edit");
 
-  const isConflicted =
+  // 以文件内容为准：index 标记冲突 OR 文件里有冲突标记，任一满足即视为冲突。
+  // 这样可以避免 index 状态已清但文件内容尚未解决时冲突标记消失的问题。
+  const content = preview?.content ?? "";
+  const hasConflictMarkers = content.includes("<<<<<<<");
+
+  const isConflictedByIndex =
     selectedFile !== null &&
     conflictedFilePaths.some((conflictedPath) =>
       normalizeExplorerPath(selectedFile.path).endsWith(normalizeExplorerPath(conflictedPath)),
     );
+
+  const isConflicted = isConflictedByIndex || hasConflictMarkers;
 
   if (!selectedFile) {
     return (
@@ -294,11 +330,7 @@ export function FilePreview({
       <div className={cn("border-b border-border px-2", explorerTopSectionHeightClassName)}>
         <div className="flex h-full items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <PreviewHeader
-              isConflicted={isConflicted}
-              preview={preview}
-              selectedFile={selectedFile}
-            />
+            <PreviewHeader preview={preview} selectedFile={selectedFile} />
 
             <CardDescription
               className="truncate font-mono text-xs"
@@ -308,7 +340,7 @@ export function FilePreview({
             </CardDescription>
           </div>
 
-          {selectedFile.fileKind === "markdown" ? (
+          {selectedFile.fileKind === "markdown" && !isConflicted ? (
             <ToggleGroup
               className="shrink-0 gap-0"
               onValueChange={(values) => {
@@ -323,14 +355,12 @@ export function FilePreview({
               <ToggleGroupItem className="gap-1.5 px-3" value="edit">
                 <div className="flex gap-1.5 items-center">
                   <Pencil className="size-3.5 shrink-0" />
-                
                 </div>
               </ToggleGroupItem>
 
               <ToggleGroupItem className="gap-1.5 px-3" value="preview">
                 <div className="flex gap-1.5 items-center">
                   <Eye className="size-4 shrink-0" />
-                 
                 </div>
               </ToggleGroupItem>
             </ToggleGroup>
@@ -344,6 +374,7 @@ export function FilePreview({
           loading={loading}
           markdownMode={markdownMode}
           preview={preview}
+          rootPath={rootPath}
           selectedFile={selectedFile}
         />
       </div>

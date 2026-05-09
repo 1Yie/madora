@@ -2,8 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
-import { FileExplorerSidebar } from "@/components/explorer/file-explorer-sidebar";
-import { FilePreview } from "@/components/explorer/file-preview";
+import { FileExplorerSidebar } from "@/components/explorer/file/file-explorer-sidebar";
+import { FilePreview } from "@/components/explorer/file/file-preview";
 import { showErrorToast } from "@/components/ui/toast";
 
 import {
@@ -13,23 +13,52 @@ import {
   normalizeExplorerPath,
   remapPathPrefix,
   replacePathBaseName,
-} from "./path-utils";
+} from "../../../lib/path-utils";
 import type {
   ExplorerClipboardItem,
   ExplorerNode,
   FilePreview as FilePreviewData,
-} from "./types";
-import type { GitStatus } from "./git-types";
+} from "../types";
+import type { GitStatus } from "../git/git-types";
 
 const WORKSPACE_ROOT_STORAGE_KEY = "madora-workspace-root-path";
 const LAST_OPEN_FILE_STORAGE_KEY = "madora-last-open-file-path";
 const SIDEBAR_WIDTH_STORAGE_KEY = "madora-workspace-sidebar-width";
+const MARKDOWN_DRAFT_KEY_PREFIX = "madora-markdown-draft:";
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
 
 type ClipboardMode = "cut";
 type WorkspaceOperation = "create" | "rename" | "delete" | "move" | null;
+
+function removeMarkdownDraftsFor(path: string): void {
+  window.localStorage.removeItem(`${MARKDOWN_DRAFT_KEY_PREFIX}${path}`);
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+
+    if (key?.startsWith(`${MARKDOWN_DRAFT_KEY_PREFIX}${path}/`)) {
+      window.localStorage.removeItem(key);
+    }
+  }
+}
+
+function clearAllMarkdownDrafts(): void {
+  const keysToRemove: string[] = [];
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+
+    if (key?.startsWith(MARKDOWN_DRAFT_KEY_PREFIX)) {
+      keysToRemove.push(key);
+    }
+  }
+
+  for (const key of keysToRemove) {
+    window.localStorage.removeItem(key);
+  }
+}
 
 function clampSidebarWidth(width: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
@@ -167,6 +196,7 @@ export function WorkspaceBrowser() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewRequestId = useRef(0);
   const dragStartWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH);
+  const selectedFileRef = useRef<ExplorerNode | null>(null);
 
   const clearPreviewState = () => {
     previewRequestId.current += 1;
@@ -186,6 +216,8 @@ export function WorkspaceBrowser() {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    selectedFileRef.current = selectedFile;
+
     if (selectedFile) {
       window.localStorage.setItem(LAST_OPEN_FILE_STORAGE_KEY, selectedFile.path);
     }
@@ -530,6 +562,8 @@ export function WorkspaceBrowser() {
         selectedPath: targetPath,
       });
 
+      removeMarkdownDraftsFor(createdPath);
+
       // Re-scan the whole workspace to ensure the new file appears immediately.
       const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", { rootPath });
 
@@ -607,6 +641,9 @@ export function WorkspaceBrowser() {
         targetPath,
       });
 
+      removeMarkdownDraftsFor(targetPath);
+      removeMarkdownDraftsFor(renamedPath);
+
       const nextRoot = await invoke<ExplorerNode>("scan_workspace_folder", {
         rootPath: root.path,
       });
@@ -660,6 +697,8 @@ export function WorkspaceBrowser() {
         rootPath: root.path,
         targetPath,
       });
+
+      removeMarkdownDraftsFor(targetPath);
 
       const nextRoot = await refreshDirectories(root, [parentDirectory]);
 
@@ -895,7 +934,7 @@ export function WorkspaceBrowser() {
 
   useEffect(() => {
     const handleWorkspaceFileSaved = (event: Event) => {
-      const customEvent = event as CustomEvent<{ filePath?: string }>;
+      const customEvent = event as CustomEvent<{ filePath?: string; source?: string }>;
 
       if (!root?.path) {
         return;
@@ -908,6 +947,14 @@ export function WorkspaceBrowser() {
       }
 
       void refreshGitStatus(root.path);
+
+      if (customEvent.detail?.source === "conflict-resolve") {
+        const currentFile = selectedFileRef.current;
+
+        if (currentFile && normalizeExplorerPath(currentFile.path) === normalizeExplorerPath(savedPath)) {
+          void loadPreview(currentFile);
+        }
+      }
     };
 
     window.addEventListener("workspace-file-saved", handleWorkspaceFileSaved as EventListener);
@@ -961,7 +1008,8 @@ export function WorkspaceBrowser() {
           onOpenFolder={openFolder}
           onPasteNode={pasteNode}
           onRefresh={refreshFolder}
-          onGitRefresh={async () => refreshGitStatus()}
+          onGitRefresh={async () => { await refreshGitStatus(); await refreshFolder(); }}
+          onGitRefreshWorkspace={async () => { clearAllMarkdownDrafts(); await refreshGitStatus(); await refreshFolder(); }}
           onGitStatusChange={setGitStatus}
           onRenameNode={renameNode}
           onExpandDirectory={expandDirectory}
@@ -985,6 +1033,7 @@ export function WorkspaceBrowser() {
           loading={previewLoading}
           onOpenFolder={openFolder}
           preview={preview}
+          rootPath={root?.path ?? null}
           selectedFile={selectedFile}
           workspaceOpen={Boolean(root)}
         />

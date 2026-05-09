@@ -1,7 +1,7 @@
 import type { SaveMode } from "@/components/system/ai-settings-provider";
 import { useEditor } from "@/hooks/use-editor";
 import { Spinner } from "@/components/ui/spinner";
-import { explorerEditorStatusBarClassName } from "./layout";
+import { explorerEditorStatusBarClassName } from "../layout";
 import { MarkdownPreview } from "./markdown-preview";
 
 type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";

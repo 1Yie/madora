@@ -1,5 +1,7 @@
 import { useTheme } from "@/components/system/theme-provider";
+import { useProseTheme } from "@/components/system/prose-theme-provider";
 import { SettingsSectionCard, ThemeOption } from "@/components/system/setting/shared";
+import { Textarea } from "@/components/ui/textarea";
 
 function CheckIcon({ className }: { className?: string }) {
   return (
@@ -103,6 +105,7 @@ const PRESETS: Array<[string, string]> = [
 
 export function AppearanceSettings() {
   const { theme, setTheme, accent, accentMode, setAccent, setAccentMode } = useTheme();
+  const { customCss, setCustomCss } = useProseTheme();
 
   const sorted = [...PRESETS].sort((a, b) => {
     const aRgb = hexToRgb(a[0]);
@@ -237,6 +240,21 @@ export function AppearanceSettings() {
               </div>
             </button>
           ))}
+        </div>
+      </SettingsSectionCard>
+      <SettingsSectionCard description="自定义 Markdown 预览的 CSS 样式" title="自定义 CSS">
+        <div className="[&_textarea]:min-h-60 [&_textarea]:font-mono [&_textarea]:text-sm">
+          <Textarea
+            onChange={(e) => setCustomCss(e.target.value)}
+            placeholder={`.prose-custom h1 {\n  font-size: 2.5rem;\n}\n\n.prose-custom blockquote {\n  border-left-color: var(--primary);\n}`}
+            spellCheck={false}
+            value={customCss}
+          />
+        </div>
+        <div className="pt-2">
+          <p className="text-xs text-muted-foreground">
+            选择器应以 <code>.prose-custom</code> 为前缀，以避免与应用其他部分的样式冲突。
+          </p>
         </div>
       </SettingsSectionCard>
     </div>

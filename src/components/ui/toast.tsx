@@ -73,7 +73,7 @@ function useToastPortalContainer() {
 
   useEffect(() => {
     const syncContainer = () => {
-      setContainer(getTopNativeDialogHost());
+      setContainer(getTopNativeDialogHost() ?? document.body);
     };
 
     syncContainer();
@@ -320,6 +320,14 @@ export function showErrorToast(
     priority: "high",
     title,
     type: "error",
+  });
+}
+
+export function showSuccessToast(title: React.ReactNode): string {
+  return toastManager.add({
+    priority: "low",
+    title,
+    type: "success",
   });
 }
 

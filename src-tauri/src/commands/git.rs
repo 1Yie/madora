@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
 use git2::{
-    BranchType, Cred, Error, ErrorCode, FetchOptions, IndexAddOption, PushOptions,
-    RemoteCallbacks, Repository, ResetType, Signature, Status, StatusOptions,
+    BranchType, Cred, Error, ErrorCode, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks,
+    Repository, ResetType, Signature, Status, StatusOptions,
 };
 
 use crate::models::git::{
-    GitAuth, GitBranchStatus, GitFileState, GitFileStatus, GitLogEntry, GitRemoteInfo,
-    GitStatus, GitSyncResult,
+    GitAuth, GitBranchInfo, GitBranchStatus, GitFileState, GitFileStatus, GitLogEntry,
+    GitRemoteInfo, GitRepositoryState, GitStatus, GitSyncResult,
 };
 
 fn to_error_message(error: Error) -> String {
@@ -24,6 +24,7 @@ fn empty_git_status() -> GitStatus {
         has_untracked_files: false,
         is_merging: false,
         remotes: Vec::new(),
+        repository_state: GitRepositoryState::Clean,
         staged_count: 0,
         total_changed_count: 0,
         unstaged_count: 0,
@@ -33,6 +34,10 @@ fn empty_git_status() -> GitStatus {
 
 fn discover_repo(root_path: &Path) -> Result<Repository, Error> {
     Repository::discover(root_path)
+}
+
+fn is_editor_managed_repo(repo: &Repository) -> bool {
+    repo.path().join("EDITOR_MANAGED").exists()
 }
 
 fn relative_repo_path(repo: &Repository, path: &Path) -> Result<PathBuf, String> {
@@ -49,7 +54,10 @@ fn normalize_repo_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-fn build_remote_callbacks<'a>(repo: &'a Repository, auth: Option<&'a GitAuth>) -> RemoteCallbacks<'a> {
+fn build_remote_callbacks<'a>(
+    repo: &'a Repository,
+    auth: Option<&'a GitAuth>,
+) -> RemoteCallbacks<'a> {
     let mut callbacks = RemoteCallbacks::new();
 
     callbacks.credentials(move |url, username_from_url, allowed_types| {
@@ -59,7 +67,9 @@ fn build_remote_callbacks<'a>(repo: &'a Repository, auth: Option<&'a GitAuth>) -
                 .or(username_from_url)
                 .unwrap_or("git");
 
-            if let Some(private_key_path) = auth.and_then(|value| value.ssh_private_key_path.as_deref()) {
+            if let Some(private_key_path) =
+                auth.and_then(|value| value.ssh_private_key_path.as_deref())
+            {
                 return Cred::ssh_key(
                     ssh_username,
                     None,
@@ -68,14 +78,20 @@ fn build_remote_callbacks<'a>(repo: &'a Repository, auth: Option<&'a GitAuth>) -
                 );
             }
 
-            if let Some(username) = username_from_url {
-                if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+            let has_ssh_sock = std::env::var("SSH_AUTH_SOCK")
+                .map(|sock| Path::new(&sock).exists())
+                .unwrap_or(false);
+
+            if has_ssh_sock {
+                if let Some(username) = username_from_url {
+                    if let Ok(cred) = Cred::ssh_key_from_agent(username) {
+                        return Ok(cred);
+                    }
+                }
+
+                if let Ok(cred) = Cred::ssh_key_from_agent(ssh_username) {
                     return Ok(cred);
                 }
-            }
-
-            if let Ok(cred) = Cred::ssh_key_from_agent(ssh_username) {
-                return Ok(cred);
             }
         }
 
@@ -101,12 +117,17 @@ fn build_remote_callbacks<'a>(repo: &'a Repository, auth: Option<&'a GitAuth>) -
         }
 
         if allowed_types.is_username() {
-            if let Some(username) = auth.and_then(|value| value.username.as_deref()).or(username_from_url) {
+            if let Some(username) = auth
+                .and_then(|value| value.username.as_deref())
+                .or(username_from_url)
+            {
                 return Cred::username(username);
             }
         }
 
-        Err(Error::from_str("Git 认证失败，请检查远端配置或提供凭证"))
+        Err(Error::from_str(
+            "认证失败：请在工作区底部的 SSH 设置中填写 SSH 私钥路径或用户名密码",
+        ))
     });
 
     callbacks
@@ -150,11 +171,11 @@ fn current_branch_status(repo: &Repository) -> Result<Option<GitBranchStatus>, E
         if let Ok(upstream_branch) = branch.upstream() {
             upstream = upstream_branch.name()?.map(str::to_string);
 
-            if let (Some(local_target), Some(upstream_target)) = (
-                branch.get().target(),
-                upstream_branch.get().target(),
-            ) {
-                let (next_ahead, next_behind) = repo.graph_ahead_behind(local_target, upstream_target)?;
+            if let (Some(local_target), Some(upstream_target)) =
+                (branch.get().target(), upstream_branch.get().target())
+            {
+                let (next_ahead, next_behind) =
+                    repo.graph_ahead_behind(local_target, upstream_target)?;
                 ahead = next_ahead;
                 behind = next_behind;
             }
@@ -304,7 +325,8 @@ fn read_git_status(root_path: &Path) -> Result<GitStatus, Error> {
             .head_to_index()
             .and_then(|delta| delta.new_file().path().or_else(|| delta.old_file().path()))
             .or_else(|| {
-                entry.index_to_workdir()
+                entry
+                    .index_to_workdir()
                     .and_then(|delta| delta.new_file().path().or_else(|| delta.old_file().path()))
             })
             .map(|value| {
@@ -317,17 +339,41 @@ fn read_git_status(root_path: &Path) -> Result<GitStatus, Error> {
             })
             .unwrap_or_else(String::new);
 
+        let has_conflict_markers = if status.is_conflicted() {
+            std::fs::read_to_string(&path)
+                .map(|content| content.contains("<<<<<<<"))
+                .unwrap_or(false)
+        } else {
+            false
+        };
+
         files.push(GitFileStatus {
             path,
             staged,
             unstaged,
             status: map_file_state(status, staged),
+            has_conflict_markers,
         });
     }
 
     let branch = current_branch_status(&repo)?;
     let conflicted_files = collect_conflicts(&repo)?;
     let remotes = collect_remotes(&repo)?;
+
+    let repository_state = match repo.state() {
+        git2::RepositoryState::Merge => GitRepositoryState::Merge,
+        git2::RepositoryState::Revert | git2::RepositoryState::RevertSequence => {
+            GitRepositoryState::Revert
+        }
+        git2::RepositoryState::CherryPick | git2::RepositoryState::CherryPickSequence => {
+            GitRepositoryState::CherryPick
+        }
+        git2::RepositoryState::Bisect => GitRepositoryState::Bisect,
+        git2::RepositoryState::Rebase
+        | git2::RepositoryState::RebaseInteractive
+        | git2::RepositoryState::RebaseMerge => GitRepositoryState::Rebase,
+        _ => GitRepositoryState::Clean,
+    };
 
     Ok(GitStatus {
         branch,
@@ -338,6 +384,7 @@ fn read_git_status(root_path: &Path) -> Result<GitStatus, Error> {
         has_untracked_files,
         is_merging: repo.state() == git2::RepositoryState::Merge,
         remotes,
+        repository_state,
         staged_count,
         total_changed_count: files.len(),
         unstaged_count,
@@ -348,7 +395,9 @@ fn read_git_status(root_path: &Path) -> Result<GitStatus, Error> {
 fn ensure_remote(repo: &Repository, remote_name: &str, remote_url: &str) -> Result<(), Error> {
     match repo.find_remote(remote_name) {
         Ok(_) => repo.remote_set_url(remote_name, remote_url),
-        Err(error) if error.code() == ErrorCode::NotFound => repo.remote(remote_name, remote_url).map(|_| ()),
+        Err(error) if error.code() == ErrorCode::NotFound => {
+            repo.remote(remote_name, remote_url).map(|_| ())
+        }
         Err(error) => Err(error),
     }
 }
@@ -368,7 +417,11 @@ fn fast_forward(
         }
         Err(error) => return Err(error),
     };
-    let message = format!("Fast-Forward: Setting {} to id: {}", refname, fetch_commit.id());
+    let message = format!(
+        "Fast-Forward: Setting {} to id: {}",
+        refname,
+        fetch_commit.id()
+    );
     let mut reference = match repo.find_reference(&refname) {
         Ok(reference) => reference,
         Err(_) => repo.reference(&refname, fetch_commit.id(), true, &message)?,
@@ -394,14 +447,21 @@ fn normal_merge(
     let their_commit = repo.find_commit(fetch_commit.id())?;
 
     let mut checkout = git2::build::CheckoutBuilder::new();
-    checkout.allow_conflicts(true).conflict_style_merge(true).safe();
+    checkout
+        .allow_conflicts(true)
+        .conflict_style_merge(true)
+        .safe();
     repo.merge(&[fetch_commit], None, Some(&mut checkout))?;
 
     let mut index = repo.index()?;
     if index.has_conflicts() {
+        index.write()?;
         let conflicts = collect_conflicts(repo)?;
         return Ok(GitSyncResult {
-            branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+            branch: repo
+                .head()
+                .ok()
+                .and_then(|head| head.shorthand().map(str::to_string)),
             conflicts,
             message: "拉取完成，但存在冲突，请先解决冲突后再提交".to_string(),
         });
@@ -425,7 +485,10 @@ fn normal_merge(
     repo.cleanup_state()?;
 
     Ok(GitSyncResult {
-        branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+        branch: repo
+            .head()
+            .ok()
+            .and_then(|head| head.shorthand().map(str::to_string)),
         conflicts: Vec::new(),
         message: "拉取并合并成功".to_string(),
     })
@@ -440,6 +503,9 @@ fn pull_repo(
     auth: Option<&GitAuth>,
 ) -> Result<GitSyncResult, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     let branch = match branch_name {
         Some(branch) => branch.to_string(),
         None => current_branch_status(&repo)?
@@ -469,7 +535,10 @@ fn pull_repo(
         fast_forward(&repo, &fetch_commit, &branch)?;
 
         return Ok(GitSyncResult {
-            branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+            branch: repo
+                .head()
+                .ok()
+                .and_then(|head| head.shorthand().map(str::to_string)),
             conflicts: Vec::new(),
             message: "拉取成功，已快进更新".to_string(),
         });
@@ -489,6 +558,9 @@ fn push_repo(
     auth: Option<&GitAuth>,
 ) -> Result<GitSyncResult, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     let branch = match branch_name {
         Some(branch) => branch.to_string(),
         None => current_branch_status(&repo)?
@@ -518,6 +590,9 @@ fn push_repo(
 
 fn read_git_log(root_path: &Path, limit: usize) -> Result<Vec<GitLogEntry>, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     let mut revwalk = repo.revwalk()?;
     revwalk.push_head()?;
 
@@ -526,9 +601,15 @@ fn read_git_log(root_path: &Path, limit: usize) -> Result<Vec<GitLogEntry>, Erro
     for oid in revwalk.take(limit) {
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
-        let committed_at = chrono::DateTime::<chrono::Utc>::from_timestamp(commit.time().seconds(), 0)
-            .map(|value| value.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string())
-            .unwrap_or_else(|| "未知时间".to_string());
+        let committed_at =
+            chrono::DateTime::<chrono::Utc>::from_timestamp(commit.time().seconds(), 0)
+                .map(|value| {
+                    value
+                        .with_timezone(&chrono::Local)
+                        .format("%Y-%m-%d %H:%M")
+                        .to_string()
+                })
+                .unwrap_or_else(|| "未知时间".to_string());
 
         entries.push(GitLogEntry {
             id: oid.to_string(),
@@ -550,7 +631,10 @@ fn ensure_clean_for_history_mutation(repo: &Repository) -> Result<(), Error> {
 
     let statuses = repo.statuses(Some(&mut options))?;
 
-    if statuses.iter().any(|entry| !entry.status().is_ignored() && !entry.status().is_empty()) {
+    if statuses
+        .iter()
+        .any(|entry| !entry.status().is_ignored() && !entry.status().is_empty())
+    {
         return Err(Error::from_str(
             "当前工作区有未提交更改，请先提交、暂存或清理后再执行历史管理操作",
         ));
@@ -561,6 +645,9 @@ fn ensure_clean_for_history_mutation(repo: &Repository) -> Result<(), Error> {
 
 fn undo_last_commit(root_path: &Path) -> Result<GitSyncResult, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     ensure_clean_for_history_mutation(&repo)?;
 
     let head = repo.head()?;
@@ -577,7 +664,10 @@ fn undo_last_commit(root_path: &Path) -> Result<GitSyncResult, Error> {
     repo.reset(&parent_object, ResetType::Mixed, None)?;
 
     Ok(GitSyncResult {
-        branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+        branch: repo
+            .head()
+            .ok()
+            .and_then(|head| head.shorthand().map(str::to_string)),
         conflicts: Vec::new(),
         message: format!("已撤销最近提交 {}，改动保留在工作区", head_commit.id()),
     })
@@ -590,6 +680,9 @@ fn revert_commit(
     author_email: Option<&str>,
 ) -> Result<GitSyncResult, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     ensure_clean_for_history_mutation(&repo)?;
 
     let oid = git2::Oid::from_str(commit_id)?;
@@ -598,17 +691,24 @@ fn revert_commit(
 
     let mut revert_options = git2::RevertOptions::new();
     let mut checkout = git2::build::CheckoutBuilder::new();
-    checkout.allow_conflicts(true).conflict_style_merge(true).safe();
+    checkout
+        .allow_conflicts(true)
+        .conflict_style_merge(true)
+        .safe();
     revert_options.checkout_builder(checkout);
     repo.revert(&commit_to_revert, Some(&mut revert_options))?;
 
     let mut index = repo.index()?;
     if index.has_conflicts() {
+        index.write()?;
         let conflicts = collect_conflicts(&repo)?;
         return Ok(GitSyncResult {
-            branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+            branch: repo
+                .head()
+                .ok()
+                .and_then(|head| head.shorthand().map(str::to_string)),
             conflicts,
-            message: "回滚提交时产生冲突，请先解决冲突后再提交".to_string(),
+            message: "回滚时产生冲突，请解决后提交".to_string(),
         });
     }
 
@@ -635,7 +735,10 @@ fn revert_commit(
     }
 
     Ok(GitSyncResult {
-        branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+        branch: repo
+            .head()
+            .ok()
+            .and_then(|head| head.shorthand().map(str::to_string)),
         conflicts: Vec::new(),
         message: format!("已回滚提交 {commit_id}，新提交为 {new_commit_id}"),
     })
@@ -643,9 +746,24 @@ fn revert_commit(
 
 fn restore_file(root_path: &Path, path: &Path) -> Result<GitStatus, Error> {
     let repo = discover_repo(root_path)?;
+    if !is_editor_managed_repo(&repo) {
+        return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+    }
     let relative_path = relative_repo_path(&repo, path).map_err(|error| Error::from_str(&error))?;
+
     let head = repo.head()?;
     let head_commit = head.peel_to_commit()?;
+    let head_tree = head_commit.tree()?;
+
+    let tracked_in_head = head_tree.get_path(&relative_path).is_ok();
+
+    if !tracked_in_head {
+        let mut index = repo.index()?;
+        index.remove_path(&relative_path)?;
+        index.write()?;
+        return read_git_status(root_path);
+    }
+
     let head_object = head_commit.as_object();
 
     repo.reset_default(Some(head_object), [&relative_path])?;
@@ -665,8 +783,9 @@ fn restore_file(root_path: &Path, path: &Path) -> Result<GitStatus, Error> {
 pub async fn git_status(root_path: String) -> Result<GitStatus, String> {
     let root_path = PathBuf::from(root_path);
 
-    tauri::async_runtime::spawn_blocking(move || match read_git_status(&root_path) {
-        Ok(status) => Ok(status),
+    tauri::async_runtime::spawn_blocking(move || match discover_repo(&root_path) {
+        Ok(repo) if !is_editor_managed_repo(&repo) => Ok(empty_git_status()),
+        Ok(_) => read_git_status(&root_path),
         Err(error) if error.code() == ErrorCode::NotFound => Ok(empty_git_status()),
         Err(error) => Err(error),
     })
@@ -680,7 +799,9 @@ pub async fn git_init(root_path: String) -> Result<GitStatus, String> {
     let root_path = PathBuf::from(root_path);
 
     tauri::async_runtime::spawn_blocking(move || {
-        Repository::init(&root_path)?;
+        let repo = Repository::init(&root_path)?;
+        std::fs::write(repo.path().join("EDITOR_MANAGED"), [] as [u8; 0])
+            .map_err(|error| Error::from_str(&error.to_string()))?;
         read_git_status(&root_path)
     })
     .await
@@ -698,6 +819,9 @@ pub async fn git_set_remote(
 
     tauri::async_runtime::spawn_blocking(move || {
         let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
         ensure_remote(&repo, &remote_name, &remote_url)?;
         read_git_status(&root_path)
     })
@@ -717,6 +841,9 @@ pub async fn git_commit_all(
 
     tauri::async_runtime::spawn_blocking(move || {
         let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
         let mut index = repo.index()?;
         index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
         index.update_all(["*"].iter(), None)?;
@@ -764,7 +891,7 @@ pub async fn git_commit_all(
                 &tree,
                 &[parent_commit],
             )?,
-            (None, _) => repo.commit(Some("HEAD"), &signature, &signature, &message, &tree, &[])?
+            (None, _) => repo.commit(Some("HEAD"), &signature, &signature, &message, &tree, &[])?,
         };
 
         if repo.state() == git2::RepositoryState::Merge {
@@ -772,7 +899,10 @@ pub async fn git_commit_all(
         }
 
         Ok(GitSyncResult {
-            branch: repo.head().ok().and_then(|head| head.shorthand().map(str::to_string)),
+            branch: repo
+                .head()
+                .ok()
+                .and_then(|head| head.shorthand().map(str::to_string)),
             conflicts: Vec::new(),
             message: format!("提交成功: {commit_id}"),
         })
@@ -810,6 +940,113 @@ pub async fn git_pull(
 }
 
 #[tauri::command]
+pub async fn git_fetch(
+    root_path: String,
+    remote_name: Option<String>,
+    auth: Option<GitAuth>,
+) -> Result<GitStatus, String> {
+    let root_path = PathBuf::from(root_path);
+    let remote_name = remote_name.unwrap_or_else(|| "origin".to_string());
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+        let mut remote = repo.find_remote(&remote_name)?;
+        let callbacks = build_remote_callbacks(&repo, auth.as_ref());
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+        remote
+            .fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
+        read_git_status(&root_path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
+pub async fn git_commit(
+    root_path: String,
+    message: String,
+    author_name: Option<String>,
+    author_email: Option<String>,
+) -> Result<GitSyncResult, String> {
+    let root_path = PathBuf::from(root_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+        let mut index = repo.index()?;
+        index.write()?;
+
+        if index.is_empty() {
+            return Err(Error::from_str("暂存区为空，请先暂存文件"));
+        }
+
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        let signature = build_signature(&repo, author_name.as_deref(), author_email.as_deref())?;
+        let parent_commit = repo
+            .head()
+            .ok()
+            .and_then(|head| head.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+
+        if let Some(parent_commit) = parent_commit.as_ref() {
+            if parent_commit.tree_id() == tree_id {
+                return Err(Error::from_str("没有可提交的更改"));
+            }
+        }
+
+        let merge_head_commit = repo
+            .find_reference("MERGE_HEAD")
+            .ok()
+            .and_then(|reference| reference.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+
+        let commit_id = match (parent_commit.as_ref(), merge_head_commit.as_ref()) {
+            (Some(parent_commit), Some(merge_parent)) => repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &message,
+                &tree,
+                &[parent_commit, merge_parent],
+            )?,
+            (Some(parent_commit), None) => repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                &message,
+                &tree,
+                &[parent_commit],
+            )?,
+            (None, _) => repo.commit(Some("HEAD"), &signature, &signature, &message, &tree, &[])?,
+        };
+
+        if repo.state() == git2::RepositoryState::Merge {
+            repo.cleanup_state()?;
+        }
+
+        Ok(GitSyncResult {
+            branch: repo
+                .head()
+                .ok()
+                .and_then(|head| head.shorthand().map(str::to_string)),
+            conflicts: Vec::new(),
+            message: format!("提交成功: {commit_id}"),
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
 pub async fn git_push(
     root_path: String,
     remote_name: Option<String>,
@@ -820,7 +1057,12 @@ pub async fn git_push(
     let remote_name = remote_name.unwrap_or_else(|| "origin".to_string());
 
     tauri::async_runtime::spawn_blocking(move || {
-        push_repo(&root_path, &remote_name, branch_name.as_deref(), auth.as_ref())
+        push_repo(
+            &root_path,
+            &remote_name,
+            branch_name.as_deref(),
+            auth.as_ref(),
+        )
     })
     .await
     .map_err(|error| error.to_string())?
@@ -834,10 +1076,53 @@ pub async fn git_stage_file(root_path: String, path: String) -> Result<GitStatus
 
     tauri::async_runtime::spawn_blocking(move || {
         let repo = discover_repo(&root_path)?;
-        let relative_path = relative_repo_path(&repo, &path).map_err(|error| Error::from_str(&error))?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+        let relative_path =
+            relative_repo_path(&repo, &path).map_err(|error| Error::from_str(&error))?;
         let mut index = repo.index()?;
-        index.add_path(&relative_path)?;
+        if path.exists() {
+            index.add_path(&relative_path)?;
+        } else {
+            index.remove_path(&relative_path)?;
+        }
         index.write()?;
+        read_git_status(&root_path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
+pub async fn git_unstage_file(root_path: String, path: String) -> Result<GitStatus, String> {
+    let root_path = PathBuf::from(root_path);
+    let path = PathBuf::from(path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+        let relative_path =
+            relative_repo_path(&repo, &path).map_err(|error| Error::from_str(&error))?;
+
+        let head = repo.head()?;
+        let head_commit = head.peel_to_commit()?;
+        let head_tree = head_commit.tree()?;
+
+        if head_tree.get_path(&relative_path).is_ok() {
+            let head_object = head_commit.as_object();
+            let normalized = PathBuf::from(normalize_repo_path(&relative_path));
+            repo.reset_default(Some(head_object), [&normalized])?;
+            let mut index = repo.index()?;
+            index.write()?;
+        } else {
+            let mut index = repo.index()?;
+            index.remove_path(&relative_path)?;
+            index.write()?;
+        }
         read_git_status(&root_path)
     })
     .await
@@ -905,6 +1190,117 @@ pub async fn git_revert_commit(
             author_name.as_deref(),
             author_email.as_deref(),
         )
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
+pub async fn git_list_branches(root_path: String) -> Result<Vec<GitBranchInfo>, String> {
+    let root_path = PathBuf::from(root_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+
+        let head = repo
+            .head()
+            .ok()
+            .and_then(|h| h.shorthand().map(str::to_string));
+        let mut branches = Vec::new();
+
+        for branch in repo.branches(Some(BranchType::Local))? {
+            let (branch, _) = branch?;
+            let name = branch.name()?.unwrap_or("").to_string();
+
+            if !name.is_empty() {
+                branches.push(GitBranchInfo {
+                    name: name.clone(),
+                    is_head: head.as_deref() == Some(&name),
+                });
+            }
+        }
+
+        Ok(branches)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
+pub async fn git_create_branch(
+    root_path: String,
+    branch_name: String,
+) -> Result<GitStatus, String> {
+    let root_path = PathBuf::from(root_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+
+        let head = match repo.head() {
+            Ok(head) => head,
+            Err(error) if error.code() == ErrorCode::UnbornBranch => {
+                return Err(Error::from_str("当前仓库还没有提交，请先提交后再创建分支"));
+            }
+            Err(error) => return Err(error),
+        };
+        let head_commit = head.peel_to_commit()?;
+        repo.branch(&branch_name, &head_commit, false)?;
+        read_git_status(&root_path)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(to_error_message)
+}
+
+#[tauri::command]
+pub async fn git_switch_branch(
+    root_path: String,
+    branch_name: String,
+) -> Result<GitStatus, String> {
+    let root_path = PathBuf::from(root_path);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let repo = discover_repo(&root_path)?;
+        if !is_editor_managed_repo(&repo) {
+            return Err(Error::from_str("当前目录不是由编辑器管理的 Git 仓库"));
+        }
+
+        let refname = format!("refs/heads/{}", branch_name);
+
+        let mut status_opts = StatusOptions::new();
+        status_opts
+            .include_untracked(true)
+            .include_ignored(false)
+            .include_unmodified(false);
+        let dirty = !repo.statuses(Some(&mut status_opts))?.is_empty();
+
+        if dirty {
+            return Err(Error::from_str(
+                "工作区有未提交的更改，请先提交或撤销更改后再切换分支",
+            ));
+        }
+
+        let branch_ref = repo
+            .find_reference(&refname)
+            .map_err(|_| Error::from_str(&format!("未找到分支: {}", branch_name)))?;
+        let commit = branch_ref.peel_to_commit()?;
+        let tree = commit.tree()?;
+
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        checkout.recreate_missing(true);
+        repo.checkout_tree(tree.as_object(), Some(&mut checkout))?;
+
+        repo.set_head(&refname)?;
+
+        read_git_status(&root_path)
     })
     .await
     .map_err(|error| error.to_string())?

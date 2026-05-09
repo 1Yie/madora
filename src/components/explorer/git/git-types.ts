@@ -27,11 +27,20 @@ export type GitFileState =
   | "typechange"
   | "untracked";
 
+export type GitRepositoryState =
+  | "clean"
+  | "merge"
+  | "revert"
+  | "cherryPick"
+  | "bisect"
+  | "rebase";
+
 export type GitFileStatus = {
   path: string;
   staged: boolean;
   unstaged: boolean;
   status: GitFileState;
+  hasConflictMarkers: boolean;
 };
 
 export type GitStatus = {
@@ -43,6 +52,7 @@ export type GitStatus = {
   hasUntrackedFiles: boolean;
   isMerging: boolean;
   remotes: GitRemoteInfo[];
+  repositoryState: GitRepositoryState;
   stagedCount: number;
   totalChangedCount: number;
   unstagedCount: number;
@@ -60,4 +70,9 @@ export type GitSyncResult = {
   branch: string | null;
   conflicts: string[];
   message: string;
+};
+
+export type GitBranchInfo = {
+  name: string;
+  isHead: boolean;
 };
