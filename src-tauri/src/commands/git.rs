@@ -4,10 +4,11 @@ use git2::{
     BranchType, Cred, Error, ErrorCode, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks,
     Repository, ResetType, Signature, Status, StatusOptions,
 };
+use tauri::Manager;
 
 use crate::models::git::{
-    GitAuth, GitBranchInfo, GitBranchStatus, GitFileState, GitFileStatus, GitLogEntry,
-    GitRemoteInfo, GitRepositoryState, GitStatus, GitSyncResult,
+    GitAuth, GitBranchInfo, GitBranchStatus, GitCredentials, GitFileState, GitFileStatus,
+    GitLogEntry, GitRemoteInfo, GitRepositoryState, GitStatus, GitSyncResult,
 };
 
 fn to_error_message(error: Error) -> String {
@@ -1305,4 +1306,68 @@ pub async fn git_switch_branch(
     .await
     .map_err(|error| error.to_string())?
     .map_err(to_error_message)
+}
+
+const CREDENTIALS_FILENAME: &str = "git_credentials.json";
+
+fn credentials_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取应用数据目录: {e}"))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("无法创建数据目录: {e}"))?;
+    Ok(data_dir.join(CREDENTIALS_FILENAME))
+}
+
+fn store_credentials(app_handle: &tauri::AppHandle, creds: &GitCredentials) -> Result<(), String> {
+    let path = credentials_path(app_handle)?;
+    let json = serde_json::to_string(creds).map_err(|e| format!("序列化凭证失败: {e}"))?;
+    std::fs::write(&path, json.as_bytes()).map_err(|e| format!("写入凭证文件失败: {e}"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("设置凭证文件权限失败: {e}"))?;
+    }
+
+    #[cfg(windows)]
+    {
+        let mut perms = std::fs::metadata(&path)
+            .map_err(|e| format!("读取凭证文件元数据失败: {e}"))?
+            .permissions();
+        perms.set_readonly(false);
+        std::fs::set_permissions(&path, perms)
+            .map_err(|e| format!("设置凭证文件权限失败: {e}"))?;
+    }
+
+    Ok(())
+}
+
+fn load_credentials(app_handle: &tauri::AppHandle) -> Result<GitCredentials, String> {
+    let path = credentials_path(app_handle)?;
+    match std::fs::read_to_string(&path) {
+        Ok(json) => serde_json::from_str(&json).map_err(|e| format!("解析凭证文件失败: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(GitCredentials::default()),
+        Err(e) => Err(format!("读取凭证文件失败: {e}")),
+    }
+}
+
+#[tauri::command]
+pub async fn git_store_credentials(
+    app_handle: tauri::AppHandle,
+    credentials: GitCredentials,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || store_credentials(&app_handle, &credentials))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn git_load_credentials(
+    app_handle: tauri::AppHandle,
+) -> Result<GitCredentials, String> {
+    tauri::async_runtime::spawn_blocking(move || load_credentials(&app_handle))
+        .await
+        .map_err(|e| e.to_string())?
 }

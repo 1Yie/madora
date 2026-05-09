@@ -46,6 +46,8 @@ pub fn run() {
             git::git_list_branches,
             git::git_create_branch,
             git::git_switch_branch,
+            git::git_store_credentials,
+            git::git_load_credentials,
             ai::generate_completion,
             project::read_file_content,
             project::scan_project

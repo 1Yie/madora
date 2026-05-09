@@ -76,3 +76,11 @@ export type GitBranchInfo = {
   name: string;
   isHead: boolean;
 };
+
+export type GitCredentials = {
+  authUsername: string;
+  authPassword: string;
+  sshUsername: string;
+  sshPrivateKeyPath: string;
+  sshPassphrase: string;
+};

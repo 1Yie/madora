@@ -14,7 +14,6 @@ const STORAGE_KEY = "madora-prose-custom-css";
 const STYLE_ID = "prose-theme-style";
 
 function getInitialCustomCss(): string {
-  if (typeof window === "undefined") return "";
   return window.localStorage.getItem(STORAGE_KEY) ?? "";
 }
 

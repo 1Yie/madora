@@ -62,11 +62,7 @@ export function ConflictEditor({
   filePath: string;
   rootPath: string;
 }) {
-  const [blocks] = useState<Block[]>(() => {
-    const result = parseConflictMarkers(content);
-    console.log("parsed blocks:", JSON.stringify(result, null, 2));
-    return result;
-  });
+  const [blocks] = useState<Block[]>(() => parseConflictMarkers(content));
   const [choices, setChoices] = useState<Record<number, SideChoice>>({});
   const [resolving, setResolving] = useState(false);
 

@@ -100,3 +100,13 @@ pub struct GitBranchInfo {
     pub name: String,
     pub is_head: bool,
 }
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCredentials {
+    pub auth_username: String,
+    pub auth_password: String,
+    pub ssh_username: String,
+    pub ssh_private_key_path: String,
+    pub ssh_passphrase: String,
+}

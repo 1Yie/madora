@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ import { GitTabHistory } from "./tab/history";
 import { GitTabRemote } from "./tab/remote";
 import { GitTabSsh } from "./tab/ssh";
 
-import type { GitAuth, GitBranchInfo, GitLogEntry, GitStatus, GitSyncResult } from "./git-types";
+import type { GitAuth, GitBranchInfo, GitCredentials, GitLogEntry, GitStatus, GitSyncResult } from "./git-types";
 
 type GitPanelProps = {
   disabled?: boolean;
@@ -52,11 +52,7 @@ type GitHistoryAction =
   | { type: "revert-commit"; commitId: string; summary: string }
   | null;
 
-const GIT_AUTH_USERNAME_KEY = "madora-git-auth-username";
-const GIT_AUTH_PASSWORD_KEY = "madora-git-auth-password";
-const GIT_SSH_USERNAME_KEY = "madora-git-auth-ssh-username";
-const GIT_SSH_PRIVATE_KEY_PATH_KEY = "madora-git-auth-ssh-private-key-path";
-const GIT_SSH_PASSPHRASE_KEY = "madora-git-auth-ssh-passphrase";
+const CREDENTIALS_DEBOUNCE_MS = 2000;
 
 const workbenchSections = [
   { id: "commit" as GitWorkbenchTab, label: "提交", description: "创建新提交", icon: Check },
@@ -130,21 +126,11 @@ export function GitPanel({
   const [commitMessage, setCommitMessage] = useState("");
   const [remoteName, setRemoteName] = useState("origin");
   const [remoteUrl, setRemoteUrl] = useState("");
-  const [authUsername, setAuthUsername] = useState(
-    () => window.localStorage.getItem(GIT_AUTH_USERNAME_KEY) ?? "",
-  );
-  const [authPassword, setAuthPassword] = useState(
-    () => window.localStorage.getItem(GIT_AUTH_PASSWORD_KEY) ?? "",
-  );
-  const [sshUsername, setSshUsername] = useState(
-    () => window.localStorage.getItem(GIT_SSH_USERNAME_KEY) ?? "git",
-  );
-  const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState(
-    () => window.localStorage.getItem(GIT_SSH_PRIVATE_KEY_PATH_KEY) ?? "",
-  );
-  const [sshPassphrase, setSshPassphrase] = useState(
-    () => window.localStorage.getItem(GIT_SSH_PASSPHRASE_KEY) ?? "",
-  );
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [sshUsername, setSshUsername] = useState("git");
+  const [sshPrivateKeyPath, setSshPrivateKeyPath] = useState("");
+  const [sshPassphrase, setSshPassphrase] = useState("");
   const [gitLog, setGitLog] = useState<GitLogEntry[]>([]);
   const [pendingHistoryAction, setPendingHistoryAction] = useState<GitHistoryAction>(null);
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
@@ -157,30 +143,57 @@ export function GitPanel({
     if (!status?.remotes.length) {
       return null;
     }
-    console.log("showErrorToast is:", showErrorToast, showErrorToast.toString().slice(0, 100));
 
     return status.remotes.find((remote) => remote.name === "origin") ?? status.remotes[0];
   }, [status?.remotes]);
 
-  useEffect(() => {
-    window.localStorage.setItem(GIT_AUTH_USERNAME_KEY, authUsername);
-  }, [authUsername]);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persistCredentials = useCallback(
+    (creds: GitCredentials) => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+      }
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        void invoke("git_store_credentials", { credentials: creds });
+      }, CREDENTIALS_DEBOUNCE_MS);
+    },
+    [],
+  );
 
   useEffect(() => {
-    window.localStorage.setItem(GIT_AUTH_PASSWORD_KEY, authPassword);
-  }, [authPassword]);
+    void (async () => {
+      try {
+        const creds = await invoke<GitCredentials>("git_load_credentials");
+        setAuthUsername(creds.authUsername ?? "");
+        setAuthPassword(creds.authPassword ?? "");
+        setSshUsername(creds.sshUsername || "git");
+        setSshPrivateKeyPath(creds.sshPrivateKeyPath ?? "");
+        setSshPassphrase(creds.sshPassphrase ?? "");
+      } catch {
+        // No saved credentials yet — keep defaults
+      }
+    })();
+  }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(GIT_SSH_USERNAME_KEY, sshUsername);
-  }, [sshUsername]);
+    persistCredentials({
+      authUsername: authUsername.trim(),
+      authPassword: authPassword.trim(),
+      sshUsername: sshUsername.trim(),
+      sshPrivateKeyPath: sshPrivateKeyPath.trim(),
+      sshPassphrase: sshPassphrase.trim(),
+    });
+  }, [authUsername, authPassword, sshUsername, sshPrivateKeyPath, sshPassphrase, persistCredentials]);
 
   useEffect(() => {
-    window.localStorage.setItem(GIT_SSH_PRIVATE_KEY_PATH_KEY, sshPrivateKeyPath);
-  }, [sshPrivateKeyPath]);
-
-  useEffect(() => {
-    window.localStorage.setItem(GIT_SSH_PASSPHRASE_KEY, sshPassphrase);
-  }, [sshPassphrase]);
+    return () => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!primaryRemote) {
