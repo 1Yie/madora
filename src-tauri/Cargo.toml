@@ -14,8 +14,6 @@ edition = "2021"
 name = "madora_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-ignore = "0.4"
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -29,9 +27,13 @@ ignore = "0.4.25"
 base64 = "0.22"
 rfd = "0.15"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-tokio = { version = "1", features = ["sync"] }
+tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
+[target.'cfg(not(target_os = "linux"))'.dependencies]
 git2 = { version = "0.20", features = ["vendored-libgit2"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+git2 = "0.20"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"
