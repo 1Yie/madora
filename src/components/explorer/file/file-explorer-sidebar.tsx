@@ -38,6 +38,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   NativeDialog,
   NativeDialogClose,
@@ -1186,8 +1187,8 @@ export function FileExplorerSidebar({
 
         <ContextMenuRoot>
           <ContextMenuTrigger className="min-h-0 flex flex-1">
-            <div
-              className="min-h-0 h-full flex-1 overflow-auto px-2 pb-3"
+            <ScrollArea
+              className="min-h-0 h-full flex-1 px-2 pb-3"
               data-native-dialog-scroll-lock
             >
               {mergedRoot ? (
@@ -1221,7 +1222,7 @@ export function FileExplorerSidebar({
                   </EmptyHeader>
                 </Empty>
               )}
-            </div>
+            </ScrollArea>
           </ContextMenuTrigger>
           <ContextMenuContent
             clipboard={clipboard}

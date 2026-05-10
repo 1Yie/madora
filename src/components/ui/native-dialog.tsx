@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, type HTMLAttributes } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const nativeDialogOpenAttr = "data-native-dialog-open";
 const nativeDialogCountAttr = "data-native-dialog-count";
@@ -220,12 +221,11 @@ export function NativeDialogPanel({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pt-1 will-change-transform", className)}
-      {...props}
-    >
-      {children}
-    </div>
+    <ScrollArea className={cn("min-h-0 flex-1", className)}>
+      <div className="p-6 pt-1" {...props}>
+        {children}
+      </div>
+    </ScrollArea>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { codeToHtml, type BundledLanguage, type BundledTheme } from "shiki";
 import { useTheme } from "@/components/system/theme-provider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type HighlightedCodeBlockProps = {
   lang: string;
@@ -76,9 +77,10 @@ export function HighlightedCodeBlock({ lang, code }: HighlightedCodeBlockProps) 
   }, [code, normalized, resolvedTheme]);
 
   return (
-    <div
-      className="my-6 overflow-x-auto rounded-lg border border-border [&_pre]:m-0 [&_pre]:rounded-lg [&_pre]:p-4 [&_code]:text-sm [&_code]:leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <ScrollArea
+      className="my-6 rounded-lg border border-border [&_pre]:m-0 [&_pre]:rounded-lg [&_pre]:p-4 [&_code]:text-sm [&_code]:leading-relaxed"
+    >
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </ScrollArea>
   );
 }

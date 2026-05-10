@@ -5,10 +5,12 @@ import Titlebar from "./components/system/top-bar";
 
 function App() {
   useEffect(() => {
+    if (import.meta.env.DEV) return;
     const handler = (e: MouseEvent) => e.preventDefault();
     document.addEventListener("contextmenu", handler);
     return () => document.removeEventListener("contextmenu", handler);
   }, []);
+  
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <Titlebar />

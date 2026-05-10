@@ -25,7 +25,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { tags as t } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { createRoot, type Root } from "react-dom/client";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, type MutableRefObject } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { useTheme } from "@/components/system/theme-provider";
@@ -36,6 +36,7 @@ type UseEditorOptions = {
   onSave?: () => void;
   title?: string;
   value: string;
+  viewRef?: MutableRefObject<EditorView | null>;
 };
 
 type CompletionRequestMode = "auto" | "chat-prefix" | "fim";
@@ -270,7 +271,7 @@ function createEditorTheme(dark: boolean) {
   return EditorView.theme(
     {
       "&": {
-        height: "100%",
+        minHeight: "100%",
         accentColor: "var(--color-primary)",
         backgroundColor: "transparent",
         color: "var(--color-foreground)",
@@ -280,6 +281,8 @@ function createEditorTheme(dark: boolean) {
         fontFamily:
           'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         lineHeight: "1.7",
+        overflow: "hidden",
+        maxHeight: "none",
       },
       ".cm-content": {
         caretColor: "var(--color-primary)",
@@ -288,8 +291,7 @@ function createEditorTheme(dark: boolean) {
       },
       ".cm-line": { padding: "0" },
       ".cm-gutters": {
-        borderRight:
-          "1px solid color-mix(in oklab, var(--color-primary) 10%, var(--color-border) 90%)",
+        borderRight: "none",
         minHeight: "100%",
         backgroundColor: "transparent",
         color: "var(--color-muted-foreground)",
@@ -476,7 +478,7 @@ function createCompletionTooltipView(_status: CompletionTooltipState): TooltipVi
   };
 }
 
-export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) {
+export function useEditor({ onChange, onSave, title, value, viewRef: externalViewRef }: UseEditorOptions) {
   const autoCompletionTimerRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<number | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -850,6 +852,10 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
           EditorView.lineWrapping,
           tooltips({ tooltipSpace: getCompletionTooltipSpace }),
           EditorView.domEventHandlers({
+            contextmenu: (event) => {
+              event.preventDefault();
+              return true;
+            },
             compositionend: () => {
               window.requestAnimationFrame(() => {
                 const currentView = viewRef.current;
@@ -951,6 +957,7 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     });
 
     viewRef.current = view;
+    if (externalViewRef) externalViewRef.current = view;
     view.focus();
 
     return () => {
@@ -978,5 +985,5 @@ export function useEditor({ onChange, onSave, title, value }: UseEditorOptions) 
     });
   }, [value]);
 
-  return { editorRef };
+  return { editorRef, viewRef };
 }

@@ -1,9 +1,12 @@
 import type { ComponentProps } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { HighlightedCodeBlock } from "./code-block-highlight";
 
 type MarkdownPreviewProps = {
@@ -12,7 +15,7 @@ type MarkdownPreviewProps = {
 };
 
 const components: ComponentProps<typeof Markdown>["components"] = {
-  a: ({ href, children, ...props }) => (
+  a: ({ node: _n, href, children, ...props }) => (
     <a
       {...props}
       href={href}
@@ -24,14 +27,14 @@ const components: ComponentProps<typeof Markdown>["components"] = {
       {children}
     </a>
   ),
-  ol: ({ start, children, ...props }) => (
+  ol: ({ node: _n, start, children, ...props }) => (
     <ol start={start} {...props}>
       {children}
     </ol>
   ),
-  ul: ({ children, ...props }) => <ul {...props}>{children}</ul>,
-  li: ({ children, ...props }) => <li {...props}>{children}</li>,
-  code: ({ className, children, ...props }) => {
+  ul: ({ node: _n, children, ...props }) => <ul {...props}>{children}</ul>,
+  li: ({ node: _n, children, ...props }) => <li {...props}>{children}</li>,
+  code: ({ node: _n, className, children, ...props }) => {
     const match = /^language-(\w+)/.exec(className || "");
     if (match) {
       return <HighlightedCodeBlock code={String(children).replace(/\n$/, "")} lang={match[1]} />;
@@ -43,20 +46,28 @@ const components: ComponentProps<typeof Markdown>["components"] = {
     );
   },
   pre: ({ children }) => <div>{children}</div>,
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-6">
+      <table className="my-0!">{children}</table>
+    </div>
+  ),
+  img: ({ node: _n, src, alt, ...props }) => <img src={src} alt={alt} loading="lazy" {...props} />,
+  details: ({ node: _n, children, ...props }) => <details {...props}>{children}</details>,
+  summary: ({ node: _n, children, ...props }) => <summary {...props}>{children}</summary>,
 };
 
 export function MarkdownPreview({ className, content }: MarkdownPreviewProps) {
   return (
-    <div
-      className={cn(
-        "h-full overflow-auto p-6",
-        "prose-custom",
-        className,
-      )}
-    >
-      <Markdown components={components} remarkPlugins={[remarkGfm]}>
-        {content}
-      </Markdown>
-    </div>
+    <ScrollArea className={cn("h-full", className)}>
+      <div className="prose-custom p-6">
+        <Markdown
+          components={components}
+          remarkPlugins={[remarkMath, remarkGfm]}
+          rehypePlugins={[rehypeKatex]}
+        >
+          {content}
+        </Markdown>
+      </div>
+    </ScrollArea>
   );
 }

@@ -11,7 +11,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
@@ -134,14 +133,14 @@ function renderPreviewBody(
           />
         </div>
 
-        <div className="flex min-h-0 max-h-1/2 flex-col justify-end">
-          <div className="overflow-auto">
-            <ConflictEditor
-              content={content}
-              filePath={selectedFile.path}
-              key={selectedFile.path + "-conflict"}
-              rootPath={rootPath}
-            />
+        <div className="flex min-h-0 max-h-1/2 flex-col">
+          <div className="min-h-0 flex-1">
+          <ConflictEditor
+            content={content}
+            filePath={selectedFile.path}
+            key={selectedFile.path + "-conflict"}
+            rootPath={rootPath}
+          />
           </div>
         </div>
       </div>
@@ -249,11 +248,7 @@ function PreviewState({
       return renderPreviewBody(selectedFile, preview, isConflicted, markdownMode, rootPath);
     }
 
-    return (
-      <ScrollArea className="h-full" scrollFade>
-        {renderPreviewBody(selectedFile, preview, isConflicted, markdownMode, rootPath)}
-      </ScrollArea>
-    );
+    return renderPreviewBody(selectedFile, preview, isConflicted, markdownMode, rootPath);
   }
 
   return (

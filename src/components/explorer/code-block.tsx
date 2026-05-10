@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { codeToHtml, type BundledLanguage, type BundledTheme } from "shiki";
 
 import { useTheme } from "@/components/system/theme-provider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 type CodeBlockProps = {
@@ -113,11 +114,12 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
   }, [code, language, resolvedTheme]);
 
   return (
-    <div
+    <ScrollArea
       className={cn(
-        wrapLongLines && "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:overflow-x-hidden [&_pre]:whitespace-pre-wrap",
+        wrapLongLines && "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:whitespace-pre-wrap",
       )}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    >
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </ScrollArea>
   );
 }

@@ -2,6 +2,7 @@ import { Check, Minus, Plus, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -131,7 +132,8 @@ export function GitTabCommit({
 
       <div className="min-h-0 flex-1 flex flex-col overflow-hidden pt-2">
         {hasFiles ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 space-y-3">
+          <ScrollArea className="min-h-0 flex-1 px-6 pb-6">
+            <div className="space-y-3">
             {conflictedFiles.length > 0 && (
               <div>
                 <div className="sticky top-0 z-10 flex items-center justify-between bg-popover pb-1.5 pt-0.5">
@@ -220,7 +222,8 @@ export function GitTabCommit({
                 </div>
               </div>
             )}
-          </div>
+            </div>
+          </ScrollArea>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <div className="text-sm text-muted-foreground">没有更改需要提交。</div>

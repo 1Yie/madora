@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "katex/dist/katex.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -292,8 +293,6 @@
   display: block;
   font-family: inherit;
 }
-
-/* Markdown 预览样式由 ProseThemeProvider 动态注入，支持用户自定义 CSS */
 
 .dark .madora-markdown .shiki,
 .dark .madora-markdown .shiki span {

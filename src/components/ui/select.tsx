@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const Select: typeof SelectPrimitive.Root = SelectPrimitive.Root;
 
@@ -148,15 +149,14 @@ export function SelectPopup({
             <ChevronUpIcon className="relative size-4.5 sm:size-4" />
           </SelectPrimitive.ScrollUpArrow>
           <div className="relative h-full min-w-(--anchor-width) rounded-lg border bg-popover not-dark:bg-clip-padding shadow-lg/5 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]">
-            <SelectPrimitive.List
-              className={cn(
-                "max-h-(--available-height) overflow-y-auto p-1",
-                className,
-              )}
-              data-slot="select-list"
-            >
-              {children}
-            </SelectPrimitive.List>
+            <ScrollArea>
+              <SelectPrimitive.List
+                className={cn("p-1", className)}
+                data-slot="select-list"
+              >
+                {children}
+              </SelectPrimitive.List>
+            </ScrollArea>
           </div>
           <SelectPrimitive.ScrollDownArrow
             className="bottom-0 z-50 flex h-6 w-full cursor-default items-center justify-center before:pointer-events-none before:absolute before:inset-x-px before:bottom-px before:h-[200%] before:rounded-b-[calc(var(--radius-lg)-1px)] before:bg-linear-to-t before:from-50% before:from-popover"

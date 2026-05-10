@@ -1,10 +1,11 @@
-import { Settings2 } from "lucide-react";
+import { Bolt } from "lucide-react";
 import { useState } from "react";
 import { AboutSettings } from "@/components/system/setting/about";
 import { AppearanceSettings } from "@/components/system/setting/appearance";
 import { EditorSettings } from "@/components/system/setting/editor";
 import { Button } from "@/components/ui/button";
 import { NativeDialog, NativeDialogClose } from "@/components/ui/native-dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { settingsSections, type SettingsSectionId } from "@/components/system/setting/types";
 
@@ -30,7 +31,7 @@ export function SettingsDialog() {
         variant="ghost"
         onClick={() => setOpen(true)}
       >
-        <Settings2 size={14} />
+        <Bolt size={14} />
       </Button>
       <NativeDialog
         className="max-h-[min(85vh,720px)] max-w-[min(960px,calc(100vw-2rem))] overflow-hidden"
@@ -44,7 +45,7 @@ export function SettingsDialog() {
           />
           <div className="flex min-h-0 min-w-0 flex-1  overflow-hidden flex-row">
             <aside className="border-b bg-muted md:w-64 md:shrink-0 md:border-b-0 md:border-r">
-              <div className="max-h-60 overflow-y-auto will-change-transform [scrollbar-gutter:stable] md:h-full md:max-h-none">
+              <ScrollArea className="max-h-60 md:h-full md:max-h-none">
                 <nav className="flex flex-col gap-1 p-3">
                   {settingsSections.map((section) => {
                     const Icon = section.icon;
@@ -83,10 +84,10 @@ export function SettingsDialog() {
                     );
                   })}
                 </nav>
-              </div>
+              </ScrollArea>
             </aside>
             <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-popover">
-              <div className="min-h-0 flex-1 overflow-y-auto will-change-transform [scrollbar-gutter:stable]">
+              <ScrollArea className="min-h-0 flex-1">
                 <div className="space-y-6 p-4 sm:p-6">
                   <div className="space-y-1">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -98,7 +99,7 @@ export function SettingsDialog() {
                   </div>
                   <SettingsContent section={currentSection.id} />
                 </div>
-              </div>
+              </ScrollArea>
             </section>
           </div>
         </div>

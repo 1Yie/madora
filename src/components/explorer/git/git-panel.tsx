@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   NativeDialog,
   NativeDialogClose,
@@ -670,7 +671,7 @@ export function GitPanel({
             </Tooltip>
             <PopoverPopup className="p-0 m-0">
               <div className="flex max-h-80 flex-col gap-2">
-                <div className="min-h-0 flex-1 overflow-auto">
+                <ScrollArea className="min-h-0 flex-1">
                   {branches.length === 0 ? (
                     <p className="px-3 py-4 text-center text-xs text-muted-foreground">
                       {branchesLoaded ? "暂无分支" : "加载中..."}
@@ -699,7 +700,7 @@ export function GitPanel({
                       </button>
                     ))
                   )}
-                </div>
+                </ScrollArea>
                 <div className="shrink-0 border-border">
                   <div className="flex items-center gap-2">
                     <Input
@@ -856,7 +857,7 @@ export function GitPanel({
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
             <aside className="border-r border-border bg-muted md:w-56 md:shrink-0">
-              <div className="max-h-60 overflow-y-auto will-change-transform [scrollbar-gutter:stable] md:h-full md:max-h-none">
+              <ScrollArea className="max-h-60 md:h-full md:max-h-none">
                 <nav className="flex flex-col gap-1 p-3">
                   {workbenchSections.map((section) => {
                     const Icon = section.icon;
@@ -895,7 +896,7 @@ export function GitPanel({
                     );
                   })}
                 </nav>
-              </div>
+              </ScrollArea>
             </aside>
             <section className="flex min-h-0 min-w-0 flex-1 pt-4 flex-col overflow-hidden bg-popover">
               {activeTab === "history" && (
@@ -926,7 +927,7 @@ export function GitPanel({
                 />
               )}
               {activeTab !== "history" && activeTab !== "commit" && (
-                <div className="min-h-0 flex-1 overflow-y-auto will-change-transform [scrollbar-gutter:stable]">
+                <ScrollArea className="min-h-0 flex-1">
                   <div className="space-y-6 p-4 sm:p-6">
                     {activeTab === "remote" && (
                       <GitTabRemote
@@ -958,7 +959,7 @@ export function GitPanel({
                       />
                     )}
                   </div>
-                </div>
+                </ScrollArea>
               )}
             </section>
           </div>

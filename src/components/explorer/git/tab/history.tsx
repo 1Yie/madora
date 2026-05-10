@@ -2,6 +2,7 @@ import { ClockIcon, CornerDownLeft, Ellipsis, RefreshCw, RotateCcw, UserIcon } f
 
 import { Button } from "@/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@/components/ui/menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 import type { GitLogEntry } from "../git-types";
@@ -48,7 +49,7 @@ export function GitTabHistory({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <ScrollArea className="min-h-0 flex-1 pr-1">
         <div className="space-y-0.5 p-3">
           {gitLog.map((entry, index) => (
             <div key={entry.id} className="git-entry flex items-stretch gap-0">
@@ -146,7 +147,7 @@ export function GitTabHistory({
             </div>
           ))}
         </div>
-      </div>
+      </ScrollArea>
     </>
   );
 }
