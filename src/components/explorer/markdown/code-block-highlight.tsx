@@ -38,10 +38,7 @@ function getShikiTheme(theme: "light" | "dark"): BundledTheme {
 }
 
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function plainTextBlock(code: string): string {
@@ -77,10 +74,8 @@ export function HighlightedCodeBlock({ lang, code }: HighlightedCodeBlockProps) 
   }, [code, normalized, resolvedTheme]);
 
   return (
-    <ScrollArea
-      className="my-6 rounded-lg border border-border [&_pre]:m-0 [&_pre]:rounded-lg [&_pre]:p-4 [&_code]:text-sm [&_code]:leading-relaxed"
-    >
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+    <ScrollArea className="my-6 rounded-lg border border-border bg-muted [&_pre]:m-0 [&_pre]:bg-transparent! [&_pre]:px-4 [&_pre]:py-4 [&_code]:text-sm [&_code]:leading-relaxed">
+      <div className="min-w-fit" dangerouslySetInnerHTML={{ __html: html }} />
     </ScrollArea>
   );
 }

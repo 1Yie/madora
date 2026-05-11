@@ -22,6 +22,7 @@ export type ExplorerClipboardItem = {
 export type FilePreview = {
   fileKind: ExplorerFileKind;
   content: string | null;
+  encoding: string | null;
   imageDataUrl: string | null;
   size: number;
   truncated: boolean;

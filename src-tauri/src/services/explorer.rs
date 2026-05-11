@@ -2,10 +2,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use chardetng::EncodingDetector;
+use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 
 use crate::models::explorer::{ExplorerFileKind, ExplorerNode, ExplorerNodeKind, FilePreview};
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 512 * 1024;
+
+struct DetectedTextEncoding {
+    encoding: &'static Encoding,
+    has_bom: bool,
+}
 
 fn path_name(path: &Path) -> String {
     path.file_name()
@@ -96,8 +103,85 @@ fn build_file_node(root: &Path, path: &Path, file_kind: ExplorerFileKind) -> Exp
     }
 }
 
-fn read_text_preview(path: &Path) -> Result<(String, bool), String> {
+fn bom_bytes_for_encoding(encoding: &'static Encoding) -> Option<&'static [u8]> {
+    if encoding == UTF_8 {
+        return Some(&[0xEF, 0xBB, 0xBF]);
+    }
+
+    if encoding == UTF_16LE {
+        return Some(&[0xFF, 0xFE]);
+    }
+
+    if encoding == UTF_16BE {
+        return Some(&[0xFE, 0xFF]);
+    }
+
+    None
+}
+
+fn detect_text_encoding(bytes: &[u8]) -> DetectedTextEncoding {
+    if let Some((encoding, _bom_len)) = Encoding::for_bom(bytes) {
+        return DetectedTextEncoding {
+            encoding,
+            has_bom: true,
+        };
+    }
+
+    let mut detector = EncodingDetector::new();
+    detector.feed(bytes, true);
+
+    DetectedTextEncoding {
+        encoding: detector.guess(None, true),
+        has_bom: false,
+    }
+}
+
+fn decode_text_bytes(bytes: &[u8], detected: &DetectedTextEncoding) -> String {
+    let bom_len = if detected.has_bom {
+        bom_bytes_for_encoding(detected.encoding)
+            .map(|bom| bom.len())
+            .unwrap_or_default()
+    } else {
+        0
+    };
+    let text_bytes = &bytes[bom_len.min(bytes.len())..];
+    let (text, _, _) = detected.encoding.decode(text_bytes);
+
+    text.into_owned()
+}
+
+fn encode_text_content(
+    content: &str,
+    detected: Option<&DetectedTextEncoding>,
+) -> Result<Vec<u8>, String> {
+    let Some(detected) = detected else {
+        return Ok(content.as_bytes().to_vec());
+    };
+
+    let (encoded, _, had_errors) = detected.encoding.encode(content);
+
+    if had_errors {
+        return Err(format!(
+            "当前内容无法按 {} 编码保存",
+            detected.encoding.name()
+        ));
+    }
+
+    let mut bytes = Vec::new();
+
+    if detected.has_bom {
+        if let Some(bom) = bom_bytes_for_encoding(detected.encoding) {
+            bytes.extend_from_slice(bom);
+        }
+    }
+
+    bytes.extend_from_slice(encoded.as_ref());
+    Ok(bytes)
+}
+
+fn read_text_preview(path: &Path) -> Result<(String, bool, String), String> {
     let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    let detected = detect_text_encoding(&bytes);
     let truncated = bytes.len() > MAX_TEXT_PREVIEW_BYTES;
     let preview_bytes = if truncated {
         &bytes[..MAX_TEXT_PREVIEW_BYTES]
@@ -106,9 +190,23 @@ fn read_text_preview(path: &Path) -> Result<(String, bool), String> {
     };
 
     Ok((
-        String::from_utf8_lossy(preview_bytes).into_owned(),
+        decode_text_bytes(preview_bytes, &detected),
         truncated,
+        detected.encoding.name().to_string(),
     ))
+}
+
+pub fn write_workspace_file(file_path: &Path, content: &str) -> Result<(), String> {
+    let detected = if file_path.exists() {
+        let bytes = fs::read(file_path).map_err(|error| error.to_string())?;
+        Some(detect_text_encoding(&bytes))
+    } else {
+        None
+    };
+
+    let encoded = encode_text_content(content, detected.as_ref())?;
+
+    fs::write(file_path, encoded).map_err(|error| error.to_string())
 }
 
 fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
@@ -233,6 +331,7 @@ pub fn read_workspace_file(file_path: &Path) -> Result<FilePreview, String> {
             Ok(FilePreview {
                 file_kind,
                 content: None,
+                encoding: None,
                 image_data_url: Some(format!(
                     "data:{};base64,{}",
                     image_mime_type(file_path),
@@ -243,11 +342,12 @@ pub fn read_workspace_file(file_path: &Path) -> Result<FilePreview, String> {
             })
         }
         ExplorerFileKind::Markdown | ExplorerFileKind::Text => {
-            let (content, truncated) = read_text_preview(file_path)?;
+            let (content, truncated, encoding) = read_text_preview(file_path)?;
 
             Ok(FilePreview {
                 file_kind,
                 content: Some(content),
+                encoding: Some(encoding),
                 image_data_url: None,
                 size: metadata.len(),
                 truncated,

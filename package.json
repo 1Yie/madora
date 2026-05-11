@@ -1,13 +1,14 @@
 {
   "name": "Madora",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "bump": "node ./scripts/bump-version.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

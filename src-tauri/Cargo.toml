@@ -1,6 +1,6 @@
 [package]
 name = "madora"
-version = "0.1.4"
+version = "0.1.5"
 description = "Markdown editing, powered by AI"
 authors = ["ichiyo"]
 edition = "2021"
@@ -29,6 +29,8 @@ rfd = "0.15"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
+chardetng = "0.1"
+encoding_rs = "0.8"
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 git2 = { version = "0.20", features = ["vendored-libgit2"] }
 
@@ -37,3 +39,6 @@ git2 = "0.20"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.10"
+
+
+

@@ -1,43 +1,175 @@
-import { Window } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { X, Square, Minus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SettingsDialog } from "@/components/system/settings-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  NativeDialog,
+  NativeDialogDescription,
+  NativeDialogFooter,
+  NativeDialogHeader,
+  NativeDialogTitle,
+} from "@/components/ui/native-dialog";
+import { showErrorToast } from "@/components/ui/toast";
+import { clearStoredMarkdownDrafts, hasUnsaved, saveAll } from "@/lib/unsaved-registry";
 
-const appWindow = new Window("main");
+const appWindow = getCurrentWindow();
+
+function getSaveFailureMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "关闭前保存失败";
+}
 
 export default function Titlebar() {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savingBeforeClose, setSavingBeforeClose] = useState(false);
+  const bypassCloseGuardRef = useRef(false);
+
+  const closeWindow = useCallback(async () => {
+    bypassCloseGuardRef.current = true;
+    try {
+      await appWindow.destroy();
+    } finally {
+      window.setTimeout(() => {
+        bypassCloseGuardRef.current = false;
+      }, 0);
+    }
+  }, []);
+
+  const requestClose = useCallback(async () => {
+    if (savingBeforeClose) return;
+    if (hasUnsaved()) {
+      setConfirmOpen(true);
+      return;
+    }
+    await closeWindow();
+  }, [closeWindow, savingBeforeClose]);
+
+  const handleSaveAndClose = useCallback(async () => {
+    if (savingBeforeClose) return;
+    setSavingBeforeClose(true);
+    try {
+      const results = await saveAll();
+      const failed = results.filter((r) => !r.ok);
+
+      if (failed.length > 0) {
+        const firstError = failed[0]?.error;
+        showErrorToast("关闭前保存失败", getSaveFailureMessage(firstError));
+      }
+
+      if (!hasUnsaved()) {
+        setConfirmOpen(false);
+        await closeWindow();
+        return;
+      }
+
+      showErrorToast("关闭前仍有未保存内容", "请重试保存，或选择不保存并关闭。");
+    } finally {
+      setSavingBeforeClose(false);
+    }
+  }, [closeWindow, savingBeforeClose]);
+
+  const handleDiscardAndClose = useCallback(async () => {
+    clearStoredMarkdownDrafts();
+    setConfirmOpen(false);
+    await closeWindow();
+  }, [closeWindow]);
+
+  const requestCloseRef = useRef(requestClose);
+  useEffect(() => {
+    requestCloseRef.current = requestClose;
+  }, [requestClose]);
+
+  useEffect(() => {
+    let active = true;
+
+    const bindCloseListener = async () => {
+      const unlisten = await appWindow.onCloseRequested(async (event) => {
+        if (bypassCloseGuardRef.current) return;
+        event.preventDefault();
+        await requestCloseRef.current();
+      });
+
+      if (!active) unlisten();
+      return unlisten;
+    };
+
+    const unlistenPromise = bindCloseListener();
+
+    return () => {
+      active = false;
+      void unlistenPromise.then((unlisten) => unlisten?.());
+    };
+  }, []);
+
   return (
-    <div
-      data-tauri-drag-region
-      className="flex h-9 items-center justify-between border-b border-border bg-muted/80 text-foreground select-none"
-    >
-      <div className="flex items-center ml-4 gap-2 pointer-events-none">
-        <span className="text-sm font-medium text-muted-foreground">Madora</span>
+    <>
+      <div
+        data-tauri-drag-region
+        className="flex h-9 items-center justify-between border-b border-border bg-muted/80 text-foreground select-none"
+      >
+        <div className="flex items-center ml-4 gap-2 pointer-events-none">
+          <span className="text-sm font-medium text-muted-foreground">Madora</span>
+        </div>
+        <div className="flex items-center h-full">
+          <SettingsDialog />
+          <button
+            type="button"
+            onClick={() => void appWindow.minimize()}
+            className="flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => void appWindow.toggleMaximize()}
+            className="flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Square size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={() => void requestClose()}
+            className="group flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-red-500/80 hover:text-white"
+          >
+            <X size={14} className="group-hover:text-white" />
+          </button>
+        </div>
       </div>
-      <div className="flex items-center h-full">
-        <SettingsDialog />
-        <button
-          type="button"
-          onClick={() => appWindow.minimize()}
-          className="flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          <Minus size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => appWindow.toggleMaximize()}
-          className="flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          <Square size={12} />
-        </button>
-        <button
-          type="button"
-          onClick={() => appWindow.close()}
-          className="group flex h-full items-center px-3 text-muted-foreground transition-colors hover:bg-red-500/80 hover:text-white"
-        >
-          <X size={14} className="group-hover:text-white" />
-        </button>
-      </div>
-    </div>
+
+      <NativeDialog className="max-w-md" onOpenChange={setConfirmOpen} open={confirmOpen}>
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <NativeDialogHeader>
+            <NativeDialogTitle>工作区还有文档未保存</NativeDialogTitle>
+            <NativeDialogDescription>
+              {savingBeforeClose
+                ? "正在保存未完成的修改..."
+                : "关闭窗口前请选择：先保存修改，或放弃这些未保存的内容。"}
+            </NativeDialogDescription>
+          </NativeDialogHeader>
+          <NativeDialogFooter>
+            <Button
+              disabled={savingBeforeClose}
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              disabled={savingBeforeClose}
+              variant="destructive-outline"
+              onClick={() => void handleDiscardAndClose()}
+            >
+              不保存并关闭
+            </Button>
+            <Button loading={savingBeforeClose} onClick={() => void handleSaveAndClose()}>
+              保存并关闭
+            </Button>
+          </NativeDialogFooter>
+        </div>
+      </NativeDialog>
+    </>
   );
 }

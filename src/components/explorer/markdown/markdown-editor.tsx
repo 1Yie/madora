@@ -3,6 +3,7 @@ import type { SaveMode } from "@/components/system/ai-settings-provider";
 import { useEditor } from "@/hooks/use-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { explorerEditorStatusBarClassName } from "../layout";
 import { MarkdownPreview } from "./markdown-preview";
 import {
@@ -22,11 +23,18 @@ import {
   Underline,
   Link,
   ImageIcon,
+  PenLine,
+  CircleCheck,
+  CircleX,
+  Save,
+  CloudUpload,
 } from "lucide-react";
+import type { ReactNode } from "react";
 
 type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 type MarkdownEditorProps = {
+  encoding?: string | null;
   mode: "edit" | "preview";
   onChange: (value: string) => void;
   onSave: () => void;
@@ -36,18 +44,67 @@ type MarkdownEditorProps = {
   value: string;
 };
 
-function getSaveStatusText(saveStatus: SaveStatus, saveMode: SaveMode): string {
+function isMac(): boolean {
+  if ("userAgentData" in navigator) {
+    return (
+      (navigator as Navigator & { userAgentData: { platform: string } }).userAgentData.platform ===
+      "macOS"
+    );
+  }
+  return navigator.platform.toUpperCase().includes("MAC");
+}
+
+function getModKey(): string {
+  return isMac() ? "Cmd" : "Ctrl";
+}
+
+function SaveShortcutHint(): ReactNode {
+  return (
+    <KbdGroup>
+      <Kbd>{getModKey()}</Kbd>
+      <Kbd>S</Kbd>
+    </KbdGroup>
+  );
+}
+
+function getSaveStatusNode(saveStatus: SaveStatus, saveMode: SaveMode): ReactNode {
   switch (saveStatus) {
     case "dirty":
-      return "未保存，按 Ctrl / Cmd + S 保存";
+      return (
+        <span className="inline-flex items-center gap-1.5">
+          <PenLine className="size-3.5 shrink-0" />
+          未保存，按 <SaveShortcutHint /> 保存
+        </span>
+      );
     case "saving":
-      return "正在保存...";
+      return <span className="inline-flex items-center gap-1.5">正在保存...</span>;
     case "saved":
-      return "已保存";
+      return (
+        <span className="inline-flex items-center gap-1.5 text-emerald-500">
+          <CircleCheck className="size-3.5 shrink-0" />
+          已保存
+        </span>
+      );
     case "error":
-      return "保存失败";
+      return (
+        <span className="inline-flex items-center gap-1.5 text-destructive">
+          <CircleX className="size-3.5 shrink-0" />
+          保存失败
+        </span>
+      );
     default:
-      return saveMode === "manual" ? "手动保存（Ctrl / Cmd + S）" : "编辑文本自动保存";
+      return saveMode === "manual" ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Save className="size-3.5 shrink-0" />
+          手动保存（
+          <SaveShortcutHint />）
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          <CloudUpload className="size-3.5 shrink-0" />
+          编辑文本自动保存
+        </span>
+      );
   }
 }
 
@@ -68,6 +125,7 @@ function wrapSelection(
 }
 
 export function MarkdownEditor({
+  encoding,
   mode,
   onChange,
   onSave,
@@ -157,7 +215,6 @@ export function MarkdownEditor({
     const insert = `[${text}](url)`;
     view.dispatch({
       changes: { from, to, insert },
-      // 选中 url 部分方便用户直接替换
       selection: { anchor: from + text.length + 3, head: from + insert.length - 1 },
     });
     view.focus();
@@ -205,7 +262,6 @@ export function MarkdownEditor({
             粘贴
           </MenuItem>
           <MenuSeparator />
-
           <div className="flex items-center gap-0.5 px-1 py-0.5 select-none">
             {(
               [
@@ -237,11 +293,11 @@ export function MarkdownEditor({
           {saveStatus === "saving" ? (
             <Spinner className="size-3.5 shrink-0 flex-none text-primary" />
           ) : null}
-          <span className="truncate">{getSaveStatusText(saveStatus, saveMode)}</span>
+          <span className="truncate">{getSaveStatusNode(saveStatus, saveMode)}</span>
         </div>
         <div className="flex shrink-0 items-center gap-3 text-muted-foreground tabular-nums">
           <span>{characterCount} 字符</span>
-          <span>UTF-8</span>
+          <span>{encoding ?? "-"}</span>
         </div>
       </div>
     </div>

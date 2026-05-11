@@ -128,6 +128,7 @@ function renderPreviewBody(
           <TextWorkspace
             key={selectedFile.path + "-preview"}
             content={content}
+            encoding={preview.encoding}
             filePath={selectedFile.path}
             mode={markdownMode}
           />
@@ -164,6 +165,7 @@ function renderPreviewBody(
       <MarkdownWorkspace
         key={selectedFile.path}
         content={content}
+        encoding={preview.encoding}
         filePath={selectedFile.path}
         mode={markdownMode}
       />

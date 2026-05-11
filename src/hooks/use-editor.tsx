@@ -313,8 +313,7 @@ function createEditorTheme(dark: boolean) {
       ".cm-fim-preview": {
         color: "var(--color-muted-foreground)",
         fontStyle: "italic",
-        fontWeight: "100",
-        opacity: "0.6",
+        fontWeight: "200",
         overflowWrap: "anywhere",
         pointerEvents: "none",
         userSelect: "none",
@@ -478,7 +477,13 @@ function createCompletionTooltipView(_status: CompletionTooltipState): TooltipVi
   };
 }
 
-export function useEditor({ onChange, onSave, title, value, viewRef: externalViewRef }: UseEditorOptions) {
+export function useEditor({
+  onChange,
+  onSave,
+  title,
+  value,
+  viewRef: externalViewRef,
+}: UseEditorOptions) {
   const autoCompletionTimerRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<number | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);

@@ -827,37 +827,9 @@ export function GitPanel({
             className="absolute inset-e-2 top-2 z-10"
             onClick={() => setWorkbenchOpen(false)}
           />
-          {/* <NativeDialogHeader className="border-b border-border pb-2">
-            <NativeDialogTitle>Git 工作台</NativeDialogTitle>
-
-            <div className="grid gap-2 pt-2 sm:grid-cols-3">
-              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-                <span className="text-xs text-muted-foreground">当前分支</span>
-
-                <span className="ml-3 truncate text-sm font-medium text-foreground">
-                  {branchLabel}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-                <span className="text-xs text-muted-foreground">工作区状态</span>
-
-                <span className="ml-3 truncate text-sm font-medium text-foreground">{summary}</span>
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
-                <span className="text-xs text-muted-foreground">远端</span>
-
-                <span className="ml-3 truncate text-sm font-medium text-foreground">
-                  {remoteName || "origin"}
-                </span>
-              </div>
-            </div>
-          </NativeDialogHeader> */}
-
           <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
             <aside className="border-r border-border bg-muted md:w-56 md:shrink-0">
-              <ScrollArea className="max-h-60 md:h-full md:max-h-none">
+              <ScrollArea className="max-h-60 md:h-full md:max-h-none overflow-x-hidden">
                 <nav className="flex flex-col gap-1 p-3">
                   {workbenchSections.map((section) => {
                     const Icon = section.icon;

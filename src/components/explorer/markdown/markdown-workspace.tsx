@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { showErrorToast } from "@/components/ui/toast";
+import { MARKDOWN_DRAFT_STORAGE_KEY_PREFIX, registerEditor, unregisterEditor } from "@/lib/unsaved-registry";
 
 import { MarkdownEditor } from "./markdown-editor";
 
@@ -10,21 +11,25 @@ type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 type MarkdownWorkspaceProps = {
   content: string;
+  encoding?: string | null;
   filePath: string;
   mode: "edit" | "preview";
 };
 
-const DRAFT_STORAGE_KEY_PREFIX = "madora-markdown-draft:";
 const SAVE_DEBOUNCE_MS = 400;
 
 function getDraftStorageKey(filePath: string): string {
-  return `${DRAFT_STORAGE_KEY_PREFIX}${filePath}`;
+  return `${MARKDOWN_DRAFT_STORAGE_KEY_PREFIX}${filePath}`;
 }
 
 function getInitialValue(filePath: string, content: string): string {
   const draft = window.localStorage.getItem(getDraftStorageKey(filePath));
 
   return draft ?? content;
+}
+
+function hasStoredDraft(filePath: string): boolean {
+  return window.localStorage.getItem(getDraftStorageKey(filePath)) !== null;
 }
 
 function getFileTitle(filePath: string): string {
@@ -46,15 +51,20 @@ function getErrorMessage(error: unknown): string {
   return "保存失败";
 }
 
-export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspaceProps) {
+export function MarkdownWorkspace({ content, encoding, filePath, mode }: MarkdownWorkspaceProps) {
   const { saveMode } = useAiSettings();
   const [value, setValue] = useState(() => getInitialValue(filePath, content));
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
+    hasStoredDraft(filePath) ? "dirty" : "idle",
+  );
   const saveTimerRef = useRef<number | null>(null);
   const saveRequestIdRef = useRef(0);
-  const lastSavedValueRef = useRef(getInitialValue(filePath, content));
+  const lastSavedValueRef = useRef(content);
   const syncingFromPropsRef = useRef(false);
+  const latestValueRef = useRef(value);
+
+  latestValueRef.current = value;
 
   useEffect(() => {
     if (saveTimerRef.current !== null) {
@@ -64,15 +74,21 @@ export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspa
 
     saveRequestIdRef.current += 1;
     const nextValue = getInitialValue(filePath, content);
+    const dirtyFromDraft = hasStoredDraft(filePath) && nextValue !== content;
 
-    lastSavedValueRef.current = nextValue;
+    lastSavedValueRef.current = content;
     syncingFromPropsRef.current = true;
     setValue(nextValue);
     setSaveError(null);
-    setSaveStatus("idle");
+    setSaveStatus(dirtyFromDraft ? "dirty" : "idle");
   }, [content, filePath]);
 
   useEffect(() => {
+    if (value === lastSavedValueRef.current) {
+      window.localStorage.removeItem(getDraftStorageKey(filePath));
+      return;
+    }
+
     window.localStorage.setItem(getDraftStorageKey(filePath), value);
   }, [filePath, value]);
 
@@ -106,7 +122,7 @@ export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspa
     }
   });
 
-  const requestSave = useEffectEvent((nextValue: string, immediate = false) => {
+  const requestSave = useEffectEvent(async (nextValue: string, immediate = false) => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -124,7 +140,7 @@ export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspa
     setSaveError(null);
 
     if (immediate) {
-      void persistValue(nextValue, requestId);
+      await persistValue(nextValue, requestId);
       return;
     }
 
@@ -137,6 +153,26 @@ export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspa
   const handleSave = useEffectEvent(() => {
     requestSave(value, true);
   });
+
+  useEffect(() => {
+    const editorId = `markdown:${filePath}`;
+
+    registerEditor(editorId, {
+      filePath,
+      isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
+      save: async (options) => {
+        if (latestValueRef.current === lastSavedValueRef.current) {
+          return;
+        }
+
+        await requestSave(latestValueRef.current, options?.immediate ?? true);
+      },
+    });
+
+    return () => {
+      unregisterEditor(editorId);
+    };
+  }, [filePath, requestSave]);
 
   useEffect(() => {
     if (syncingFromPropsRef.current) {
@@ -181,6 +217,7 @@ export function   MarkdownWorkspace({ content, filePath, mode }: MarkdownWorkspa
 
   return (
     <MarkdownEditor
+      encoding={encoding}
       mode={mode}
       onChange={setValue}
       onSave={handleSave}

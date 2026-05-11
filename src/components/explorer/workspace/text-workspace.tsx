@@ -3,6 +3,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { useAiSettings } from "@/components/system/ai-settings-provider";
 import { showErrorToast } from "@/components/ui/toast";
+import { registerEditor, unregisterEditor } from "@/lib/unsaved-registry";
 
 import { MarkdownEditor } from "../markdown/markdown-editor";
 
@@ -10,6 +11,7 @@ type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
 type TextWorkspaceProps = {
   content: string;
+  encoding?: string | null;
   filePath: string;
   mode?: "edit" | "preview";
 };
@@ -28,7 +30,7 @@ function getErrorMessage(error: unknown): string {
   return "保存失败";
 }
 
-export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspaceProps) {
+export function TextWorkspace({ content, encoding, filePath, mode = "edit" }: TextWorkspaceProps) {
   const { saveMode } = useAiSettings();
   const [value, setValue] = useState(content);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -37,6 +39,9 @@ export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspac
   const saveRequestIdRef = useRef(0);
   const lastSavedValueRef = useRef(content);
   const syncingFromPropsRef = useRef(false);
+  const latestValueRef = useRef(value);
+
+  latestValueRef.current = value;
 
   const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? "file";
 
@@ -78,7 +83,7 @@ export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspac
     }
   });
 
-  const requestSave = useEffectEvent((nextValue: string, immediate = false) => {
+  const requestSave = useEffectEvent(async (nextValue: string, immediate = false) => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
@@ -96,7 +101,7 @@ export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspac
     setSaveError(null);
 
     if (immediate) {
-      void persistValue(nextValue, requestId);
+      await persistValue(nextValue, requestId);
       return;
     }
 
@@ -107,8 +112,28 @@ export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspac
   });
 
   const handleSave = useEffectEvent(() => {
-    requestSave(value, true);
+    void requestSave(value, true);
   });
+
+  useEffect(() => {
+    const editorId = `text:${filePath}`;
+
+    registerEditor(editorId, {
+      filePath,
+      isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
+      save: async (options) => {
+        if (latestValueRef.current === lastSavedValueRef.current) {
+          return;
+        }
+
+        await requestSave(latestValueRef.current, options?.immediate ?? true);
+      },
+    });
+
+    return () => {
+      unregisterEditor(editorId);
+    };
+  }, [filePath, requestSave]);
 
   useEffect(() => {
     if (syncingFromPropsRef.current) {
@@ -155,11 +180,14 @@ export function TextWorkspace({ content, filePath, mode = "edit" }: TextWorkspac
 
   return (
     <MarkdownEditor
+      encoding={encoding}
       onChange={setValue}
       onSave={handleSave}
       saveMode={saveMode}
       saveStatus={saveStatus}
       title={fileName}
-      value={value} mode={mode}    />
+      value={value}
+      mode={mode}
+    />
   );
 }

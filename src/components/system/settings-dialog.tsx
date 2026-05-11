@@ -45,7 +45,7 @@ export function SettingsDialog() {
           />
           <div className="flex min-h-0 min-w-0 flex-1  overflow-hidden flex-row">
             <aside className="border-b bg-muted md:w-64 md:shrink-0 md:border-b-0 md:border-r">
-              <ScrollArea className="max-h-60 md:h-full md:max-h-none">
+              <ScrollArea className="max-h-60 md:h-full md:max-h-none overflow-x-hidden">
                 <nav className="flex flex-col gap-1 p-3">
                   {settingsSections.map((section) => {
                     const Icon = section.icon;

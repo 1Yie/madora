@@ -90,7 +90,7 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
             {
               pre(node) {
                 node.properties.class = ["shiki", "madora-code-block"];
-                node.properties.style = ["margin:0;background-color:transparent"];
+                node.properties.style = ["margin:0;background-color:transparent;"];
               },
             },
           ],
@@ -116,7 +116,7 @@ export function CodeBlock({ code, language, wrapLongLines = false }: CodeBlockPr
   return (
     <ScrollArea
       className={cn(
-        wrapLongLines && "[&_code]:break-words [&_code]:whitespace-pre-wrap [&_pre]:whitespace-pre-wrap",
+        wrapLongLines && "[&_code]:wrap-break-word [&_code]:whitespace-pre-wrap [&_pre]:whitespace-pre-wrap",
       )}
     >
       <div dangerouslySetInnerHTML={{ __html: html }} />

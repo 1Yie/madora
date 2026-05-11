@@ -1188,8 +1188,9 @@ export function FileExplorerSidebar({
         <ContextMenuRoot>
           <ContextMenuTrigger className="min-h-0 flex flex-1">
             <ScrollArea
-              className="min-h-0 h-full flex-1 px-2 pb-3"
+              className="min-h-0 h-full flex-1 px-2"
               data-native-dialog-scroll-lock
+              scrollFade
             >
               {mergedRoot ? (
                 <div className="space-y-1 py-2">

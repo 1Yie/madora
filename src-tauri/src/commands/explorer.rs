@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::PathBuf;
 
 use crate::models::explorer::{ExplorerNode, FilePreview};
@@ -102,9 +101,7 @@ pub async fn create_workspace_directory(
 pub async fn write_workspace_file(path: String, content: String) -> Result<(), String> {
     let file_path = PathBuf::from(path);
 
-    tauri::async_runtime::spawn_blocking(move || {
-        fs::write(file_path, content).map_err(|error| error.to_string())
-    })
+    tauri::async_runtime::spawn_blocking(move || explorer::write_workspace_file(&file_path, &content))
     .await
     .map_err(|error| error.to_string())?
 }

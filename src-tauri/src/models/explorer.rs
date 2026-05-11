@@ -33,6 +33,7 @@ pub struct ExplorerNode {
 pub struct FilePreview {
     pub file_kind: ExplorerFileKind,
     pub content: Option<String>,
+    pub encoding: Option<String>,
     pub image_data_url: Option<String>,
     pub size: u64,
     pub truncated: bool,
