@@ -14,6 +14,12 @@ pub enum AiProvider {
     OpenAi,
 }
 
+impl Default for AiProvider {
+    fn default() -> Self {
+        Self::DeepSeek
+    }
+}
+
 impl AiProvider {
     pub fn as_key(self) -> &'static str {
         match self {
@@ -70,6 +76,7 @@ pub struct CompletionResult {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiCompletionConfig {
+    #[serde(default)]
     pub api_key: String,
     pub api_url: Option<String>,
     pub model: Option<String>,

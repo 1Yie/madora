@@ -43,7 +43,7 @@ pub fn resolve_api_key(config: &AiCompletionConfig) -> Result<&str, String> {
     let api_key = config.api_key.trim();
 
     if api_key.is_empty() {
-        return Err("请先在设置中填写 API Key".to_string());
+        return Err("请先在设置中保存 API Key".to_string());
     }
 
     Ok(api_key)

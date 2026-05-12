@@ -1,6 +1,6 @@
 [package]
 name = "madora"
-version = "0.1.5"
+version = "0.1.6"
 description = "Markdown editing, powered by AI"
 authors = ["ichiyo"]
 edition = "2021"
@@ -31,6 +31,8 @@ tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
+keyring = "4"
+keyring-core = "1"
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 git2 = { version = "0.20", features = ["vendored-libgit2"] }
 

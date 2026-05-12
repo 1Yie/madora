@@ -380,14 +380,18 @@ function getErrorMessage(error: unknown): string {
   return "AI 补全失败";
 }
 
-function getDefaultCompletionStatus(enabled: boolean, apiKey: string): CompletionStatus {
+function getDefaultCompletionStatus(enabled: boolean, hasApiKey: boolean): CompletionStatus {
   if (!enabled) return { message: "AI 补全已关闭", tone: "muted" };
-  if (apiKey.trim().length === 0) return { message: "填写 API Key 后可用", tone: "muted" };
+  if (!hasApiKey) return { message: "保存 API Key 后可用", tone: "muted" };
   return { message: DEFAULT_READY_MESSAGE, tone: "muted" };
 }
 
-function shouldTriggerCompletion(state: EditorState, enabled: boolean, apiKey: string): boolean {
-  if (!enabled || apiKey.trim().length === 0) return false;
+function shouldTriggerCompletion(
+  state: EditorState,
+  enabled: boolean,
+  hasApiKey: boolean,
+): boolean {
+  if (!enabled || !hasApiKey) return false;
   if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return false;
   const cursor = state.selection.main.head;
   const prompt = state.doc.sliceString(Math.max(0, cursor - MAX_PREFIX_CHARS), cursor);
@@ -450,7 +454,7 @@ function renderCompletionPreview(view: EditorView, preview: CompletionPreviewSta
 
 function CompletionTooltipContent() {
   return (
-    <div className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-accent/60 p-1 shadow-sm backdrop-blur-sm">
+    <div className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-background p-1 shadow">
       <Spinner className="size-3 text-primary" />
     </div>
   );
@@ -494,19 +498,19 @@ export function useEditor({
   const viewRef = useRef<EditorView | null>(null);
   const completionCacheRef = useRef<CompletionCacheEntry | null>(null);
   const aiSettingsRef = useRef({
-    apiKey: "",
     apiUrl: "",
     enabled: true,
+    hasApiKey: false,
     model: "",
     provider: "deepseek",
     smartRoutingEnabled: false,
   });
   const completionStatusRef = useRef<CompletionStatus>({
-    message: "填写 API Key 后可用",
+    message: "保存 API Key 后可用",
     tone: "muted",
   });
 
-  const { apiKey, apiUrl, enabled, model, provider, smartRoutingEnabled } = useAiSettings();
+  const { apiUrl, enabled, hasApiKey, model, provider, smartRoutingEnabled } = useAiSettings();
   const { resolvedTheme } = useTheme();
 
   const handleChange = useEffectEvent((nextValue: string) => {
@@ -569,7 +573,7 @@ export function useEditor({
     pendingRequestRef.current = null;
     queuedRequestRef.current = null;
     setCompletionStatus(
-      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
+      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.hasApiKey),
     );
     if (cooldownTimerRef.current !== null) window.clearTimeout(cooldownTimerRef.current);
     cooldownTimerRef.current = window.setTimeout(() => {
@@ -594,7 +598,7 @@ export function useEditor({
       ],
     });
     setCompletionStatus(
-      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
+      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.hasApiKey),
     );
     return true;
   });
@@ -605,7 +609,7 @@ export function useEditor({
 
       if (!view.hasFocus) return;
       if (view.composing) return;
-      if (!shouldTriggerCompletion(view.state, settings.enabled, settings.apiKey)) return;
+      if (!shouldTriggerCompletion(view.state, settings.enabled, settings.hasApiKey)) return;
       if (isInCooldown()) {
         logCompletionDebug("request-skip:cooldown");
         return;
@@ -656,7 +660,6 @@ export function useEditor({
       try {
         const result = await invoke<CompletionResultData>("generate_completion", {
           config: {
-            apiKey: settings.apiKey,
             apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
             model: settings.model.trim().length > 0 ? settings.model : null,
             provider: settings.provider,
@@ -684,13 +687,13 @@ export function useEditor({
 
         if (!isSnapshotCurrent(currentView, snapshot)) {
           logCompletionDebug("request-drop:view-mismatch");
-          setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
+          setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.hasApiKey));
           return;
         }
 
         if (completion.length === 0) {
           clearCompletionPreview();
-          setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
+          setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.hasApiKey));
           return;
         }
 
@@ -706,7 +709,7 @@ export function useEditor({
           ],
         });
 
-        setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.apiKey));
+        setCompletionStatus(getDefaultCompletionStatus(settings.enabled, settings.hasApiKey));
       } catch (error) {
         if (requestId !== requestSequenceRef.current) return;
         clearCompletionPreview();
@@ -721,7 +724,7 @@ export function useEditor({
             setCompletionStatus(
               getDefaultCompletionStatus(
                 aiSettingsRef.current.enabled,
-                aiSettingsRef.current.apiKey,
+                aiSettingsRef.current.hasApiKey,
               ),
             );
           }
@@ -753,7 +756,7 @@ export function useEditor({
     if (
       !view.hasFocus ||
       view.composing ||
-      !shouldTriggerCompletion(view.state, settings.enabled, settings.apiKey)
+      !shouldTriggerCompletion(view.state, settings.enabled, settings.hasApiKey)
     ) {
       return;
     }
@@ -797,7 +800,7 @@ export function useEditor({
       selection: EditorSelection.cursor(cursor + preview.text.length),
     });
     setCompletionStatus(
-      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.apiKey),
+      getDefaultCompletionStatus(aiSettingsRef.current.enabled, aiSettingsRef.current.hasApiKey),
     );
     return true;
   });
@@ -813,9 +816,9 @@ export function useEditor({
   // AI 设置变化时清空缓存与进行中的请求
   useEffect(() => {
     aiSettingsRef.current = {
-      apiKey,
       apiUrl,
       enabled,
+      hasApiKey,
       model,
       provider,
       smartRoutingEnabled,
@@ -827,9 +830,9 @@ export function useEditor({
     queuedRequestRef.current = null;
     pendingRequestRef.current = null;
     clearCompletionPreview();
-    completionStatusRef.current = getDefaultCompletionStatus(enabled, apiKey);
+    completionStatusRef.current = getDefaultCompletionStatus(enabled, hasApiKey);
     syncTooltip();
-  }, [apiKey, apiUrl, enabled, model, provider, smartRoutingEnabled]);
+  }, [apiUrl, enabled, hasApiKey, model, provider, smartRoutingEnabled]);
 
   // resolvedTheme 变化时热更新编辑器主题
   useEffect(() => {
@@ -844,7 +847,7 @@ export function useEditor({
   useEffect(() => {
     if (!editorRef.current) return;
 
-    completionStatusRef.current = getDefaultCompletionStatus(enabled, apiKey);
+    completionStatusRef.current = getDefaultCompletionStatus(enabled, hasApiKey);
 
     const view = new EditorView({
       parent: editorRef.current,
@@ -927,7 +930,7 @@ export function useEditor({
               ) {
                 completionStatusRef.current = getDefaultCompletionStatus(
                   aiSettingsRef.current.enabled,
-                  aiSettingsRef.current.apiKey,
+                  aiSettingsRef.current.hasApiKey,
                 );
               }
             }

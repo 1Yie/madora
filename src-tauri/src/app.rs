@@ -1,7 +1,7 @@
 use std::env;
 
 use crate::{
-    commands::{ai, explorer, git, project, utility},
+    commands::{ai, explorer, git, project, secure_storage, utility, system},
     services::ai::AiCompletionService,
 };
 
@@ -49,8 +49,12 @@ pub fn run() {
             git::git_store_credentials,
             git::git_load_credentials,
             ai::generate_completion,
+            secure_storage::has_ai_api_key,
+            secure_storage::store_ai_api_key,
+            secure_storage::delete_ai_api_key,
             project::read_file_content,
-            project::scan_project
+            project::scan_project,
+            system::show_window
         ])
 
         .run(tauri::generate_context!())

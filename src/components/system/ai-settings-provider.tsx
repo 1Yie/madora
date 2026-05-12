@@ -6,23 +6,29 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
+
+import { showErrorToast } from "@/components/ui/toast";
 
 export type SaveMode = "auto" | "manual";
 export type AiProvider = "anthropic" | "custom" | "deepseek" | "kimi" | "openai";
 
 type ProviderConfig = {
-  apiKey: string;
   apiUrl: string;
   model: string;
 };
 
+type ProviderApiKeyAvailability = Record<AiProvider, boolean>;
+
 type AiSettingsContextValue = ProviderConfig & {
   enabled: boolean;
+  hasApiKey: boolean;
   provider: AiProvider;
   saveMode: SaveMode;
   showHiddenFiles: boolean;
   smartRoutingEnabled: boolean;
-  setApiKey: (apiKey: string) => void;
+  deleteApiKey: () => Promise<void>;
+  saveApiKey: (apiKey: string) => Promise<void>;
   setApiUrl: (apiUrl: string) => void;
   setEnabled: (enabled: boolean) => void;
   setModel: (model: string) => void;
@@ -106,6 +112,20 @@ function getProviderStorageKey(baseKey: string, provider: AiProvider) {
   return `${baseKey}:${provider}`;
 }
 
+function getProviderKeys(): AiProvider[] {
+  return PROVIDERS.map((provider) => provider.key);
+}
+
+function createProviderApiKeyAvailability(initialValue = false): ProviderApiKeyAvailability {
+  return {
+    anthropic: initialValue,
+    custom: initialValue,
+    deepseek: initialValue,
+    kimi: initialValue,
+    openai: initialValue,
+  };
+}
+
 function getStoredValue(key: string): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -116,6 +136,10 @@ function getStoredValue(key: string): string | null {
 
 function setStoredValue(key: string, value: string) {
   window.localStorage.setItem(key, value);
+}
+
+function removeStoredValue(key: string) {
+  window.localStorage.removeItem(key);
 }
 
 function getInitialEnabled(): boolean {
@@ -168,7 +192,6 @@ function getDefaultProviderConfig(provider: AiProvider): ProviderConfig {
   const definition = getProviderDefinition(provider);
 
   return {
-    apiKey: "",
     apiUrl: definition.defaultApiUrl,
     model: definition.defaultModel,
   };
@@ -182,9 +205,6 @@ function readProviderConfig(provider: AiProvider): ProviderConfig {
   const defaultConfig = getDefaultProviderConfig(provider);
 
   return {
-    apiKey:
-      getStoredValue(getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, provider)) ??
-      defaultConfig.apiKey,
     apiUrl:
       getStoredValue(getProviderStorageKey(AI_COMPLETION_API_URL_STORAGE_KEY, provider)) ??
       defaultConfig.apiUrl,
@@ -215,18 +235,80 @@ function migrateLegacyDeepSeekSettings() {
 
   if (legacyApiKey !== null) {
     setStoredValue(getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, "deepseek"), legacyApiKey);
-    window.localStorage.removeItem(AI_COMPLETION_API_KEY_STORAGE_KEY);
+    removeStoredValue(AI_COMPLETION_API_KEY_STORAGE_KEY);
   }
 
   if (legacyApiUrl !== null) {
     setStoredValue(getProviderStorageKey(AI_COMPLETION_API_URL_STORAGE_KEY, "deepseek"), legacyApiUrl);
-    window.localStorage.removeItem(AI_COMPLETION_API_URL_STORAGE_KEY);
+    removeStoredValue(AI_COMPLETION_API_URL_STORAGE_KEY);
   }
 
   if (legacyModel !== null) {
     setStoredValue(getProviderStorageKey(AI_COMPLETION_MODEL_STORAGE_KEY, "deepseek"), legacyModel);
-    window.localStorage.removeItem(AI_COMPLETION_MODEL_STORAGE_KEY);
+    removeStoredValue(AI_COMPLETION_MODEL_STORAGE_KEY);
   }
+}
+
+async function loadSecureApiKey(provider: AiProvider) {
+  return invoke<boolean>("has_ai_api_key", { provider });
+}
+
+async function storeSecureApiKey(provider: AiProvider, apiKey: string) {
+  await invoke("store_ai_api_key", { apiKey, provider });
+}
+
+async function deleteSecureApiKey(provider: AiProvider) {
+  await invoke("delete_ai_api_key", { provider });
+}
+
+async function syncProviderApiKey(provider: AiProvider, apiKey: string) {
+  if (apiKey.trim().length === 0) {
+    await deleteSecureApiKey(provider);
+    return;
+  }
+
+  await storeSecureApiKey(provider, apiKey);
+}
+
+async function loadProviderApiKeys() {
+  const apiKeyAvailability = createProviderApiKeyAvailability();
+  const errors: string[] = [];
+
+  for (const provider of getProviderKeys()) {
+    const storageKey = getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, provider);
+    const legacyApiKey = getStoredValue(storageKey);
+
+    try {
+      const hasSecureApiKey = await loadSecureApiKey(provider);
+
+      if (hasSecureApiKey) {
+        apiKeyAvailability[provider] = true;
+
+        if (legacyApiKey !== null) {
+          removeStoredValue(storageKey);
+        }
+
+        continue;
+      }
+
+      if (legacyApiKey === null) {
+        continue;
+      }
+
+      if (legacyApiKey.trim().length === 0) {
+        removeStoredValue(storageKey);
+        continue;
+      }
+
+      await syncProviderApiKey(provider, legacyApiKey);
+      removeStoredValue(storageKey);
+      apiKeyAvailability[provider] = true;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return { apiKeyAvailability, errors };
 }
 
 export function AiSettingsProvider({ children }: { children: ReactNode }) {
@@ -235,6 +317,8 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
   const [providerConfigs, setProviderConfigs] = useState<Record<AiProvider, ProviderConfig>>(
     readInitialProviderConfigs,
   );
+  const [providerApiKeyAvailability, setProviderApiKeyAvailability] =
+    useState<ProviderApiKeyAvailability>(createProviderApiKeyAvailability);
   const [saveMode, setSaveMode] = useState<SaveMode>(getInitialSaveMode);
   const [showHiddenFiles, setShowHiddenFiles] = useState<boolean>(getInitialShowHiddenFiles);
   const [smartRoutingEnabled, setSmartRoutingEnabled] = useState<boolean>(
@@ -242,8 +326,31 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    migrateLegacyDeepSeekSettings();
-    setProviderConfigs(readInitialProviderConfigs());
+    let cancelled = false;
+
+    const initializeProviderConfigs = async () => {
+      migrateLegacyDeepSeekSettings();
+      const initialConfigs = readInitialProviderConfigs();
+      if (!cancelled) {
+        setProviderConfigs(initialConfigs);
+      }
+
+      const { apiKeyAvailability, errors } = await loadProviderApiKeys();
+      if (cancelled) return;
+
+      setProviderApiKeyAvailability(apiKeyAvailability);
+
+      if (errors.length > 0) {
+        const uniqueErrors = [...new Set(errors)];
+        showErrorToast("无法访问系统密钥存储", uniqueErrors.join("\n"));
+      }
+    };
+
+    void initializeProviderConfigs();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -257,10 +364,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     for (const providerKey of Object.keys(providerConfigs) as AiProvider[]) {
       const config = providerConfigs[providerKey];
-      window.localStorage.setItem(
-        getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, providerKey),
-        config.apiKey,
-      );
       window.localStorage.setItem(
         getProviderStorageKey(AI_COMPLETION_API_URL_STORAGE_KEY, providerKey),
         config.apiUrl,
@@ -291,23 +394,34 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
   }, [showHiddenFiles]);
 
   const currentConfig = providerConfigs[provider];
+  const hasApiKey = providerApiKeyAvailability[provider];
 
   const value = useMemo<AiSettingsContextValue>(
     () => ({
-      apiKey: currentConfig.apiKey,
       apiUrl: currentConfig.apiUrl,
+      deleteApiKey: async () => {
+        await deleteSecureApiKey(provider);
+        setProviderApiKeyAvailability((prev) => ({ ...prev, [provider]: false }));
+        removeStoredValue(getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, provider));
+      },
       enabled,
+      hasApiKey,
       model: currentConfig.model,
       provider,
+      saveApiKey: async (apiKey) => {
+        const trimmedApiKey = apiKey.trim();
+
+        if (trimmedApiKey.length === 0) {
+          throw new Error("请先填写 API Key");
+        }
+
+        await storeSecureApiKey(provider, trimmedApiKey);
+        setProviderApiKeyAvailability((prev) => ({ ...prev, [provider]: true }));
+        removeStoredValue(getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, provider));
+      },
       saveMode,
       showHiddenFiles,
       smartRoutingEnabled,
-      setApiKey: (apiKey) => {
-        setProviderConfigs((prev) => ({
-          ...prev,
-          [provider]: { ...prev[provider], apiKey },
-        }));
-      },
       setApiUrl: (apiUrl) => {
         setProviderConfigs((prev) => ({
           ...prev,
@@ -327,9 +441,9 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
       setSmartRoutingEnabled,
     }),
     [
-      currentConfig.apiKey,
       currentConfig.apiUrl,
       currentConfig.model,
+      hasApiKey,
       enabled,
       provider,
       saveMode,
