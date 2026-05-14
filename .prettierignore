@@ -1,0 +1,6 @@
+src-tauri/target
+dist
+node_modules
+.agents
+.github
+.husky

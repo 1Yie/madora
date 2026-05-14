@@ -1,193 +1,223 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { invoke } from '@tauri-apps/api/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useAiSettings } from "@/components/system/ai-settings-provider";
-import { showErrorToast } from "@/components/ui/toast";
-import { registerEditor, unregisterEditor } from "@/lib/unsaved-registry";
+import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { showErrorToast } from '@/components/ui/toast';
+import { registerEditor, unregisterEditor } from '@/lib/unsaved-registry';
 
-import { MarkdownEditor } from "../markdown/markdown-editor";
+import { MarkdownEditor } from '../markdown/markdown-editor';
 
-type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 type TextWorkspaceProps = {
-  content: string;
-  encoding?: string | null;
-  filePath: string;
-  mode?: "edit" | "preview";
+	content: string;
+	encoding?: string | null;
+	filePath: string;
+	mode?: 'edit' | 'preview';
 };
 
 const SAVE_DEBOUNCE_MS = 400;
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
+	if (error instanceof Error) {
+		return error.message;
+	}
 
-  if (typeof error === "string") {
-    return error;
-  }
+	if (typeof error === 'string') {
+		return error;
+	}
 
-  return "保存失败";
+	return '保存失败';
 }
 
-export function TextWorkspace({ content, encoding, filePath, mode = "edit" }: TextWorkspaceProps) {
-  const { saveMode } = useAiSettings();
-  const [value, setValue] = useState(content);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const saveTimerRef = useRef<number | null>(null);
-  const saveRequestIdRef = useRef(0);
-  const lastSavedValueRef = useRef(content);
-  const syncingFromPropsRef = useRef(false);
-  const latestValueRef = useRef(value);
+export function TextWorkspace({
+	content,
+	encoding,
+	filePath,
+	mode = 'edit',
+}: TextWorkspaceProps) {
+	const { saveMode } = useAiSettings();
+	const [value, setValue] = useState(content);
+	const [saveError, setSaveError] = useState<string | null>(null);
+	const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+	const saveTimerRef = useRef<number | null>(null);
+	const saveRequestIdRef = useRef(0);
+	const lastSavedValueRef = useRef(content);
+	const syncingFromPropsRef = useRef(false);
+	const latestValueRef = useRef(value);
 
-  latestValueRef.current = value;
+	useEffect(() => {
+		latestValueRef.current = value;
+	}, [value]);
 
-  const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? "file";
+	const fileName = filePath.replace(/\\/g, '/').split('/').pop() ?? 'file';
 
-  useEffect(() => {
-    saveRequestIdRef.current += 1;
-    lastSavedValueRef.current = content;
-    syncingFromPropsRef.current = true;
-    setValue(content);
-    setSaveError(null);
-    setSaveStatus("idle");
-  }, [content, filePath]);
+	useEffect(() => {
+		let cancelled = false;
 
-  const persistValue = useEffectEvent(async (nextValue: string, requestId: number) => {
-    try {
-      await invoke("write_workspace_file", {
-        content: nextValue,
-        path: filePath,
-      });
+		saveRequestIdRef.current += 1;
+		lastSavedValueRef.current = content;
+		syncingFromPropsRef.current = true;
+		queueMicrotask(() => {
+			if (cancelled) return;
+			setValue(content);
+			setSaveError(null);
+			setSaveStatus('idle');
+		});
 
-      if (saveRequestIdRef.current !== requestId) {
-        return;
-      }
+		return () => {
+			cancelled = true;
+		};
+	}, [content, filePath]);
 
-      lastSavedValueRef.current = nextValue;
-      setSaveStatus("saved");
-      setSaveError(null);
-      window.dispatchEvent(
-        new CustomEvent("workspace-file-saved", {
-          detail: { filePath },
-        }),
-      );
-    } catch (error) {
-      if (saveRequestIdRef.current !== requestId) {
-        return;
-      }
+	const persistValue = useCallback(
+		async (nextValue: string, requestId: number) => {
+			try {
+				await invoke('write_workspace_file', {
+					content: nextValue,
+					path: filePath,
+				});
 
-      setSaveStatus("error");
-      setSaveError(getErrorMessage(error));
-    }
-  });
+				if (saveRequestIdRef.current !== requestId) {
+					return;
+				}
 
-  const requestSave = useEffectEvent(async (nextValue: string, immediate = false) => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+				lastSavedValueRef.current = nextValue;
+				setSaveStatus('saved');
+				setSaveError(null);
+				window.dispatchEvent(
+					new CustomEvent('workspace-file-saved', {
+						detail: { filePath },
+					})
+				);
+			} catch (error) {
+				if (saveRequestIdRef.current !== requestId) {
+					return;
+				}
 
-    if (nextValue === lastSavedValueRef.current) {
-      setSaveStatus("saved");
-      setSaveError(null);
-      return;
-    }
+				setSaveStatus('error');
+				setSaveError(getErrorMessage(error));
+			}
+		},
+		[filePath]
+	);
 
-    const requestId = saveRequestIdRef.current + 1;
-    saveRequestIdRef.current = requestId;
-    setSaveStatus("saving");
-    setSaveError(null);
+	const requestSave = useCallback(
+		async (nextValue: string, immediate = false) => {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
 
-    if (immediate) {
-      await persistValue(nextValue, requestId);
-      return;
-    }
+			if (nextValue === lastSavedValueRef.current) {
+				setSaveStatus('saved');
+				setSaveError(null);
+				return;
+			}
 
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      void persistValue(nextValue, requestId);
-    }, SAVE_DEBOUNCE_MS);
-  });
+			const requestId = saveRequestIdRef.current + 1;
+			saveRequestIdRef.current = requestId;
+			setSaveStatus('saving');
+			setSaveError(null);
 
-  const handleSave = useEffectEvent(() => {
-    void requestSave(value, true);
-  });
+			if (immediate) {
+				await persistValue(nextValue, requestId);
+				return;
+			}
 
-  useEffect(() => {
-    const editorId = `text:${filePath}`;
+			saveTimerRef.current = window.setTimeout(() => {
+				saveTimerRef.current = null;
+				void persistValue(nextValue, requestId);
+			}, SAVE_DEBOUNCE_MS);
+		},
+		[persistValue]
+	);
 
-    registerEditor(editorId, {
-      filePath,
-      isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
-      save: async (options) => {
-        if (latestValueRef.current === lastSavedValueRef.current) {
-          return;
-        }
+	const handleSave = useCallback(() => {
+		void requestSave(value, true);
+	}, [requestSave, value]);
 
-        await requestSave(latestValueRef.current, options?.immediate ?? true);
-      },
-    });
+	useEffect(() => {
+		const editorId = `text:${filePath}`;
 
-    return () => {
-      unregisterEditor(editorId);
-    };
-  }, [filePath, requestSave]);
+		registerEditor(editorId, {
+			filePath,
+			isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
+			save: async (options) => {
+				if (latestValueRef.current === lastSavedValueRef.current) {
+					return;
+				}
 
-  useEffect(() => {
-    if (syncingFromPropsRef.current) {
-      syncingFromPropsRef.current = false;
-      return;
-    }
+				await requestSave(latestValueRef.current, options?.immediate ?? true);
+			},
+		});
 
-    if (value === lastSavedValueRef.current) {
-      return;
-    }
+		return () => {
+			unregisterEditor(editorId);
+		};
+	}, [filePath, requestSave]);
 
-    if (saveMode === "manual") {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
+	useEffect(() => {
+		if (syncingFromPropsRef.current) {
+			syncingFromPropsRef.current = false;
+			return;
+		}
 
-      setSaveStatus("dirty");
-      setSaveError(null);
-      return;
-    }
+		if (value === lastSavedValueRef.current) {
+			return;
+		}
 
-    requestSave(value);
+		if (saveMode === 'manual') {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
 
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    };
-  }, [filePath, requestSave, saveMode, value]);
+			queueMicrotask(() => {
+				setSaveStatus('dirty');
+				setSaveError(null);
+			});
+			return;
+		}
 
-  useEffect(() => {
-    if (!saveError) {
-      return;
-    }
+		requestSave(value);
 
-    showErrorToast("保存失败", saveError);
-    setSaveError(null);
-    setSaveStatus(
-      value === lastSavedValueRef.current ? "idle" : saveMode === "manual" ? "dirty" : "idle",
-    );
-  }, [saveError, saveMode, value]);
+		return () => {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
+		};
+	}, [filePath, requestSave, saveMode, value]);
 
-  return (
-    <MarkdownEditor
-      encoding={encoding}
-      onChange={setValue}
-      onSave={handleSave}
-      saveMode={saveMode}
-      saveStatus={saveStatus}
-      title={fileName}
-      value={value}
-      mode={mode}
-    />
-  );
+	useEffect(() => {
+		if (!saveError) {
+			return;
+		}
+
+		showErrorToast('保存失败', saveError);
+		queueMicrotask(() => {
+			setSaveError(null);
+			setSaveStatus(
+				value === lastSavedValueRef.current
+					? 'idle'
+					: saveMode === 'manual'
+						? 'dirty'
+						: 'idle'
+			);
+		});
+	}, [saveError, saveMode, value]);
+
+	return (
+		<MarkdownEditor
+			encoding={encoding}
+			onChange={setValue}
+			onSave={handleSave}
+			saveMode={saveMode}
+			saveStatus={saveStatus}
+			title={fileName}
+			value={value}
+			mode={mode}
+		/>
+	);
 }

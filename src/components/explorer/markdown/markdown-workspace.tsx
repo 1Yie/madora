@@ -1,230 +1,266 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { invoke } from '@tauri-apps/api/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useAiSettings } from "@/components/system/ai-settings-provider";
-import { showErrorToast } from "@/components/ui/toast";
-import { MARKDOWN_DRAFT_STORAGE_KEY_PREFIX, registerEditor, unregisterEditor } from "@/lib/unsaved-registry";
+import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { showErrorToast } from '@/components/ui/toast';
+import {
+	MARKDOWN_DRAFT_STORAGE_KEY_PREFIX,
+	registerEditor,
+	unregisterEditor,
+} from '@/lib/unsaved-registry';
 
-import { MarkdownEditor } from "./markdown-editor";
+import { MarkdownEditor } from './markdown-editor';
 
-type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
+type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 type MarkdownWorkspaceProps = {
-  content: string;
-  encoding?: string | null;
-  filePath: string;
-  mode: "edit" | "preview";
+	content: string;
+	encoding?: string | null;
+	filePath: string;
+	mode: 'edit' | 'preview';
 };
 
 const SAVE_DEBOUNCE_MS = 400;
 
 function getDraftStorageKey(filePath: string): string {
-  return `${MARKDOWN_DRAFT_STORAGE_KEY_PREFIX}${filePath}`;
+	return `${MARKDOWN_DRAFT_STORAGE_KEY_PREFIX}${filePath}`;
 }
 
 function getInitialValue(filePath: string, content: string): string {
-  const draft = window.localStorage.getItem(getDraftStorageKey(filePath));
+	const draft = window.localStorage.getItem(getDraftStorageKey(filePath));
 
-  return draft ?? content;
+	return draft ?? content;
 }
 
 function hasStoredDraft(filePath: string): boolean {
-  return window.localStorage.getItem(getDraftStorageKey(filePath)) !== null;
+	return window.localStorage.getItem(getDraftStorageKey(filePath)) !== null;
 }
 
 function getFileTitle(filePath: string): string {
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  const fileName = normalizedPath.split("/").pop() ?? "Untitled";
+	const normalizedPath = filePath.replace(/\\/g, '/');
+	const fileName = normalizedPath.split('/').pop() ?? 'Untitled';
 
-  return fileName.replace(/\.(md|markdown|mdx)$/i, "");
+	return fileName.replace(/\.(md|markdown|mdx)$/i, '');
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
+	if (error instanceof Error) {
+		return error.message;
+	}
 
-  if (typeof error === "string") {
-    return error;
-  }
+	if (typeof error === 'string') {
+		return error;
+	}
 
-  return "保存失败";
+	return '保存失败';
 }
 
-export function MarkdownWorkspace({ content, encoding, filePath, mode }: MarkdownWorkspaceProps) {
-  const { saveMode } = useAiSettings();
-  const [value, setValue] = useState(() => getInitialValue(filePath, content));
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
-    hasStoredDraft(filePath) ? "dirty" : "idle",
-  );
-  const saveTimerRef = useRef<number | null>(null);
-  const saveRequestIdRef = useRef(0);
-  const lastSavedValueRef = useRef(content);
-  const syncingFromPropsRef = useRef(false);
-  const latestValueRef = useRef(value);
+export function MarkdownWorkspace({
+	content,
+	encoding,
+	filePath,
+	mode,
+}: MarkdownWorkspaceProps) {
+	const { saveMode } = useAiSettings();
+	const [value, setValue] = useState(() => getInitialValue(filePath, content));
+	const [saveError, setSaveError] = useState<string | null>(null);
+	const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
+		hasStoredDraft(filePath) ? 'dirty' : 'idle'
+	);
+	const saveTimerRef = useRef<number | null>(null);
+	const saveRequestIdRef = useRef(0);
+	const lastSavedValueRef = useRef(content);
+	const syncingFromPropsRef = useRef(false);
+	const latestValueRef = useRef(value);
 
-  latestValueRef.current = value;
+	useEffect(() => {
+		latestValueRef.current = value;
+	}, [value]);
 
-  useEffect(() => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+	useEffect(() => {
+		let cancelled = false;
 
-    saveRequestIdRef.current += 1;
-    const nextValue = getInitialValue(filePath, content);
-    const dirtyFromDraft = hasStoredDraft(filePath) && nextValue !== content;
+		if (saveTimerRef.current !== null) {
+			window.clearTimeout(saveTimerRef.current);
+			saveTimerRef.current = null;
+		}
 
-    lastSavedValueRef.current = content;
-    syncingFromPropsRef.current = true;
-    setValue(nextValue);
-    setSaveError(null);
-    setSaveStatus(dirtyFromDraft ? "dirty" : "idle");
-  }, [content, filePath]);
+		saveRequestIdRef.current += 1;
+		const nextValue = getInitialValue(filePath, content);
+		const dirtyFromDraft = hasStoredDraft(filePath) && nextValue !== content;
 
-  useEffect(() => {
-    if (value === lastSavedValueRef.current) {
-      window.localStorage.removeItem(getDraftStorageKey(filePath));
-      return;
-    }
+		lastSavedValueRef.current = content;
+		syncingFromPropsRef.current = true;
+		queueMicrotask(() => {
+			if (cancelled) return;
+			setValue(nextValue);
+			setSaveError(null);
+			setSaveStatus(dirtyFromDraft ? 'dirty' : 'idle');
+		});
 
-    window.localStorage.setItem(getDraftStorageKey(filePath), value);
-  }, [filePath, value]);
+		return () => {
+			cancelled = true;
+		};
+	}, [content, filePath]);
 
-  const persistValue = useEffectEvent(async (nextValue: string, requestId: number) => {
-    try {
-      await invoke("write_workspace_file", {
-        content: nextValue,
-        path: filePath,
-      });
+	useEffect(() => {
+		if (value === lastSavedValueRef.current) {
+			window.localStorage.removeItem(getDraftStorageKey(filePath));
+			return;
+		}
 
-      if (saveRequestIdRef.current !== requestId) {
-        return;
-      }
+		window.localStorage.setItem(getDraftStorageKey(filePath), value);
+	}, [filePath, value]);
 
-      lastSavedValueRef.current = nextValue;
-      window.localStorage.removeItem(getDraftStorageKey(filePath));
-      setSaveStatus("saved");
-      setSaveError(null);
-      window.dispatchEvent(
-        new CustomEvent("workspace-file-saved", {
-          detail: { filePath },
-        }),
-      );
-    } catch (error) {
-      if (saveRequestIdRef.current !== requestId) {
-        return;
-      }
+	const persistValue = useCallback(
+		async (nextValue: string, requestId: number) => {
+			try {
+				await invoke('write_workspace_file', {
+					content: nextValue,
+					path: filePath,
+				});
 
-      setSaveStatus("error");
-      setSaveError(getErrorMessage(error));
-    }
-  });
+				if (saveRequestIdRef.current !== requestId) {
+					return;
+				}
 
-  const requestSave = useEffectEvent(async (nextValue: string, immediate = false) => {
-    if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+				lastSavedValueRef.current = nextValue;
+				window.localStorage.removeItem(getDraftStorageKey(filePath));
+				setSaveStatus('saved');
+				setSaveError(null);
+				window.dispatchEvent(
+					new CustomEvent('workspace-file-saved', {
+						detail: { filePath },
+					})
+				);
+			} catch (error) {
+				if (saveRequestIdRef.current !== requestId) {
+					return;
+				}
 
-    if (nextValue === lastSavedValueRef.current) {
-      setSaveStatus("saved");
-      setSaveError(null);
-      return;
-    }
+				setSaveStatus('error');
+				setSaveError(getErrorMessage(error));
+			}
+		},
+		[filePath]
+	);
 
-    const requestId = saveRequestIdRef.current + 1;
-    saveRequestIdRef.current = requestId;
-    setSaveStatus("saving");
-    setSaveError(null);
+	const requestSave = useCallback(
+		async (nextValue: string, immediate = false) => {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
 
-    if (immediate) {
-      await persistValue(nextValue, requestId);
-      return;
-    }
+			if (nextValue === lastSavedValueRef.current) {
+				setSaveStatus('saved');
+				setSaveError(null);
+				return;
+			}
 
-    saveTimerRef.current = window.setTimeout(() => {
-      saveTimerRef.current = null;
-      void persistValue(nextValue, requestId);
-    }, SAVE_DEBOUNCE_MS);
-  });
+			const requestId = saveRequestIdRef.current + 1;
+			saveRequestIdRef.current = requestId;
+			setSaveStatus('saving');
+			setSaveError(null);
 
-  const handleSave = useEffectEvent(() => {
-    requestSave(value, true);
-  });
+			if (immediate) {
+				await persistValue(nextValue, requestId);
+				return;
+			}
 
-  useEffect(() => {
-    const editorId = `markdown:${filePath}`;
+			saveTimerRef.current = window.setTimeout(() => {
+				saveTimerRef.current = null;
+				void persistValue(nextValue, requestId);
+			}, SAVE_DEBOUNCE_MS);
+		},
+		[persistValue]
+	);
 
-    registerEditor(editorId, {
-      filePath,
-      isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
-      save: async (options) => {
-        if (latestValueRef.current === lastSavedValueRef.current) {
-          return;
-        }
+	const handleSave = useCallback(() => {
+		void requestSave(value, true);
+	}, [requestSave, value]);
 
-        await requestSave(latestValueRef.current, options?.immediate ?? true);
-      },
-    });
+	useEffect(() => {
+		const editorId = `markdown:${filePath}`;
 
-    return () => {
-      unregisterEditor(editorId);
-    };
-  }, [filePath, requestSave]);
+		registerEditor(editorId, {
+			filePath,
+			isDirty: () => latestValueRef.current !== lastSavedValueRef.current,
+			save: async (options) => {
+				if (latestValueRef.current === lastSavedValueRef.current) {
+					return;
+				}
 
-  useEffect(() => {
-    if (syncingFromPropsRef.current) {
-      syncingFromPropsRef.current = false;
-      return;
-    }
+				await requestSave(latestValueRef.current, options?.immediate ?? true);
+			},
+		});
 
-    if (value === lastSavedValueRef.current) {
-      return;
-    }
+		return () => {
+			unregisterEditor(editorId);
+		};
+	}, [filePath, requestSave]);
 
-    if (saveMode === "manual") {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
+	useEffect(() => {
+		if (syncingFromPropsRef.current) {
+			syncingFromPropsRef.current = false;
+			return;
+		}
 
-      setSaveStatus("dirty");
-      setSaveError(null);
-      return;
-    }
+		if (value === lastSavedValueRef.current) {
+			return;
+		}
 
-    requestSave(value);
+		if (saveMode === 'manual') {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
 
-    return () => {
-      if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-    };
-  }, [filePath, requestSave, saveMode, value]);
+			queueMicrotask(() => {
+				setSaveStatus('dirty');
+				setSaveError(null);
+			});
+			return;
+		}
 
-  useEffect(() => {
-    if (!saveError) {
-      return;
-    }
+		requestSave(value);
 
-    showErrorToast("保存失败", saveError);
-    setSaveError(null);
-    setSaveStatus(value === lastSavedValueRef.current ? "idle" : saveMode === "manual" ? "dirty" : "idle");
-  }, [saveError, saveMode, value]);
+		return () => {
+			if (saveTimerRef.current !== null) {
+				window.clearTimeout(saveTimerRef.current);
+				saveTimerRef.current = null;
+			}
+		};
+	}, [filePath, requestSave, saveMode, value]);
 
-  return (
-    <MarkdownEditor
-      encoding={encoding}
-      mode={mode}
-      onChange={setValue}
-      onSave={handleSave}
-      saveMode={saveMode}
-      saveStatus={saveStatus}
-      title={getFileTitle(filePath)}
-      value={value}
-    />
-  );
+	useEffect(() => {
+		if (!saveError) {
+			return;
+		}
+
+		showErrorToast('保存失败', saveError);
+		queueMicrotask(() => {
+			setSaveError(null);
+			setSaveStatus(
+				value === lastSavedValueRef.current
+					? 'idle'
+					: saveMode === 'manual'
+						? 'dirty'
+						: 'idle'
+			);
+		});
+	}, [saveError, saveMode, value]);
+
+	return (
+		<MarkdownEditor
+			encoding={encoding}
+			mode={mode}
+			onChange={setValue}
+			onSave={handleSave}
+			saveMode={saveMode}
+			saveStatus={saveStatus}
+			title={getFileTitle(filePath)}
+			value={value}
+		/>
+	);
 }
