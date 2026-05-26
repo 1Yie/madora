@@ -8,16 +8,14 @@ use reqwest::Client;
 use tokio::sync::Notify;
 
 use crate::{
-    models::ai::{
-        AiCompletionConfig, AiProvider, CompletionMode, CompletionRequest, CompletionResult,
-        CompletionResultMode,
-    },
+    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
     prompt::PromptManager,
     providers::{default_api_url, default_model, get_provider},
 };
 
 const COMPLETION_CACHE_MAX_ENTRIES: usize = 128;
 const COMPLETION_CACHE_TTL: Duration = Duration::from_secs(15);
+const MAX_CACHE_PREFIX_CHARS: usize = 1000;
 
 pub struct AiCompletionService {
     client: Client,
@@ -26,16 +24,9 @@ pub struct AiCompletionService {
     prompt_manager: PromptManager,
 }
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-enum CompletionCacheKind {
-    ChatPrefix,
-    Fim,
-}
-
 #[derive(Clone, Eq, Hash, PartialEq)]
 struct CompletionCacheKey {
     api_url: String,
-    kind: CompletionCacheKind,
     model: String,
     prefix: String,
     provider: AiProvider,
@@ -56,8 +47,17 @@ struct InFlightCompletionRequest {
 
 impl AiCompletionService {
     pub fn new() -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .pool_max_idle_per_host(8)
+            .tcp_keepalive(Duration::from_secs(30))
+            .user_agent("madora/1.0")
+            .build()
+            .expect("Failed to create HTTP client");
+
         Self {
-            client: Client::new(),
+            client,
             completion_cache: Mutex::new(HashMap::new()),
             completion_in_flight: Mutex::new(HashMap::new()),
             prompt_manager: PromptManager::new(),
@@ -71,7 +71,6 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 fn cleanup_completion_cache(cache: &mut HashMap<CompletionCacheKey, CachedCompletion>) {
     let now = Instant::now();
-
     cache.retain(|_, entry| entry.expires_at > now);
 
     if cache.len() <= COMPLETION_CACHE_MAX_ENTRIES {
@@ -82,7 +81,6 @@ fn cleanup_completion_cache(cache: &mut HashMap<CompletionCacheKey, CachedComple
         .iter()
         .map(|(key, entry)| (key.clone(), entry.last_accessed_at))
         .collect::<Vec<_>>();
-
     keys_by_access_time.sort_by_key(|(_, last_accessed_at)| *last_accessed_at);
 
     for (key, _) in keys_by_access_time
@@ -100,18 +98,22 @@ fn resolve_provider(config: &AiCompletionConfig) -> AiProvider {
 fn build_completion_cache_key(
     config: &AiCompletionConfig,
     request: &CompletionRequest,
-    kind: CompletionCacheKind,
 ) -> CompletionCacheKey {
     let provider = resolve_provider(config);
 
     CompletionCacheKey {
         api_url: resolve_cache_api_url(provider, config),
-        kind,
         model: resolve_cache_model(provider, config),
-        prefix: request.prefix.clone(),
+        prefix: truncate_suffix_for_cache(&request.prefix),
         provider,
-        suffix: request.suffix.clone(),
+        suffix: request.suffix.as_deref().map(|s| truncate_suffix_for_cache(s)),
     }
+}
+
+fn truncate_suffix_for_cache(value: &str) -> String {
+    let total = value.chars().count();
+    let skip = total.saturating_sub(MAX_CACHE_PREFIX_CHARS);
+    value.chars().skip(skip).collect()
 }
 
 async fn wait_for_in_flight_completion_request(
@@ -122,7 +124,6 @@ async fn wait_for_in_flight_completion_request(
 
         {
             let result = lock_unpoisoned(&request.result);
-
             if let Some(result) = result.as_ref() {
                 return result.clone();
             }
@@ -137,12 +138,10 @@ fn get_cached_completion(
     cache_key: &CompletionCacheKey,
 ) -> Option<String> {
     let mut cache = lock_unpoisoned(&service.completion_cache);
-
     cleanup_completion_cache(&mut cache);
 
     let now = Instant::now();
     let entry = cache.get_mut(cache_key)?;
-
     entry.last_accessed_at = now;
 
     Some(entry.text.clone())
@@ -162,122 +161,6 @@ fn cache_completion(service: &AiCompletionService, cache_key: CompletionCacheKey
         },
     );
     cleanup_completion_cache(&mut cache);
-}
-
-async fn request_cached_fim_completion(
-    service: &AiCompletionService,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-) -> Result<String, String> {
-    let cache_key = build_completion_cache_key(config, request, CompletionCacheKind::Fim);
-
-    if let Some(text) = get_cached_completion(service, &cache_key) {
-        return Ok(text);
-    }
-
-    let (in_flight_request, is_leader) = {
-        let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
-
-        if let Some(in_flight_request) = in_flight.get(&cache_key) {
-            (in_flight_request.clone(), false)
-        } else {
-            let in_flight_request = Arc::new(InFlightCompletionRequest {
-                notify: Notify::new(),
-                result: Mutex::new(None),
-            });
-
-            in_flight.insert(cache_key.clone(), in_flight_request.clone());
-
-            (in_flight_request, true)
-        }
-    };
-
-    if !is_leader {
-        return wait_for_in_flight_completion_request(&in_flight_request).await;
-    }
-
-    let provider = get_provider(resolve_provider(config));
-    let result = provider
-        .request_fim_completion(&service.client, &service.prompt_manager, config, request)
-        .await;
-
-    if let Ok(text) = result.as_ref() {
-        cache_completion(service, cache_key.clone(), text.clone());
-    }
-
-    {
-        let mut shared_result = lock_unpoisoned(&in_flight_request.result);
-        *shared_result = Some(result.clone());
-    }
-
-    in_flight_request.notify.notify_waiters();
-
-    let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
-    in_flight.remove(&cache_key);
-
-    result
-}
-
-async fn request_cached_chat_prefix_completion(
-    service: &AiCompletionService,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-) -> Result<String, String> {
-    let cache_key = build_completion_cache_key(config, request, CompletionCacheKind::ChatPrefix);
-
-    if let Some(text) = get_cached_completion(service, &cache_key) {
-        return Ok(text);
-    }
-
-    let (in_flight_request, is_leader) = {
-        let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
-
-        if let Some(in_flight_request) = in_flight.get(&cache_key) {
-            (in_flight_request.clone(), false)
-        } else {
-            let in_flight_request = Arc::new(InFlightCompletionRequest {
-                notify: Notify::new(),
-                result: Mutex::new(None),
-            });
-
-            in_flight.insert(cache_key.clone(), in_flight_request.clone());
-
-            (in_flight_request, true)
-        }
-    };
-
-    if !is_leader {
-        return wait_for_in_flight_completion_request(&in_flight_request).await;
-    }
-
-    let provider = get_provider(resolve_provider(config));
-    let result = provider
-        .request_chat_prefix_completion(&service.client, &service.prompt_manager, config, request)
-        .await;
-
-    if let Ok(text) = result.as_ref() {
-        cache_completion(service, cache_key.clone(), text.clone());
-    }
-
-    {
-        let mut shared_result = lock_unpoisoned(&in_flight_request.result);
-        *shared_result = Some(result.clone());
-    }
-
-    in_flight_request.notify.notify_waiters();
-
-    let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
-    in_flight.remove(&cache_key);
-
-    result
-}
-
-fn has_suffix(request: &CompletionRequest) -> bool {
-    request
-        .suffix
-        .as_deref()
-        .map(str::trim)
-        .is_some_and(|value| !value.is_empty())
 }
 
 fn resolve_cache_api_url(provider: AiProvider, config: &AiCompletionConfig) -> String {
@@ -314,48 +197,52 @@ pub async fn generate_completion(
     config: &AiCompletionConfig,
     request: &CompletionRequest,
 ) -> Result<CompletionResult, String> {
-    match request.mode.unwrap_or(CompletionMode::Auto) {
-        CompletionMode::Fim => {
-            let text = request_cached_fim_completion(service, config, request).await?;
+    let cache_key = build_completion_cache_key(config, request);
 
-            Ok(CompletionResult {
-                mode: CompletionResultMode::Fim,
-                text,
-            })
-        }
-        CompletionMode::ChatPrefix => {
-            let text = request_cached_chat_prefix_completion(service, config, request).await?;
-
-            Ok(CompletionResult {
-                mode: CompletionResultMode::ChatPrefix,
-                text,
-            })
-        }
-        CompletionMode::Auto => {
-            if config.smart_routing_enabled {
-                if has_suffix(request) {
-                    let text = request_cached_fim_completion(service, config, request).await?;
-
-                    return Ok(CompletionResult {
-                        mode: CompletionResultMode::Fim,
-                        text,
-                    });
-                }
-
-                let text = request_cached_chat_prefix_completion(service, config, request).await?;
-
-                return Ok(CompletionResult {
-                    mode: CompletionResultMode::ChatPrefix,
-                    text,
-                });
-            }
-
-            let text = request_cached_fim_completion(service, config, request).await?;
-
-            Ok(CompletionResult {
-                mode: CompletionResultMode::Fim,
-                text,
-            })
-        }
+    if let Some(text) = get_cached_completion(service, &cache_key) {
+        return Ok(CompletionResult { text });
     }
+
+    let (in_flight_request, is_leader) = {
+        let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
+
+        if let Some(in_flight_request) = in_flight.get(&cache_key) {
+            (in_flight_request.clone(), false)
+        } else {
+            let in_flight_request = Arc::new(InFlightCompletionRequest {
+                notify: Notify::new(),
+                result: Mutex::new(None),
+            });
+
+            in_flight.insert(cache_key.clone(), in_flight_request.clone());
+            (in_flight_request, true)
+        }
+    };
+
+    if !is_leader {
+        return Ok(CompletionResult {
+            text: wait_for_in_flight_completion_request(&in_flight_request).await?,
+        });
+    }
+
+    let provider = get_provider(resolve_provider(config));
+    let result = provider
+        .request_fim_completion(&service.client, &service.prompt_manager, config, request)
+        .await;
+
+    if let Ok(text) = result.as_ref() {
+        cache_completion(service, cache_key.clone(), text.clone());
+    }
+
+    {
+        let mut shared_result = lock_unpoisoned(&in_flight_request.result);
+        *shared_result = Some(result.clone());
+    }
+
+    in_flight_request.notify.notify_waiters();
+
+    let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
+    in_flight.remove(&cache_key);
+
+    result.map(|text| CompletionResult { text })
 }

@@ -29,56 +29,33 @@ impl CompletionProvider for OpenAiProvider {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String> {
-        request_openai_compatible_chat_completion(
-            self.provider(),
-            client,
-            prompt_manager,
-            config,
-            request,
-            "fim_system",
-            "fim_user",
-            0.3,
-        )
-        .await
-    }
-
-    async fn request_chat_prefix_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        request_openai_compatible_chat_completion(
-            self.provider(),
-            client,
-            prompt_manager,
-            config,
-            request,
-            "chat_prefix_system",
-            "chat_prefix_user",
-            0.5,
-        )
-        .await
+        request_openai_compatible_fim(client, prompt_manager, config, request).await
     }
 }
 
-pub(crate) async fn request_openai_compatible_chat_completion(
-    provider: AiProvider,
+pub(crate) async fn request_openai_compatible_fim(
     client: &Client,
     prompt_manager: &PromptManager,
     config: &AiCompletionConfig,
     request: &CompletionRequest,
-    system_prompt_name: &str,
-    user_prompt_name: &str,
-    temperature: f32,
 ) -> Result<String, String> {
+    let provider = config.provider.unwrap_or(AiProvider::OpenAi);
     let api_key = resolve_api_key(config)?;
     let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
     let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
     let prompt_context = build_prompt_context(request);
-    let system_prompt = prompt_manager.render_prompt(provider, system_prompt_name, &prompt_context);
-    let user_prompt = prompt_manager.render_prompt(provider, user_prompt_name, &prompt_context);
+    let system_prompt =
+        prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
+    let user_prompt =
+        prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
+
+    let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let (max_tokens, temperature) = if has_suffix {
+        (MAX_COMPLETION_TOKENS, 0.3)
+    } else {
+        (64usize, 0.2)
+    };
+
     let response = client
         .post(join_url(&api_url, "/v1/chat/completions"))
         .bearer_auth(api_key)
@@ -94,7 +71,7 @@ pub(crate) async fn request_openai_compatible_chat_completion(
                     "content": user_prompt,
                 }
             ],
-            "max_tokens": MAX_COMPLETION_TOKENS,
+            "max_tokens": max_tokens,
             "temperature": temperature,
             "stop": STOP_SEQUENCES,
         }))

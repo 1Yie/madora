@@ -35,14 +35,6 @@ pub trait CompletionProvider: Send + Sync {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String>;
-
-    async fn request_chat_prefix_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String>;
 }
 
 static ANTHROPIC_PROVIDER: anthropic::AnthropicProvider = anthropic::AnthropicProvider;

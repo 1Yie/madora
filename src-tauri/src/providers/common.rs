@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+
 use crate::{
     models::ai::{AiCompletionConfig, CompletionRequest},
     prompt::PromptContext,
@@ -144,6 +145,7 @@ pub fn build_prompt_context(request: &CompletionRequest) -> PromptContext {
         title,
     }
 }
+
 
 pub fn take_text_completion(payload: TextCompletionResponse) -> String {
     payload

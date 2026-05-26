@@ -31,7 +31,7 @@ type AiSettingsContextValue = ProviderConfig & {
 	provider: AiProvider;
 	saveMode: SaveMode;
 	showHiddenFiles: boolean;
-	smartRoutingEnabled: boolean;
+
 	deleteApiKey: () => Promise<void>;
 	saveApiKey: (apiKey: string) => Promise<void>;
 	setApiUrl: (apiUrl: string) => void;
@@ -40,7 +40,6 @@ type AiSettingsContextValue = ProviderConfig & {
 	setProvider: (provider: AiProvider) => void;
 	setSaveMode: (saveMode: SaveMode) => void;
 	setShowHiddenFiles: (showHiddenFiles: boolean) => void;
-	setSmartRoutingEnabled: (smartRoutingEnabled: boolean) => void;
 };
 
 type ProviderDefinition = {
@@ -98,8 +97,6 @@ const AI_COMPLETION_MODEL_STORAGE_KEY = 'madora-ai-completion-model';
 const EDITOR_SAVE_MODE_STORAGE_KEY = 'madora-editor-save-mode';
 const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY =
 	'madora-explorer-show-hidden-files';
-const AI_COMPLETION_SMART_ROUTING_STORAGE_KEY =
-	'madora-ai-completion-smart-routing-enabled';
 
 const AiSettingsContext = createContext<AiSettingsContextValue | null>(null);
 
@@ -169,16 +166,6 @@ function getInitialProvider(): AiProvider {
 	}
 
 	return DEFAULT_PROVIDER;
-}
-
-function getInitialSmartRoutingEnabled(): boolean {
-	const storedValue = getStoredValue(AI_COMPLETION_SMART_ROUTING_STORAGE_KEY);
-
-	if (storedValue === null) {
-		return false;
-	}
-
-	return storedValue === 'true';
 }
 
 function getInitialSaveMode(): SaveMode {
@@ -346,9 +333,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 	const [showHiddenFiles, setShowHiddenFiles] = useState<boolean>(
 		getInitialShowHiddenFiles
 	);
-	const [smartRoutingEnabled, setSmartRoutingEnabled] = useState<boolean>(
-		getInitialSmartRoutingEnabled
-	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -404,13 +388,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 	}, [providerConfigs]);
 
 	useEffect(() => {
-		window.localStorage.setItem(
-			AI_COMPLETION_SMART_ROUTING_STORAGE_KEY,
-			String(smartRoutingEnabled)
-		);
-	}, [smartRoutingEnabled]);
-
-	useEffect(() => {
 		window.localStorage.setItem(EDITOR_SAVE_MODE_STORAGE_KEY, saveMode);
 	}, [saveMode]);
 
@@ -459,7 +436,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			},
 			saveMode,
 			showHiddenFiles,
-			smartRoutingEnabled,
+
 			setApiUrl: (apiUrl) => {
 				setProviderConfigs((prev) => ({
 					...prev,
@@ -476,7 +453,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			setProvider,
 			setSaveMode,
 			setShowHiddenFiles,
-			setSmartRoutingEnabled,
 		}),
 		[
 			currentConfig.apiUrl,
@@ -486,7 +462,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			provider,
 			saveMode,
 			showHiddenFiles,
-			smartRoutingEnabled,
 		]
 	);
 

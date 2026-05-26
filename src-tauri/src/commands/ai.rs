@@ -1,17 +1,42 @@
+use std::{collections::HashMap, sync::{LazyLock, Mutex}};
+
 use tauri::State;
 
 use crate::{
-    models::ai::{AiCompletionConfig, CompletionRequest, CompletionResult},
+    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
     services::ai,
 };
 
 use super::secure_storage;
 
-fn require_api_key(provider: crate::models::ai::AiProvider) -> Result<String, String> {
-    secure_storage::load_ai_api_key_sync(provider)?
-        .map(|api_key| api_key.trim().to_string())
-        .filter(|api_key| !api_key.is_empty())
-        .ok_or_else(|| format!("请先在设置中保存 {} API Key", provider.display_name()))
+static API_KEY_CACHE: LazyLock<Mutex<HashMap<AiProvider, String>>> =
+    LazyLock::new(Default::default);
+
+fn require_api_key(provider: AiProvider) -> Result<String, String> {
+    {
+        let cache = API_KEY_CACHE.lock().unwrap();
+        if let Some(key) = cache.get(&provider) {
+            if !key.is_empty() {
+                return Ok(key.clone());
+            }
+        }
+    }
+
+    let api_key = secure_storage::load_ai_api_key_sync(provider)?
+        .map(|key| key.trim().to_string())
+        .filter(|key| !key.is_empty())
+        .ok_or_else(|| format!("请先在设置中保存 {} API Key", provider.display_name()))?;
+
+    {
+        let mut cache = API_KEY_CACHE.lock().unwrap();
+        cache.insert(provider, api_key.clone());
+    }
+
+    Ok(api_key)
+}
+
+pub(crate) fn invalidate_api_key_cache() {
+    API_KEY_CACHE.lock().unwrap().clear();
 }
 
 #[tauri::command]

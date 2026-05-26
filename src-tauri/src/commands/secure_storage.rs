@@ -71,6 +71,7 @@ fn delete_ai_api_key_sync(provider: AiProvider) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn store_ai_api_key(provider: AiProvider, api_key: String) -> Result<(), String> {
+    super::ai::invalidate_api_key_cache();
     tauri::async_runtime::spawn_blocking(move || store_ai_api_key_sync(provider, api_key))
         .await
         .map_err(|error| error.to_string())?
@@ -85,6 +86,7 @@ pub async fn has_ai_api_key(provider: AiProvider) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn delete_ai_api_key(provider: AiProvider) -> Result<(), String> {
+    super::ai::invalidate_api_key_cache();
     tauri::async_runtime::spawn_blocking(move || delete_ai_api_key_sync(provider))
         .await
         .map_err(|error| error.to_string())?

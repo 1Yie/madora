@@ -283,6 +283,42 @@ fn collect_conflicts(repo: &Repository) -> Result<Vec<String>, Error> {
     Ok(conflicts)
 }
 
+/// After a merge or revert with allow_conflicts(true), the index may contain
+/// conflict entries even when the working tree was auto-resolved (no markers).
+/// Filter out these phantom conflicts by checking for <<<<<<< in the file.
+fn filter_phantom_conflicts(
+    repo: &Repository,
+    conflict_paths: &[String],
+) -> Result<Vec<String>, Error> {
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| Error::from_str("当前仓库没有可用的工作区目录"))?;
+    let mut real_conflicts = Vec::new();
+
+    for path in conflict_paths {
+        let full_path = workdir.join(path);
+        let has_markers = std::fs::read_to_string(&full_path)
+            .map(|content| content.contains("<<<<<<<"))
+            .unwrap_or(false);
+
+        if has_markers {
+            real_conflicts.push(path.clone());
+        } else {
+            // Phantom conflict — auto-stage to clear index conflict stages.
+            let mut index = repo.index()?;
+            let relative = Path::new(path);
+            if full_path.exists() {
+                index.add_path(relative)?;
+            } else {
+                index.remove_path(relative)?;
+            }
+            index.write()?;
+        }
+    }
+
+    Ok(real_conflicts)
+}
+
 fn read_git_status(root_path: &Path) -> Result<GitStatus, Error> {
     let repo = discover_repo(root_path)?;
     let mut options = StatusOptions::new();
@@ -458,14 +494,20 @@ fn normal_merge(
     if index.has_conflicts() {
         index.write()?;
         let conflicts = collect_conflicts(repo)?;
-        return Ok(GitSyncResult {
-            branch: repo
-                .head()
-                .ok()
-                .and_then(|head| head.shorthand().map(str::to_string)),
-            conflicts,
-            message: "拉取完成，但存在冲突，请先解决冲突后再提交".to_string(),
-        });
+        let real_conflicts = filter_phantom_conflicts(repo, &conflicts)?;
+
+        // Re-read index after auto-staging phantom conflicts.
+        index = repo.index()?;
+        if index.has_conflicts() {
+            return Ok(GitSyncResult {
+                branch: repo
+                    .head()
+                    .ok()
+                    .and_then(|head| head.shorthand().map(str::to_string)),
+                conflicts: real_conflicts,
+                message: "拉取完成，但存在冲突，请先解决冲突后再提交".to_string(),
+            });
+        }
     }
 
     let result_tree = repo.find_tree(index.write_tree_to(repo)?)?;
@@ -703,14 +745,20 @@ fn revert_commit(
     if index.has_conflicts() {
         index.write()?;
         let conflicts = collect_conflicts(&repo)?;
-        return Ok(GitSyncResult {
-            branch: repo
-                .head()
-                .ok()
-                .and_then(|head| head.shorthand().map(str::to_string)),
-            conflicts,
-            message: "回滚时产生冲突，请解决后提交".to_string(),
-        });
+        let real_conflicts = filter_phantom_conflicts(&repo, &conflicts)?;
+
+        // Re-read index after auto-staging phantom conflicts.
+        index = repo.index()?;
+        if index.has_conflicts() {
+            return Ok(GitSyncResult {
+                branch: repo
+                    .head()
+                    .ok()
+                    .and_then(|head| head.shorthand().map(str::to_string)),
+                conflicts: real_conflicts,
+                message: "回滚时产生冲突，请解决后提交".to_string(),
+            });
+        }
     }
 
     let head_commit = repo.head()?.peel_to_commit()?;
@@ -854,6 +902,17 @@ pub async fn git_commit_all(
             return Err(Error::from_str("没有可提交的更改"));
         }
 
+        if index.has_conflicts() {
+            let conflicts = collect_conflicts(&repo)?;
+            return Err(Error::from_str(
+                &format!(
+                    "仍有 {} 个冲突文件未解决。请在提交面板中逐个暂存以标记已解决: {}",
+                    conflicts.len(),
+                    conflicts.join(", ")
+                )
+            ));
+        }
+
         let tree_id = index.write_tree()?;
         let tree = repo.find_tree(tree_id)?;
         let signature = build_signature(&repo, author_name.as_deref(), author_email.as_deref())?;
@@ -986,6 +1045,17 @@ pub async fn git_commit(
 
         if index.is_empty() {
             return Err(Error::from_str("暂存区为空，请先暂存文件"));
+        }
+
+        if index.has_conflicts() {
+            let conflicts = collect_conflicts(&repo)?;
+            return Err(Error::from_str(
+                &format!(
+                    "仍有 {} 个冲突文件未解决。请在提交面板中逐个暂存以标记已解决: {}",
+                    conflicts.len(),
+                    conflicts.join(", ")
+                )
+            ));
         }
 
         let tree_id = index.write_tree()?;

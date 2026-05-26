@@ -7,9 +7,8 @@ use crate::{
     prompt::PromptManager,
     providers::{
         common::{
-            build_prompt_context, join_url, resolve_api_key, resolve_model, take_chat_completion,
-            take_text_completion, ChatCompletionResponse, TextCompletionResponse,
-            MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
+            join_url, resolve_api_key, resolve_model, take_text_completion,
+            TextCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
         },
         CompletionProvider,
     },
@@ -36,6 +35,13 @@ impl CompletionProvider for DeepSeekProvider {
         let api_key = resolve_api_key(config)?;
         let api_url = resolve_beta_api_url(config)?;
         let model = resolve_model(config, DEFAULT_MODEL)?;
+        let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+        let (max_tokens, stop, temperature) = if has_suffix {
+            (MAX_COMPLETION_TOKENS, STOP_SEQUENCES, 0.3)
+        } else {
+            (64usize, &["\n\n", "\n", "。", ".", "！", "?", "!"] as &[&str], 0.2)
+        };
+
         let response = client
             .post(join_url(&api_url, "/completions"))
             .bearer_auth(api_key)
@@ -43,11 +49,12 @@ impl CompletionProvider for DeepSeekProvider {
                 "model": model,
                 "prompt": request.prefix.as_str(),
                 "suffix": request.suffix.as_deref(),
-                "max_tokens": MAX_COMPLETION_TOKENS,
-                "temperature": 0.3,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
                 "frequency_penalty": 0.3,
                 "presence_penalty": 0.1,
-                "stop": STOP_SEQUENCES,
+                "stop": stop,
+                "thinking": { "type": "disabled" },
             }))
             .send()
             .await
@@ -69,69 +76,6 @@ impl CompletionProvider for DeepSeekProvider {
             .map_err(|error| format!("解析 FIM completion 响应失败: {error}"))?;
 
         Ok(take_text_completion(payload))
-    }
-
-    async fn request_chat_prefix_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        let api_key = resolve_api_key(config)?;
-        let api_url = resolve_beta_api_url(config)?;
-        let model = resolve_model(config, DEFAULT_MODEL)?;
-        let prompt_context = build_prompt_context(request);
-        let system_prompt =
-            prompt_manager.render_prompt(self.provider(), "chat_prefix_system", &prompt_context);
-        let user_prompt =
-            prompt_manager.render_prompt(self.provider(), "chat_prefix_user", &prompt_context);
-        let response = client
-            .post(join_url(&api_url, "/chat/completions"))
-            .bearer_auth(api_key)
-            .json(&json!({
-                "model": model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-                    {
-                        "role": "user",
-                        "content": user_prompt,
-                    },
-                    {
-                        "role": "assistant",
-                        "content": "",
-                        "prefix": true,
-                    }
-                ],
-                "max_tokens": MAX_COMPLETION_TOKENS,
-                "temperature": 0.5,
-                "frequency_penalty": 0.3,
-                "presence_penalty": 0.2,
-                "stop": STOP_SEQUENCES,
-            }))
-            .send()
-            .await
-            .map_err(|error| format!("调用 chat-prefix completion 失败: {error}"))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "无法读取错误详情".to_string());
-
-            return Err(format!("Chat prefix completion API error ({status}): {body}"));
-        }
-
-        let payload = response
-            .json::<ChatCompletionResponse>()
-            .await
-            .map_err(|error| format!("解析 chat-prefix 响应失败: {error}"))?;
-
-        Ok(take_chat_completion(payload))
     }
 }
 

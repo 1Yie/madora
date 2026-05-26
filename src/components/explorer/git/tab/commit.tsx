@@ -1,9 +1,14 @@
-import { Check, Minus, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Minus, Plus, RefreshCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 import type { GitFileStatus, GitStatus } from '../git-types';
@@ -163,7 +168,7 @@ export function GitTabCommit({
 											</Badge>
 										</div>
 										<span className="text-xs text-muted-foreground">
-											请在编辑器中解决冲突后暂存
+											请先在编辑器中解决冲突标记再暂存
 										</span>
 									</div>
 									<div
@@ -171,15 +176,12 @@ export function GitTabCommit({
 											divide-border/40"
 									>
 										{conflictedFiles.map((file) => (
-											<div
+											<ConflictFileRow
 												key={file.path}
-												className="flex items-center px-3 py-1.5"
-											>
-												<div className="flex min-w-0 items-center gap-2">
-													<FileBadge status={file.status} />
-													<FileLabel file={file} />
-												</div>
-											</div>
+												file={file}
+												canOperate={canOperate}
+												onStage={() => onStageFile(file.path)}
+											/>
 										))}
 									</div>
 								</div>
@@ -334,6 +336,62 @@ function FileRow({
 			>
 				{actionIcon}
 			</Button>
+		</div>
+	);
+}
+
+function ConflictFileRow({
+	file,
+	canOperate,
+	onStage,
+}: {
+	file: GitFileStatus;
+	canOperate: boolean;
+	onStage: () => void;
+}) {
+	const hasMarkers = file.hasConflictMarkers;
+	return (
+		<div
+			className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30
+				transition-colors"
+		>
+			<div className="flex min-w-0 items-center gap-2">
+				<FileBadge status={file.status} />
+				<FileLabel file={file} />
+				{hasMarkers && (
+					<Tooltip>
+						<TooltipTrigger>
+							<AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+						</TooltipTrigger>
+						<TooltipContent>
+							文件仍包含冲突标记
+							&lt;&lt;&lt;&lt;&lt;&lt;&lt;，请先在编辑器中手动解决冲突
+						</TooltipContent>
+					</Tooltip>
+				)}
+			</div>
+			<div className="flex items-center gap-1">
+				{hasMarkers ? (
+					<span
+						className="inline-flex items-center justify-center size-6 rounded-sm
+							text-muted-foreground/40 cursor-not-allowed"
+						title="请先解决冲突标记再暂存"
+					>
+						<Plus className="size-3.5" />
+					</span>
+				) : (
+					<Button
+						aria-label="暂存并标记冲突已解决"
+						disabled={!canOperate}
+						onClick={onStage}
+						size="icon-xs"
+						variant="ghost"
+						className="shrink-0"
+					>
+						<Plus className="size-3.5" />
+					</Button>
+				)}
+			</div>
 		</div>
 	);
 }

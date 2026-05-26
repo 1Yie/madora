@@ -42,25 +42,9 @@ impl AiProvider {
     }
 }
 
-#[derive(Clone, Copy, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CompletionMode {
-    Auto,
-    ChatPrefix,
-    Fim,
-}
-
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum CompletionResultMode {
-    ChatPrefix,
-    Fim,
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionRequest {
-    pub mode: Option<CompletionMode>,
     pub title: Option<String>,
     pub prefix: String,
     pub suffix: Option<String>,
@@ -69,7 +53,6 @@ pub struct CompletionRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionResult {
-    pub mode: CompletionResultMode,
     pub text: String,
 }
 
@@ -81,5 +64,4 @@ pub struct AiCompletionConfig {
     pub api_url: Option<String>,
     pub model: Option<String>,
     pub provider: Option<AiProvider>,
-    pub smart_routing_enabled: bool,
 }

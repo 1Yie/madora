@@ -156,16 +156,6 @@ prompt_templates! {
     // Anthropic
     (
         AiProvider::Anthropic,
-        "chat_prefix_system",
-        "/prompts/anthropic/chat_prefix_system.md"
-    ),
-    (
-        AiProvider::Anthropic,
-        "chat_prefix_user",
-        "/prompts/anthropic/chat_prefix_user.md"
-    ),
-    (
-        AiProvider::Anthropic,
         "fim_system",
         "/prompts/anthropic/fim_system.md"
     ),
@@ -178,16 +168,6 @@ prompt_templates! {
     // Custom
     (
         AiProvider::Custom,
-        "chat_prefix_system",
-        "/prompts/custom/chat_prefix_system.md"
-    ),
-    (
-        AiProvider::Custom,
-        "chat_prefix_user",
-        "/prompts/custom/chat_prefix_user.md"
-    ),
-    (
-        AiProvider::Custom,
         "fim_system",
         "/prompts/custom/fim_system.md"
     ),
@@ -197,29 +177,7 @@ prompt_templates! {
         "/prompts/custom/fim_user.md"
     ),
 
-    // DeepSeek
-    (
-        AiProvider::DeepSeek,
-        "chat_prefix_system",
-        "/prompts/deepseek/chat_prefix_system.md"
-    ),
-    (
-        AiProvider::DeepSeek,
-        "chat_prefix_user",
-        "/prompts/deepseek/chat_prefix_user.md"
-    ),
-
     // Kimi
-    (
-        AiProvider::Kimi,
-        "chat_prefix_system",
-        "/prompts/kimi/chat_prefix_system.md"
-    ),
-    (
-        AiProvider::Kimi,
-        "chat_prefix_user",
-        "/prompts/kimi/chat_prefix_user.md"
-    ),
     (
         AiProvider::Kimi,
         "fim_system",
@@ -232,16 +190,6 @@ prompt_templates! {
     ),
 
     // OpenAI
-    (
-        AiProvider::OpenAi,
-        "chat_prefix_system",
-        "/prompts/openai/chat_prefix_system.md"
-    ),
-    (
-        AiProvider::OpenAi,
-        "chat_prefix_user",
-        "/prompts/openai/chat_prefix_user.md"
-    ),
     (
         AiProvider::OpenAi,
         "fim_system",

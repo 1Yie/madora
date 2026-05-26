@@ -26,14 +26,13 @@ export function EditorSettings() {
 		saveApiKey,
 		saveMode,
 		showHiddenFiles,
-		smartRoutingEnabled,
+
 		setApiUrl,
 		setEnabled,
 		setModel,
 		setProvider,
 		setSaveMode,
 		setShowHiddenFiles,
-		setSmartRoutingEnabled,
 	} = useAiSettings();
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
 	const [, setApiKeyBusy] = useState(false);
@@ -180,23 +179,7 @@ export function EditorSettings() {
 						</div>
 						<Switch checked={enabled} onCheckedChange={setEnabled} />
 					</div>
-					<div
-						className="flex items-center justify-between gap-4 rounded-xl border
-							border-border bg-background px-4 py-3"
-					>
-						<div className="space-y-1">
-							<div className="text-sm font-medium text-foreground">
-								启用智能路由
-							</div>
-							<p className="text-xs text-muted-foreground">
-								开启后光标后方还有文本时走 FIM，否则走 chat-prefix。
-							</p>
-						</div>
-						<Switch
-							checked={smartRoutingEnabled}
-							onCheckedChange={setSmartRoutingEnabled}
-						/>
-					</div>
+
 					<div className="space-y-2">
 						<span className="text-sm font-medium text-foreground">
 							Provider

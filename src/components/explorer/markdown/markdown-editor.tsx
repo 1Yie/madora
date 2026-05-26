@@ -42,6 +42,7 @@ type MarkdownEditorProps = {
 	saveMode: SaveMode;
 	saveStatus: SaveStatus;
 	title?: string;
+
 	value: string;
 };
 
@@ -177,6 +178,7 @@ export function MarkdownEditor({
 	saveMode,
 	saveStatus,
 	title,
+
 	value,
 }: MarkdownEditorProps) {
 	const { editorRef, viewRef } = useEditor({ onChange, onSave, title, value });

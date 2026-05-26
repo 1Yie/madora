@@ -1114,10 +1114,12 @@ export function FileExplorerSidebar({
 	const resolvedExpandedPaths = useMemo(() => {
 		if (!mergedRoot) return new Set<string>();
 
-		const nextPaths = new Set<string>(
-			expandedPaths.size > 0 ? expandedPaths : [mergedRoot.path]
-		);
-		nextPaths.add(mergedRoot.path);
+		const nextPaths = new Set(expandedPaths);
+
+		// On initial load (no explicit expansion state), default to root expanded.
+		if (nextPaths.size === 0) {
+			nextPaths.add(mergedRoot.path);
+		}
 
 		if (selectedPath) {
 			for (const ancestor of collectAncestorPaths(mergedRoot, selectedPath)) {

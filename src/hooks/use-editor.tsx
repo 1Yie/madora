@@ -40,14 +40,12 @@ type UseEditorOptions = {
 	onChange?: (value: string) => void;
 	onSave?: () => void;
 	title?: string;
+
 	value: string;
 	viewRef?: MutableRefObject<EditorView | null>;
 };
 
-type CompletionRequestMode = 'auto' | 'chat-prefix' | 'fim';
-
 type CompletionResultData = {
-	mode: Exclude<CompletionRequestMode, 'auto'>;
 	text: string;
 };
 
@@ -83,8 +81,8 @@ type CompletionCacheEntry = {
 	snapshot: CompletionSnapshot;
 };
 
-const AUTO_COMPLETION_DEBOUNCE_MS = 300;
-const AUTO_COMPLETION_COOLDOWN_MS = 800;
+const AUTO_COMPLETION_DEBOUNCE_MS = 150;
+const AUTO_COMPLETION_COOLDOWN_MS = 250;
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
 const DEFAULT_READY_MESSAGE = 'AI 自动补全已就绪';
@@ -139,6 +137,31 @@ function isSnapshotCurrent(
 		state.selection.main.empty &&
 		state.selection.main.head === snapshot.cursor
 	);
+}
+
+/**
+ * Scroll the parent ScrollArea viewport to ensure the cursor at the given
+ * document position is visible. CodeMirror's internal scrollIntoView cannot
+ * work because .cm-scroller has overflow: hidden, so we must scroll the
+ * ScrollArea viewport that wraps the editor.
+ */
+function scrollParentToCursor(view: EditorView, pos: number): void {
+	requestAnimationFrame(() => {
+		const coords = view.coordsAtPos(pos);
+		if (!coords) return;
+
+		const viewport = view.dom.closest('[data-slot="scroll-area-viewport"]');
+		if (!viewport) return;
+
+		const viewportRect = viewport.getBoundingClientRect();
+		const margin = 24;
+
+		if (coords.bottom + margin > viewportRect.bottom) {
+			viewport.scrollTop += coords.bottom + margin - viewportRect.bottom;
+		} else if (coords.top - margin < viewportRect.top) {
+			viewport.scrollTop -= viewportRect.top - coords.top + margin;
+		}
+	});
 }
 
 function getContinuedCompletionPreview(
@@ -553,6 +576,7 @@ export function useEditor({
 	onChange,
 	onSave,
 	title,
+
 	value,
 	viewRef: externalViewRef,
 }: UseEditorOptions) {
@@ -571,15 +595,14 @@ export function useEditor({
 		hasApiKey: false,
 		model: '',
 		provider: 'deepseek',
-		smartRoutingEnabled: false,
 	});
 	const completionStatusRef = useRef<CompletionStatus>({
 		message: '保存 API Key 后可用',
 		tone: 'muted',
 	});
 
-	const { apiUrl, enabled, hasApiKey, model, provider, smartRoutingEnabled } =
-		useAiSettings();
+	const { apiUrl, enabled, hasApiKey, model, provider } = useAiSettings();
+
 	const { resolvedTheme } = useTheme();
 
 	const handleChange = useEffectEvent((nextValue: string) => {
@@ -770,10 +793,8 @@ export function useEditor({
 								settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
 							model: settings.model.trim().length > 0 ? settings.model : null,
 							provider: settings.provider,
-							smartRoutingEnabled: settings.smartRoutingEnabled,
 						},
 						request: {
-							mode: 'auto',
 							prefix: prompt,
 							suffix: suffix.length > 0 ? suffix : null,
 							title: title ?? null,
@@ -820,6 +841,7 @@ export function useEditor({
 						internalCompletionEffect.of(true),
 					],
 				});
+				scrollParentToCursor(currentView, cursor);
 
 				setCompletionStatus(
 					getDefaultCompletionStatus(settings.enabled, settings.hasApiKey)
@@ -918,6 +940,7 @@ export function useEditor({
 			effects: setCompletionPreviewEffect.of(null),
 			selection: EditorSelection.cursor(cursor + preview.text.length),
 		});
+		scrollParentToCursor(view, cursor + preview.text.length);
 		setCompletionStatus(
 			getDefaultCompletionStatus(
 				aiSettingsRef.current.enabled,
@@ -943,7 +966,6 @@ export function useEditor({
 			hasApiKey,
 			model,
 			provider,
-			smartRoutingEnabled,
 		};
 		completionCacheRef.current = null;
 
@@ -957,7 +979,7 @@ export function useEditor({
 			hasApiKey
 		);
 		syncTooltip();
-	}, [apiUrl, enabled, hasApiKey, model, provider, smartRoutingEnabled]);
+	}, [apiUrl, enabled, hasApiKey, model, provider]);
 
 	// resolvedTheme 变化时热更新编辑器主题
 	useEffect(() => {
@@ -1077,6 +1099,10 @@ export function useEditor({
 							);
 							if (isUserInput && !compositionInputUpdate) {
 								scheduleCompletionRequest(update.view);
+								scrollParentToCursor(
+									update.view,
+									update.view.state.selection.main.head
+								);
 							}
 						}
 
