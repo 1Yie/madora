@@ -12,7 +12,9 @@
 		"lint:fix": "eslint . --fix",
 		"prepare": "husky",
 		"preview": "vite preview",
-		"tauri": "tauri"
+		"tauri": "tauri",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.4.1",
@@ -52,6 +54,9 @@
 		"@commitlint/config-conventional": "^21.0.1",
 		"@eslint/js": "^10.0.1",
 		"@tauri-apps/cli": "^2",
+		"@testing-library/jest-dom": "^6.9.1",
+		"@testing-library/react": "^16.3.2",
+		"@testing-library/user-event": "^14.6.1",
 		"@types/katex": "^0.16.8",
 		"@types/node": "^25.6.0",
 		"@types/react": "^19.1.8",
@@ -63,7 +68,9 @@
 		"eslint-plugin-react-hooks": "^7.1.1",
 		"eslint-plugin-react-refresh": "^0.5.2",
 		"globals": "^17.6.0",
+		"happy-dom": "^20.9.0",
 		"husky": "^9.1.7",
+		"jsdom": "^29.1.1",
 		"lint-staged": "^17.0.4",
 		"prettier": "^3.8.3",
 		"prettier-plugin-classnames": "^0.10.1",
@@ -72,7 +79,8 @@
 		"prettier-plugin-tailwindcss": "^0.8.0",
 		"typescript": "~5.8.3",
 		"typescript-eslint": "^8.59.3",
-		"vite": "^7.0.4"
+		"vite": "^7.0.4",
+		"vitest": "^4.1.7"
 	},
 	"lint-staged": {
 		"*.{js,jsx,ts,tsx,vue,json,css,scss,md}": [

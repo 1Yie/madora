@@ -26,7 +26,7 @@ pub struct GitRemoteInfo {
     pub url: Option<String>,
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum GitFileState {
     Added,

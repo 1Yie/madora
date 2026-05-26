@@ -1441,3 +1441,186 @@ pub async fn git_load_credentials(
         .await
         .map_err(|e| e.to_string())?
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── normalize_repo_path ─────────────────────────────────────────
+
+    #[test]
+    fn normalize_repo_path_unix() {
+        assert_eq!(
+            normalize_repo_path(Path::new("/home/user/repo/file.md")),
+            "/home/user/repo/file.md"
+        );
+    }
+
+    #[test]
+    fn normalize_repo_path_windows_backslash() {
+        assert_eq!(
+            normalize_repo_path(Path::new("C:\\Users\\user\\file.md")),
+            "C:/Users/user/file.md"
+        );
+    }
+
+    #[test]
+    fn normalize_repo_path_mixed() {
+        assert_eq!(
+            normalize_repo_path(Path::new("repo\\dir/file.md")),
+            "repo/dir/file.md"
+        );
+    }
+
+    // ─── map_file_state ──────────────────────────────────────────────
+
+    #[test]
+    fn map_file_state_conflicted() {
+        let status = git2::Status::from_bits_truncate(32768); // CONFLICTED
+        assert_eq!(map_file_state(status, false), GitFileState::Conflicted);
+        assert_eq!(map_file_state(status, true), GitFileState::Conflicted);
+    }
+
+    #[test]
+    fn map_file_state_index_new_staged() {
+        let status = git2::Status::from_bits_truncate(1); // INDEX_NEW
+        assert_eq!(map_file_state(status, true), GitFileState::Added);
+    }
+
+    #[test]
+    fn map_file_state_index_deleted_staged() {
+        let status = git2::Status::from_bits_truncate(4); // INDEX_DELETED
+        assert_eq!(map_file_state(status, true), GitFileState::Deleted);
+    }
+
+    #[test]
+    fn map_file_state_index_renamed_staged() {
+        let status = git2::Status::from_bits_truncate(8); // INDEX_RENAMED
+        assert_eq!(map_file_state(status, true), GitFileState::Renamed);
+    }
+
+    #[test]
+    fn map_file_state_index_typechange_staged() {
+        let status = git2::Status::from_bits_truncate(16); // INDEX_TYPECHANGE
+        assert_eq!(map_file_state(status, true), GitFileState::Typechange);
+    }
+
+    #[test]
+    fn map_file_state_wt_new_unstaged() {
+        let status = git2::Status::from_bits_truncate(128); // WT_NEW
+        assert_eq!(map_file_state(status, false), GitFileState::Untracked);
+    }
+
+    #[test]
+    fn map_file_state_wt_deleted_unstaged() {
+        let status = git2::Status::from_bits_truncate(512); // WT_DELETED
+        assert_eq!(map_file_state(status, false), GitFileState::Deleted);
+    }
+
+    #[test]
+    fn map_file_state_wt_typechange_unstaged() {
+        let status = git2::Status::from_bits_truncate(1024); // WT_TYPECHANGE
+        assert_eq!(map_file_state(status, false), GitFileState::Typechange);
+    }
+
+    #[test]
+    fn map_file_state_wt_renamed_unstaged() {
+        let status = git2::Status::from_bits_truncate(2048); // WT_RENAMED
+        assert_eq!(map_file_state(status, false), GitFileState::Renamed);
+    }
+
+    #[test]
+    fn map_file_state_modified_fallback() {
+        let status = git2::Status::from_bits_truncate(256); // WT_MODIFIED
+        assert_eq!(map_file_state(status, false), GitFileState::Modified);
+    }
+
+    #[test]
+    fn map_file_state_index_modified_staged() {
+        let status = git2::Status::from_bits_truncate(2); // INDEX_MODIFIED
+        assert_eq!(map_file_state(status, true), GitFileState::Modified);
+    }
+
+    // ─── build_signature (explicit name+email) ───────────────────────
+
+    #[test]
+    fn build_signature_with_name_and_email() {
+        // Use a temp repo so build_signature can fall back to repo.signature()
+        // when we only test the explicit path.
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        let sig = build_signature(&repo, Some("Test User"), Some("test@example.com"));
+        assert!(sig.is_ok());
+        let sig = sig.unwrap();
+        assert_eq!(sig.name(), Some("Test User"));
+        assert_eq!(sig.email(), Some("test@example.com"));
+    }
+
+    // ─── to_error_message ────────────────────────────────────────────
+
+    #[test]
+    fn to_error_message_works() {
+        let msg = to_error_message(git2::Error::from_str("test error"));
+        assert_eq!(msg, "test error");
+    }
+
+    // ─── relative_repo_path (requires real repo, basic check) ────────
+
+    #[test]
+    fn relative_repo_path_normal() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        let workdir = repo.workdir().unwrap();
+        let file_path = workdir.join("src/main.rs");
+
+        // Create the file so path exists
+        std::fs::create_dir_all(workdir.join("src")).unwrap();
+        std::fs::write(&file_path, "").unwrap();
+
+        let relative = relative_repo_path(&repo, &file_path).unwrap();
+        assert_eq!(relative, PathBuf::from("src/main.rs"));
+    }
+
+    #[test]
+    fn relative_repo_path_out_of_workdir() {
+        // Use an absolute path on a different filesystem root that can't be in the repo
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        // A path in /nonexistent is definitely outside the repo workdir
+        let outside = Path::new("/nonexistent/outside.txt");
+
+        let result = relative_repo_path(&repo, &outside);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("不在仓库工作区内"));
+    }
+
+    // ─── empty_git_status ────────────────────────────────────────────
+
+    #[test]
+    fn empty_git_status_is_clean() {
+        let status = empty_git_status();
+        assert!(!status.has_repository);
+        assert_eq!(status.staged_count, 0);
+        assert_eq!(status.unstaged_count, 0);
+        assert_eq!(status.total_changed_count, 0);
+        assert!(status.files.is_empty());
+    }
+
+    // ─── is_editor_managed_repo ──────────────────────────────────────
+
+    #[test]
+    fn is_editor_managed_repo_false_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        assert!(!is_editor_managed_repo(&repo));
+    }
+
+    #[test]
+    fn is_editor_managed_repo_true_when_marker_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        let marker_path = repo.path().join("EDITOR_MANAGED");
+        std::fs::write(&marker_path, "").unwrap();
+        assert!(is_editor_managed_repo(&repo));
+    }
+}

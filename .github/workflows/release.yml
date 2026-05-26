@@ -54,6 +54,9 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
+      - name: Run Rust tests
+        run: cargo test
+        working-directory: ./src-tauri
 
       - name: Install frontend dependencies
         run: bun install

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum AiProvider {
     #[serde(rename = "anthropic")]
     Anthropic,
@@ -56,7 +56,7 @@ pub struct CompletionResult {
     pub text: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiCompletionConfig {
     #[serde(default)]

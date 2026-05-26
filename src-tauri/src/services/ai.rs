@@ -246,3 +246,154 @@ pub async fn generate_completion(
 
     result.map(|text| CompletionResult { text })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ai::{AiCompletionConfig, AiProvider, CompletionRequest};
+
+    // ─── truncate_suffix_for_cache ───────────────────────────────────
+
+    #[test]
+    fn truncate_suffix_for_cache_short() {
+        let s = "hello";
+        assert_eq!(truncate_suffix_for_cache(s), "hello");
+    }
+
+    #[test]
+    fn truncate_suffix_for_cache_empty() {
+        assert_eq!(truncate_suffix_for_cache(""), "");
+    }
+
+    #[test]
+    fn truncate_suffix_for_cache_long() {
+        let long = "a".repeat(MAX_CACHE_PREFIX_CHARS + 50);
+        let result = truncate_suffix_for_cache(&long);
+        assert_eq!(result.chars().count(), MAX_CACHE_PREFIX_CHARS);
+        assert_eq!(result, "a".repeat(MAX_CACHE_PREFIX_CHARS));
+    }
+
+    #[test]
+    fn truncate_suffix_for_cache_multi_byte() {
+        let s = "a🔥b🫠c";
+        let result = truncate_suffix_for_cache(s);
+        // Short enough to keep everything
+        assert_eq!(result, s);
+    }
+
+    // ─── resolve_cache_api_url ───────────────────────────────────────
+
+    #[test]
+    fn resolve_cache_api_url_deepseek_adds_beta() {
+        let config = AiCompletionConfig::default();
+        let url = resolve_cache_api_url(AiProvider::DeepSeek, &config);
+        assert!(url.ends_with("/beta"));
+    }
+
+    #[test]
+    fn resolve_cache_api_url_openai_no_beta() {
+        let config = AiCompletionConfig::default();
+        let url = resolve_cache_api_url(AiProvider::OpenAi, &config);
+        assert_eq!(url, "https://api.openai.com");
+    }
+
+    #[test]
+    fn resolve_cache_api_url_custom_url() {
+        let mut config = AiCompletionConfig::default();
+        config.api_url = Some("https://custom.api.com".into());
+        let url = resolve_cache_api_url(AiProvider::DeepSeek, &config);
+        // Custom URL with DeepSeek — still adds /beta
+        assert!(url.contains("custom.api.com"));
+        assert!(url.ends_with("/beta"));
+    }
+
+    #[test]
+    fn resolve_cache_api_url_custom_no_beta_for_other() {
+        let mut config = AiCompletionConfig::default();
+        config.api_url = Some("https://custom.api.com".into());
+        let url = resolve_cache_api_url(AiProvider::OpenAi, &config);
+        assert_eq!(url, "https://custom.api.com");
+    }
+
+    #[test]
+    fn resolve_cache_api_url_already_has_beta() {
+        let mut config = AiCompletionConfig::default();
+        config.api_url = Some("https://api.deepseek.com/beta".into());
+        let url = resolve_cache_api_url(AiProvider::DeepSeek, &config);
+        assert_eq!(url, "https://api.deepseek.com/beta");
+    }
+
+    // ─── resolve_cache_model ─────────────────────────────────────────
+
+    #[test]
+    fn resolve_cache_model_configured() {
+        let mut config = AiCompletionConfig::default();
+        config.model = Some("my-model".into());
+        let model = resolve_cache_model(AiProvider::DeepSeek, &config);
+        assert_eq!(model, "my-model");
+    }
+
+    #[test]
+    fn resolve_cache_model_default_deepseek() {
+        let config = AiCompletionConfig::default();
+        let model = resolve_cache_model(AiProvider::DeepSeek, &config);
+        assert_eq!(model, "deepseek-v4-pro");
+    }
+
+    #[test]
+    fn resolve_cache_model_default_openai() {
+        let config = AiCompletionConfig::default();
+        let model = resolve_cache_model(AiProvider::OpenAi, &config);
+        assert_eq!(model, "gpt-4o-mini");
+    }
+
+    #[test]
+    fn resolve_cache_model_custom_no_default() {
+        let config = AiCompletionConfig::default();
+        let model = resolve_cache_model(AiProvider::Custom, &config);
+        assert_eq!(model, "");
+    }
+
+    // ─── build_completion_cache_key ──────────────────────────────────
+
+    #[test]
+    fn build_completion_cache_key_basic() {
+        let config = AiCompletionConfig::default();
+        let request = CompletionRequest {
+            title: None,
+            prefix: "hello".into(),
+            suffix: None,
+        };
+        let key = build_completion_cache_key(&config, &request);
+        assert_eq!(key.provider, AiProvider::DeepSeek);
+        assert_eq!(key.prefix, "hello");
+        assert_eq!(key.suffix, None);
+    }
+
+    #[test]
+    fn build_completion_cache_key_with_suffix() {
+        let config = AiCompletionConfig::default();
+        let request = CompletionRequest {
+            title: None,
+            prefix: "hello".into(),
+            suffix: Some(" world".into()),
+        };
+        let key = build_completion_cache_key(&config, &request);
+        assert_eq!(key.suffix, Some(" world".into()));
+    }
+
+    // ─── resolve_provider ────────────────────────────────────────────
+
+    #[test]
+    fn resolve_provider_default() {
+        let config = AiCompletionConfig::default();
+        assert_eq!(resolve_provider(&config), AiProvider::DeepSeek);
+    }
+
+    #[test]
+    fn resolve_provider_explicit() {
+        let mut config = AiCompletionConfig::default();
+        config.provider = Some(AiProvider::OpenAi);
+        assert_eq!(resolve_provider(&config), AiProvider::OpenAi);
+    }
+}

@@ -536,3 +536,384 @@ pub fn move_workspace_node(
 
     fs::rename(source_path, destination_path).map_err(|error| error.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── classify_file_kind ──────────────────────────────────────────
+
+    #[test]
+    fn classify_file_kind_image_png() {
+        let result = classify_file_kind(Path::new("image.png"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_jpg() {
+        let result = classify_file_kind(Path::new("photo.jpg"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_jpeg() {
+        let result = classify_file_kind(Path::new("photo.jpeg"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_gif() {
+        let result = classify_file_kind(Path::new("anim.gif"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_webp() {
+        let result = classify_file_kind(Path::new("img.webp"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_bmp() {
+        let result = classify_file_kind(Path::new("img.bmp"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_image_svg() {
+        let result = classify_file_kind(Path::new("graphic.svg"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    #[test]
+    fn classify_file_kind_markdown_md() {
+        let result = classify_file_kind(Path::new("doc.md"));
+        assert_eq!(result, Some(ExplorerFileKind::Markdown));
+    }
+
+    #[test]
+    fn classify_file_kind_markdown_markdown() {
+        let result = classify_file_kind(Path::new("doc.markdown"));
+        assert_eq!(result, Some(ExplorerFileKind::Markdown));
+    }
+
+    #[test]
+    fn classify_file_kind_markdown_mdx() {
+        let result = classify_file_kind(Path::new("doc.mdx"));
+        assert_eq!(result, Some(ExplorerFileKind::Markdown));
+    }
+
+    #[test]
+    fn classify_file_kind_text_txt() {
+        let result = classify_file_kind(Path::new("notes.txt"));
+        assert_eq!(result, Some(ExplorerFileKind::Text));
+    }
+
+    #[test]
+    fn classify_file_kind_unknown() {
+        let result = classify_file_kind(Path::new("script.js"));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn classify_file_kind_no_extension() {
+        let result = classify_file_kind(Path::new("Makefile"));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn classify_file_kind_case_insensitive() {
+        let result = classify_file_kind(Path::new("Photo.PNG"));
+        assert_eq!(result, Some(ExplorerFileKind::Image));
+    }
+
+    // ─── path_name ───────────────────────────────────────────────────
+
+    #[test]
+    fn path_name_normal() {
+        assert_eq!(path_name(Path::new("/home/user/file.md")), "file.md");
+    }
+
+    #[test]
+    fn path_name_root() {
+        assert_eq!(path_name(Path::new("/")), "/");
+    }
+
+    #[test]
+    fn path_name_no_parent() {
+        assert_eq!(path_name(Path::new("file.txt")), "file.txt");
+    }
+
+    // ─── relative_path ───────────────────────────────────────────────
+
+    #[test]
+    fn relative_path_normal() {
+        let root = Path::new("/workspace");
+        let path = Path::new("/workspace/src/main.rs");
+        assert_eq!(relative_path(root, path), "src/main.rs");
+    }
+
+    #[test]
+    fn relative_path_same_as_root() {
+        let root = Path::new("/workspace");
+        assert_eq!(relative_path(root, root), "");
+    }
+
+    // ─── detect_text_encoding ────────────────────────────────────────
+
+    #[test]
+    fn detect_text_encoding_utf8_no_bom() {
+        let bytes = b"hello world";
+        let detected = detect_text_encoding(bytes);
+        assert!(!detected.has_bom);
+        assert_eq!(detected.encoding, UTF_8);
+    }
+
+    #[test]
+    fn detect_text_encoding_utf8_with_bom() {
+        let bytes = &[0xEF, 0xBB, 0xBF, b'h', b'i'];
+        let detected = detect_text_encoding(bytes);
+        assert!(detected.has_bom);
+        assert_eq!(detected.encoding, UTF_8);
+    }
+
+    #[test]
+    fn detect_text_encoding_utf16le_with_bom() {
+        let bytes = &[0xFF, 0xFE, b'h', 0x00, b'i', 0x00];
+        let detected = detect_text_encoding(bytes);
+        assert!(detected.has_bom);
+        assert_eq!(detected.encoding, UTF_16LE);
+    }
+
+    #[test]
+    fn detect_text_encoding_utf16be_with_bom() {
+        let bytes = &[0xFE, 0xFF, 0x00, b'h', 0x00, b'i'];
+        let detected = detect_text_encoding(bytes);
+        assert!(detected.has_bom);
+        assert_eq!(detected.encoding, UTF_16BE);
+    }
+
+    #[test]
+    fn detect_text_encoding_utf8_no_bom_ascii() {
+        let bytes = b"Hello, \xe4\xbd\xa0\xe5\xa5\xbd"; // "你好" in UTF-8
+        let detected = detect_text_encoding(bytes);
+        assert!(!detected.has_bom);
+        assert_eq!(detected.encoding, UTF_8);
+    }
+
+    // ─── decode_text_bytes ───────────────────────────────────────────
+
+    #[test]
+    fn decode_text_bytes_utf8_no_bom() {
+        let bytes = b"hello";
+        let detected = DetectedTextEncoding {
+            encoding: UTF_8,
+            has_bom: false,
+        };
+        assert_eq!(decode_text_bytes(bytes, &detected), "hello");
+    }
+
+    #[test]
+    fn decode_text_bytes_utf8_with_bom() {
+        let bytes = &[0xEF, 0xBB, 0xBF, b'h', b'i'];
+        let detected = DetectedTextEncoding {
+            encoding: UTF_8,
+            has_bom: true,
+        };
+        assert_eq!(decode_text_bytes(bytes, &detected), "hi");
+    }
+
+    #[test]
+    fn decode_text_bytes_utf16le_with_bom() {
+        // "hi" in UTF-16LE with BOM
+        let bytes = &[0xFF, 0xFE, b'h', 0x00, b'i', 0x00];
+        let detected = DetectedTextEncoding {
+            encoding: UTF_16LE,
+            has_bom: true,
+        };
+        assert_eq!(decode_text_bytes(bytes, &detected), "hi");
+    }
+
+    #[test]
+    fn decode_text_bytes_utf16be_with_bom() {
+        // "hi" in UTF-16BE with BOM
+        let bytes = &[0xFE, 0xFF, 0x00, b'h', 0x00, b'i'];
+        let detected = DetectedTextEncoding {
+            encoding: UTF_16BE,
+            has_bom: true,
+        };
+        assert_eq!(decode_text_bytes(bytes, &detected), "hi");
+    }
+
+    // ─── bom_bytes_for_encoding ──────────────────────────────────────
+
+    #[test]
+    fn bom_bytes_for_encoding_utf8() {
+        assert_eq!(bom_bytes_for_encoding(UTF_8), Some(&[0xEF, 0xBB, 0xBF][..]));
+    }
+
+    #[test]
+    fn bom_bytes_for_encoding_utf16le() {
+        assert_eq!(bom_bytes_for_encoding(UTF_16LE), Some(&[0xFF, 0xFE][..]));
+    }
+
+    #[test]
+    fn bom_bytes_for_encoding_utf16be() {
+        assert_eq!(bom_bytes_for_encoding(UTF_16BE), Some(&[0xFE, 0xFF][..]));
+    }
+
+    // ─── read_text_preview ───────────────────────────────────────────
+
+    #[test]
+    fn read_text_preview_small_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        std::fs::write(&path, b"hello world").unwrap();
+
+        let (content, truncated, encoding) = read_text_preview(&path).unwrap();
+        assert_eq!(content, "hello world");
+        assert!(!truncated);
+        assert_eq!(encoding, "UTF-8");
+    }
+
+    #[test]
+    fn read_text_preview_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.txt");
+        std::fs::write(&path, b"").unwrap();
+
+        let (content, truncated, _encoding) = read_text_preview(&path).unwrap();
+        assert_eq!(content, "");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn read_text_preview_missing_file() {
+        let path = Path::new("/nonexistent/file.txt");
+        let result = read_text_preview(path);
+        assert!(result.is_err());
+    }
+
+    // ─── normalize_markdown_file_name ────────────────────────────────
+
+    #[test]
+    fn normalize_markdown_file_name_adds_extension() {
+        let result = normalize_markdown_file_name("mydoc").unwrap();
+        assert_eq!(result, "mydoc.md");
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_keeps_md() {
+        let result = normalize_markdown_file_name("doc.md").unwrap();
+        assert_eq!(result, "doc.md");
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_case_insensitive_md() {
+        let result = normalize_markdown_file_name("doc.MD").unwrap();
+        assert_eq!(result, "doc.MD");
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_trimmed() {
+        let result = normalize_markdown_file_name("  mydoc  ").unwrap();
+        assert_eq!(result, "mydoc.md");
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_empty() {
+        let result = normalize_markdown_file_name("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_whitespace_only() {
+        let result = normalize_markdown_file_name("   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalize_markdown_file_name_contains_slash() {
+        let result = normalize_markdown_file_name("a/b");
+        assert!(result.is_err());
+    }
+
+    // ─── normalize_directory_name ────────────────────────────────────
+
+    #[test]
+    fn normalize_directory_name_normal() {
+        let result = normalize_directory_name("mydir").unwrap();
+        assert_eq!(result, "mydir");
+    }
+
+    #[test]
+    fn normalize_directory_name_trimmed() {
+        let result = normalize_directory_name("  mydir  ").unwrap();
+        assert_eq!(result, "mydir");
+    }
+
+    #[test]
+    fn normalize_directory_name_empty() {
+        let result = normalize_directory_name("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalize_directory_name_contains_slash() {
+        let result = normalize_directory_name("a/b");
+        assert!(result.is_err());
+    }
+
+    // ─── image_mime_type ─────────────────────────────────────────────
+
+    #[test]
+    fn image_mime_type_png() {
+        assert_eq!(image_mime_type(Path::new("img.png")), "image/png");
+    }
+
+    #[test]
+    fn image_mime_type_jpg() {
+        assert_eq!(image_mime_type(Path::new("img.jpg")), "image/jpeg");
+    }
+
+    #[test]
+    fn image_mime_type_jpeg() {
+        assert_eq!(image_mime_type(Path::new("img.jpeg")), "image/jpeg");
+    }
+
+    #[test]
+    fn image_mime_type_gif() {
+        assert_eq!(image_mime_type(Path::new("img.gif")), "image/gif");
+    }
+
+    #[test]
+    fn image_mime_type_webp() {
+        assert_eq!(image_mime_type(Path::new("img.webp")), "image/webp");
+    }
+
+    #[test]
+    fn image_mime_type_bmp() {
+        assert_eq!(image_mime_type(Path::new("img.bmp")), "image/bmp");
+    }
+
+    #[test]
+    fn image_mime_type_svg() {
+        assert_eq!(image_mime_type(Path::new("img.svg")), "image/svg+xml");
+    }
+
+    #[test]
+    fn image_mime_type_unknown() {
+        assert_eq!(
+            image_mime_type(Path::new("img.unknown")),
+            "application/octet-stream"
+        );
+    }
+
+    #[test]
+    fn image_mime_type_no_extension() {
+        assert_eq!(
+            image_mime_type(Path::new("Makefile")),
+            "application/octet-stream"
+        );
+    }
+}

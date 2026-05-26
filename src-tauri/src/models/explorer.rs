@@ -7,7 +7,7 @@ pub enum ExplorerNodeKind {
     File,
 }
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExplorerFileKind {
     Image,
