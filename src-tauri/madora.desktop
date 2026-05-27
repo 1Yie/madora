@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Office;TextEditor;
+Comment=Markdown editing, powered by AI
+Exec=madora
+Icon=madora
+Name=madora
+StartupWMClass=madora
+Terminal=false
+Type=Application
