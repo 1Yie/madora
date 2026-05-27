@@ -162,6 +162,7 @@ mod tests {
 		let mut config = repo.config().unwrap();
 		config.set_str("user.name", "Test User").unwrap();
 		config.set_str("user.email", "test@example.com").unwrap();
+		let _ = config.set_bool("core.autocrlf", false);
 		repository::write_editor_managed_marker(&repo).unwrap();
 		repo
 	}

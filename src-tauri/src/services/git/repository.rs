@@ -60,7 +60,23 @@ pub(crate) fn relative_repo_path(repo: &Repository, path: &Path) -> GitResult<Pa
 		GitServiceError::message("当前仓库没有可用的工作区目录")
 	})?;
 
-	path.strip_prefix(workdir)
+	// Try direct strip first (fast path)
+	if let Ok(relative) = path.strip_prefix(workdir) {
+		return Ok(relative.to_path_buf());
+	}
+
+	// If direct strip fails (e.g. macOS /var → /private/var symlink),
+	// canonicalize both paths and retry.
+	let canonical_workdir = std::fs::canonicalize(workdir)
+		.map_err(|error| GitServiceError::message(format!(
+			"无法解析仓库工作区目录: {}", error
+		)))?;
+	let canonical_path = std::fs::canonicalize(path)
+		.map_err(|_| GitServiceError::message(format!(
+			"路径不在仓库工作区内: {}", path.display()
+		)))?;
+
+	canonical_path.strip_prefix(&canonical_workdir)
 		.map(Path::to_path_buf)
 		.map_err(|_| GitServiceError::message(format!("路径不在仓库工作区内: {}", path.display())))
 }
