@@ -176,18 +176,11 @@ function resolveTheme(theme: Theme, prefersDark: boolean): ResolvedTheme {
 	if (theme === 'system') {
 		return prefersDark ? 'dark' : 'light';
 	}
-
 	return theme;
 }
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
 	const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-	// If we can, ask the native layer what the system prefers. This is used
-	// when the user selected `system` mode. null means unknown / not fetched.
-	const [systemPrefersDark, setSystemPrefersDark] = useState<boolean | null>(
-		null
-	);
 	const [systemAccent, setSystemAccent] = useState<string | null>(null);
 
 	function getInitialAccent(): string | null {
@@ -199,8 +192,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 	const [accentMode, setAccentModeState] =
 		useState<AccentMode>(getInitialAccentMode);
 	const [accent, setAccentState] = useState<string | null>(getInitialAccent);
-	const effectivePrefersDark =
-		theme === 'system' ? (systemPrefersDark ?? prefersDark) : prefersDark;
+	const effectivePrefersDark = prefersDark;
 	const resolvedTheme = resolveTheme(theme, effectivePrefersDark);
 
 	const effectiveAccent =
@@ -218,8 +210,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		window.localStorage.setItem(THEME_STORAGE_KEY, theme);
 	}, [resolvedTheme, theme]);
 
-	// Request the system theme when we need either the system appearance or the
-	// system accent color.
+	// Request the system accent color when it's needed.
 	useEffect(() => {
 		let mounted = true;
 
@@ -234,8 +225,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 				);
 
 				if (!mounted) return;
-
-				setSystemPrefersDark(resp.scheme === 'dark');
 				setSystemAccent(normalizeHexColor(resp.accent) ?? null);
 			} catch (e) {
 				// ignore failures and fall back to CSS media query
