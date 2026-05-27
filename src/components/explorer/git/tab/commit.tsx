@@ -1,5 +1,5 @@
 // import { AlertTriangle, Check, Minus, Plus, RefreshCw } from 'lucide-react';
-import { AlertTriangle, Check, Minus, Plus } from 'lucide-react';
+import { AlertTriangle, Check, Info, Minus, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -79,6 +79,23 @@ function getCommitLabel(status: GitStatus | null): string {
 	return '提交已暂存更改';
 }
 
+function getConflictHintText(conflictedFiles: GitFileStatus[]): string {
+	const filesWithMarkers = conflictedFiles.filter(
+		(file) => file.hasConflictMarkers
+	).length;
+	const filesWithoutMarkers = conflictedFiles.length - filesWithMarkers;
+
+	if (filesWithMarkers > 0 && filesWithoutMarkers > 0) {
+		return `${filesWithMarkers} 个文件仍有冲突标记，需先在编辑器中处理；其余 ${filesWithoutMarkers} 个文件没有内联标记，确认当前内容后可直接暂存。`;
+	}
+
+	if (filesWithMarkers > 0) {
+		return '请先在编辑器中解决冲突标记再暂存';
+	}
+
+	return '这些冲突没有内联标记；确认当前工作区版本后可直接暂存。';
+}
+
 export function GitTabCommit({
 	actionBusy,
 	canOperate,
@@ -102,6 +119,7 @@ export function GitTabCommit({
 	const conflictedFiles = files.filter((f) => f.status === 'conflicted');
 	const hasFiles = files.length > 0;
 	const hasStaged = stagedFiles.length > 0;
+	const conflictHintText = getConflictHintText(conflictedFiles);
 
 	return (
 		<div className="flex h-full flex-col">
@@ -168,7 +186,7 @@ export function GitTabCommit({
 											</Badge>
 										</div>
 										<span className="text-xs text-muted-foreground">
-											请先在编辑器中解决冲突标记再暂存
+											{conflictHintText}
 										</span>
 									</div>
 									<div
@@ -358,17 +376,20 @@ function ConflictFileRow({
 			<div className="flex min-w-0 items-center gap-2">
 				<FileBadge status={file.status} />
 				<FileLabel file={file} />
-				{hasMarkers && (
-					<Tooltip>
-						<TooltipTrigger>
+				<Tooltip>
+					<TooltipTrigger>
+						{hasMarkers ? (
 							<AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
-						</TooltipTrigger>
-						<TooltipContent>
-							文件仍包含冲突标记
-							&lt;&lt;&lt;&lt;&lt;&lt;&lt;，请先在编辑器中手动解决冲突
-						</TooltipContent>
-					</Tooltip>
-				)}
+						) : (
+							<Info className="size-3.5 shrink-0 text-info" />
+						)}
+					</TooltipTrigger>
+					<TooltipContent>
+						{hasMarkers
+							? '文件仍包含冲突标记 <<<<<<<，请先在编辑器中手动解决'
+							: '这个冲突没有 <<<<<<< 标记。通常是修改/删除、删除/修改这类索引冲突；检查当前工作区内容后，可直接暂存为解决结果。'}
+					</TooltipContent>
+				</Tooltip>
 			</div>
 			<div className="flex items-center gap-1">
 				{hasMarkers ? (

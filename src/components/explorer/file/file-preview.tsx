@@ -1,6 +1,14 @@
-import { Eye, FileImage, FileText, FolderOpen, Pencil } from 'lucide-react';
+import {
+	Eye,
+	FileImage,
+	FileText,
+	FolderOpen,
+	Info,
+	Pencil,
+} from 'lucide-react';
 import { useState } from 'react';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CardDescription, CardTitle } from '@/components/ui/card';
@@ -154,7 +162,6 @@ function renderPreviewBody(
 		);
 	}
 
-	// 纯冲突文件（非 markdown）
 	if (isConflicted && hasConflictMarkers && rootPath) {
 		return (
 			<ConflictEditor
@@ -166,8 +173,8 @@ function renderPreviewBody(
 		);
 	}
 
-	if (preview.fileKind === 'markdown') {
-		return (
+	const body =
+		preview.fileKind === 'markdown' ? (
 			<MarkdownWorkspace
 				key={selectedFile.path}
 				content={content}
@@ -175,15 +182,31 @@ function renderPreviewBody(
 				filePath={selectedFile.path}
 				mode={markdownMode}
 			/>
+		) : (
+			<CodeBlock
+				code={content}
+				language={inferLanguage(selectedFile.name)}
+				wrapLongLines
+			/>
 		);
+
+	if (!isConflicted || hasConflictMarkers) {
+		return body;
 	}
 
 	return (
-		<CodeBlock
-			code={content}
-			language={inferLanguage(selectedFile.name)}
-			wrapLongLines
-		/>
+		<div className="flex h-full flex-col">
+			<Alert className="rounded-none border-x-0 border-t-0" variant="warning">
+				<Info />
+				<AlertTitle>这个冲突没有内联冲突标记</AlertTitle>
+				<AlertDescription>
+					这通常是修改/删除、删除/修改这类索引冲突。请先检查当前工作区版本；
+					<br />
+					如果要保留当前内容，可直接在提交面板暂存来标记冲突已解决。
+				</AlertDescription>
+			</Alert>
+			<div className="min-h-0 flex-1">{body}</div>
+		</div>
 	);
 }
 

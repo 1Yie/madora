@@ -60,6 +60,20 @@ const statusWithConflicts: GitStatus = {
 	],
 };
 
+const statusWithMarkerlessConflicts: GitStatus = {
+	...emptyStatus,
+	conflictedFiles: ['conflict.ts'],
+	files: [
+		{
+			path: 'conflict.ts',
+			staged: true,
+			unstaged: true,
+			status: 'conflicted',
+			hasConflictMarkers: false,
+		},
+	],
+};
+
 const statusWithStaged: GitStatus = {
 	...emptyStatus,
 	totalChangedCount: 1,
@@ -115,5 +129,15 @@ describe('GitTabCommit', () => {
 	it('shows conflicted files section', () => {
 		renderTab({ status: statusWithConflicts });
 		expect(screen.getByText('冲突')).toBeInTheDocument();
+	});
+
+	it('shows markerless conflict guidance', () => {
+		renderTab({ status: statusWithMarkerlessConflicts });
+		expect(
+			screen.getByText('这些冲突没有内联标记；确认当前工作区版本后可直接暂存。')
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('button', { name: '暂存并标记冲突已解决' })
+		).toBeInTheDocument();
 	});
 });
