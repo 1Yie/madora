@@ -331,6 +331,7 @@ mod tests {
         let config = AiCompletionConfig {
             api_key: "   ".into(),
             api_url: None,
+            custom_protocol: None,
             model: None,
             provider: None,
         };
