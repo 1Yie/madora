@@ -10,20 +10,23 @@ import {
 	Plus,
 	RefreshCw,
 	Settings2,
+	XIcon,
+	type LucideIcon,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, Fragment, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+	Dialog,
+	DialogClose,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogPopup,
+	DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-	NativeDialog,
-	NativeDialogClose,
-	NativeDialogDescription,
-	NativeDialogFooter,
-	NativeDialogHeader,
-	NativeDialogTitle,
-} from '@/components/ui/native-dialog';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import {
@@ -93,12 +96,74 @@ const workbenchSections = [
 	},
 ];
 
+type GitSummaryPart = {
+	key: string;
+	text: string;
+	icon?: LucideIcon;
+};
+
 function getBranchLabel(status: GitStatus | null): string {
 	if (!status?.branch?.name) {
 		return '未初始化 Git';
 	}
 
 	return status.branch.name;
+}
+
+function getConflictSummary(status: GitStatus): string | null {
+	if (status.conflictedFiles.length === 0) {
+		return null;
+	}
+
+	switch (status.repositoryState) {
+		case 'revert':
+			return `正在回滚，${status.conflictedFiles.length} 个冲突待解决`;
+		case 'merge':
+			return `正在合并，${status.conflictedFiles.length} 个冲突待解决`;
+		case 'cherryPick':
+			return `正在拣选，${status.conflictedFiles.length} 个冲突待解决`;
+		case 'rebase':
+			return `正在变基，${status.conflictedFiles.length} 个冲突待解决`;
+		default:
+			return `${status.conflictedFiles.length} 个冲突待解决`;
+	}
+}
+
+function getSummaryParts(status: GitStatus): GitSummaryPart[] {
+	const parts: GitSummaryPart[] = [];
+
+	if (status.totalChangedCount === 0) {
+		parts.push({ key: 'clean', text: '工作区干净' });
+	} else {
+		parts.push({
+			icon: Check,
+			key: 'staged',
+			text: `${status.stagedCount} 已暂存`,
+		});
+		parts.push({
+			icon: Plus,
+			key: 'unstaged',
+			text: `${status.unstagedCount} 未暂存`,
+		});
+	}
+
+	if (status.branch?.ahead) {
+		parts.push({
+			icon: ArrowUpFromLine,
+			key: 'ahead',
+			text: `领先 ${status.branch.ahead}`,
+		});
+	}
+
+	if (status.branch?.behind) {
+		parts.push({
+			icon: ArrowDownToLine,
+			key: 'behind',
+			text: `落后 ${status.branch.behind}`,
+		});
+	}
+
+	return parts;
 }
 
 function getSummary(status: GitStatus | null): string {
@@ -110,39 +175,61 @@ function getSummary(status: GitStatus | null): string {
 		return '当前工作区还不是 Git 仓库';
 	}
 
-	if (status.conflictedFiles.length > 0) {
-		switch (status.repositoryState) {
-			case 'revert':
-				return `正在回滚，${status.conflictedFiles.length} 个冲突待解决`;
-			case 'merge':
-				return `正在合并，${status.conflictedFiles.length} 个冲突待解决`;
-			case 'cherryPick':
-				return `正在拣选，${status.conflictedFiles.length} 个冲突待解决`;
-			case 'rebase':
-				return `正在变基，${status.conflictedFiles.length} 个冲突待解决`;
-			default:
-				return `${status.conflictedFiles.length} 个冲突待解决`;
-		}
+	const conflictSummary = getConflictSummary(status);
+
+	if (conflictSummary) {
+		return conflictSummary;
 	}
 
-	const parts: string[] = [];
+	return getSummaryParts(status)
+		.map((part) => part.text)
+		.join(' · ');
+}
 
-	if (status.branch?.ahead) {
-		parts.push(`领先 ${status.branch.ahead}`);
+function GitSummaryIcons({
+	className,
+	status,
+}: {
+	className?: string;
+	status: GitStatus | null;
+}) {
+	if (!status) {
+		return '正在读取仓库状态';
+	}
+	if (!status.hasRepository) {
+		return '当前工作区还不是 Git 仓库';
 	}
 
-	if (status.branch?.behind) {
-		parts.push(`落后 ${status.branch.behind}`);
+	const conflictSummary = getConflictSummary(status);
+
+	if (conflictSummary) {
+		return conflictSummary;
 	}
 
-	if (status.totalChangedCount === 0) {
-		return parts.length > 0
-			? `工作区干净 · ${parts.join(' · ')}`
-			: '工作区干净';
-	}
+	return (
+		<span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
+			{getSummaryParts(status).map((part, index) => {
+				const Icon = part.icon;
 
-	const changeInfo = `${status.stagedCount} 已暂存 / ${status.unstagedCount} 未暂存`;
-	return parts.length > 0 ? `${changeInfo} · ${parts.join(' · ')}` : changeInfo;
+				return (
+					<Fragment key={part.key}>
+						{index > 0 ? (
+							<span className="text-muted-foreground">·</span>
+						) : null}
+						<span className="inline-flex items-center gap-1 align-middle">
+							{Icon ? (
+								<span className="inline-flex size-3.5 items-center
+									justify-center">
+									<Icon className="size-3 shrink-0" />
+								</span>
+							) : null}
+							<span>{part.text}</span>
+						</span>
+					</Fragment>
+				);
+			})}
+		</span>
+	);
 }
 
 export function GitPanel({
@@ -730,7 +817,13 @@ export function GitPanel({
 								</div>
 							</TooltipTrigger>
 							<TooltipContent className="max-w-80" side="top">
-								{statusTooltip}
+								<div className="flex min-w-0 items-center gap-1.5">
+									<span className="shrink-0 font-medium text-foreground">
+										{branchLabel}
+									</span>
+									<span className="text-muted-foreground">·</span>
+									<GitSummaryIcons status={status} />
+								</div>
 							</TooltipContent>
 						</Tooltip>
 						<PopoverPopup className="p-0 m-0">
@@ -837,7 +930,13 @@ export function GitPanel({
 							</div>
 						</TooltipTrigger>
 						<TooltipContent className="max-w-80" side="top">
-							{statusTooltip}
+							<div className="flex min-w-0 items-center gap-1.5">
+								<span className="shrink-0 font-medium text-foreground">
+									{branchLabel}
+								</span>
+								<span className="text-muted-foreground">·</span>
+								<GitSummaryIcons status={status} />
+							</div>
 						</TooltipContent>
 					</Tooltip>
 				)}
@@ -901,222 +1000,240 @@ export function GitPanel({
 				</div>
 			</div>
 
-			<NativeDialog
-				className="max-h-[min(88vh,840px)] max-w-[min(980px,calc(100vw-2rem))]"
-				onOpenChange={setWorkbenchOpen}
-				open={workbenchOpen}
-			>
-				<div
-					className="flex h-[min(88vh,720px)] min-h-0 min-w-0 flex-col
+			<Dialog onOpenChange={setWorkbenchOpen} open={workbenchOpen}>
+				<DialogPopup
+					showCloseButton={false}
+					className="max-h-[min(88vh,840px)] max-w-[min(980px,calc(100vw-2rem))]
 						overflow-hidden"
 				>
-					<NativeDialogClose
-						className="absolute inset-e-2 top-2 z-10"
-						onClick={() => setWorkbenchOpen(false)}
-					/>
-					<div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
-						<aside
-							className="border-r border-border bg-muted md:w-56 md:shrink-0"
+					<div
+						className="flex h-[min(88vh,720px)] min-h-0 min-w-0 flex-col
+							overflow-hidden"
+					>
+						<DialogClose
+							className="absolute inset-e-2 top-2 z-10"
+							render={<Button size="icon" variant="ghost" />}
 						>
-							<ScrollArea
-								className="max-h-60 md:h-full md:max-h-none overflow-x-hidden"
+							<XIcon />
+						</DialogClose>
+						<div
+							className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
+						>
+							<aside
+								className="border-r border-border bg-muted md:w-56 md:shrink-0"
 							>
-								<nav className="flex flex-col gap-1 p-3">
-									{workbenchSections.map((section) => {
-										const Icon = section.icon;
-										const isActive = activeTab === section.id;
+								<ScrollArea
+									className="max-h-60 md:h-full md:max-h-none overflow-x-hidden"
+								>
+									<nav className="flex flex-col gap-1 p-3">
+										{workbenchSections.map((section) => {
+											const Icon = section.icon;
+											const isActive = activeTab === section.id;
 
-										return (
-											<button
-												key={section.id}
-												aria-current={isActive ? 'page' : undefined}
-												type="button"
-												className={cn(
-													`flex items-start gap-3 rounded-xl px-3 py-3 text-left
-													transition-colors`,
-													isActive
-														? 'bg-primary/10 text-foreground'
-														: `text-muted-foreground hover:bg-accent
-															hover:text-foreground`
-												)}
-												onClick={() => {
-													if (section.id === 'history') {
-														void loadGitLog();
-													}
-													setActiveTab(section.id);
-												}}
-											>
-												<span
+											return (
+												<button
+													key={section.id}
+													aria-current={isActive ? 'page' : undefined}
+													type="button"
 													className={cn(
-														'mt-0.5 rounded-lg border p-2',
+														`flex items-start gap-3 rounded-xl px-3 py-3
+														text-left transition-colors`,
 														isActive
-															? 'border-primary/30 bg-primary/10 text-primary'
-															: `border-border bg-background
-																text-muted-foreground`
+															? 'bg-primary/10 text-foreground'
+															: `text-muted-foreground hover:bg-accent
+																hover:text-foreground`
 													)}
+													onClick={() => {
+														if (section.id === 'history') {
+															void loadGitLog();
+														}
+														setActiveTab(section.id);
+													}}
 												>
-													<Icon className="size-4" />
-												</span>
-												<span className="min-w-0">
-													<span className="block text-sm font-medium">
-														{section.label}
-													</span>
 													<span
-														className="mt-1 block text-xs leading-5
-															text-muted-foreground"
+														className={cn(
+															'mt-0.5 rounded-lg border p-2',
+															isActive
+																? 'border-primary/30 bg-primary/10 text-primary'
+																: `border-border bg-background
+																	text-muted-foreground`
+														)}
 													>
-														{section.description}
+														<Icon className="size-4" />
 													</span>
-												</span>
-											</button>
-										);
-									})}
-								</nav>
-							</ScrollArea>
-						</aside>
-						<section
-							className="flex min-h-0 min-w-0 flex-1 pt-4 flex-col
-								overflow-hidden bg-popover"
-						>
-							{activeTab === 'history' && (
-								<GitTabHistory
-									actionBusy={actionBusy}
-									branchLabel={branchLabel}
-									gitLog={gitLog}
-									upstreamLabel={upstreamLabel}
-									onRefresh={() => void loadGitLog()}
-									onRevertRequest={(commitId, summary) =>
-										setPendingHistoryAction({
-											type: 'revert-commit',
-											commitId,
-											summary,
-										})
-									}
-									onUndoRequest={() =>
-										setPendingHistoryAction({ type: 'undo-last' })
-									}
-								/>
-							)}
-							{activeTab === 'commit' && (
-								<GitTabCommit
-									actionBusy={actionBusy}
-									canOperate={canOperate}
-									commitMessage={commitMessage}
-									status={status}
-									onCommit={() => void commitStaged()}
-									onCommitAll={() => void commitAll()}
-									onCommitMessageChange={setCommitMessage}
-									onRefresh={() => void refreshStatus()}
-									onStageFile={(path) => void stageFile(path)}
-									onUnstageFile={(path) => void unstageFile(path)}
-								/>
-							)}
-							{activeTab !== 'history' && activeTab !== 'commit' && (
-								<ScrollArea className="min-h-0 flex-1">
-									<div className="space-y-6 p-4 sm:p-6">
-										{activeTab === 'remote' && (
-											<GitTabRemote
-												key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
-												actionBusy={actionBusy}
-												canOperate={canOperate}
-												initialRemoteName={primaryRemote?.name ?? 'origin'}
-												initialRemoteUrl={primaryRemote?.url ?? ''}
-												onPull={() => void pull()}
-												onPush={() => void push()}
-												onSave={(name, url) => {
-													setRemoteName(name);
-													void saveRemote(name, url);
-												}}
-											/>
-										)}
-										{activeTab === 'ssh' && (
-											<GitTabSsh
-												actionBusy={actionBusy}
-												authPassword={authPassword}
-												authUsername={authUsername}
-												sshPassphrase={sshPassphrase}
-												sshPrivateKeyPath={sshPrivateKeyPath}
-												sshUsername={sshUsername}
-												onAuthPasswordChange={setAuthPassword}
-												onAuthUsernameChange={setAuthUsername}
-												onPickKeyFile={() => void pickSshPrivateKeyFile()}
-												onSshPassphraseChange={setSshPassphrase}
-												onSshPrivateKeyPathChange={setSshPrivateKeyPath}
-												onSshUsernameChange={setSshUsername}
-											/>
-										)}
-									</div>
+													<span className="min-w-0">
+														<span className="block text-sm font-medium">
+															{section.label}
+														</span>
+														<span
+															className="mt-1 block text-xs leading-5
+																text-muted-foreground"
+														>
+															{section.description}
+														</span>
+													</span>
+												</button>
+											);
+										})}
+									</nav>
 								</ScrollArea>
-							)}
-						</section>
+							</aside>
+							<section
+								className="flex min-h-0 min-w-0 flex-1 pt-4 flex-col
+									overflow-hidden bg-popover"
+							>
+								{activeTab === 'history' && (
+									<GitTabHistory
+										actionBusy={actionBusy}
+										branchLabel={branchLabel}
+										gitLog={gitLog}
+										upstreamLabel={upstreamLabel}
+										onRefresh={() => void loadGitLog()}
+										onRevertRequest={(commitId, summary) =>
+											setPendingHistoryAction({
+												type: 'revert-commit',
+												commitId,
+												summary,
+											})
+										}
+										onUndoRequest={() =>
+											setPendingHistoryAction({ type: 'undo-last' })
+										}
+									/>
+								)}
+								{activeTab === 'commit' && (
+									<GitTabCommit
+										actionBusy={actionBusy}
+										canOperate={canOperate}
+										commitMessage={commitMessage}
+										status={status}
+										onCommit={() => void commitStaged()}
+										onCommitAll={() => void commitAll()}
+										onCommitMessageChange={setCommitMessage}
+										onRefresh={() => void refreshStatus()}
+										onStageFile={(path) => void stageFile(path)}
+										onUnstageFile={(path) => void unstageFile(path)}
+									/>
+								)}
+								{activeTab !== 'history' && activeTab !== 'commit' && (
+									<ScrollArea className="min-h-0 flex-1">
+										<div className="space-y-6 p-4 sm:p-6">
+											{activeTab === 'remote' && (
+												<GitTabRemote
+													key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
+													actionBusy={actionBusy}
+													canOperate={canOperate}
+													initialRemoteName={primaryRemote?.name ?? 'origin'}
+													initialRemoteUrl={primaryRemote?.url ?? ''}
+													onPull={() => void pull()}
+													onPush={() => void push()}
+													onSave={(name, url) => {
+														setRemoteName(name);
+														void saveRemote(name, url);
+													}}
+												/>
+											)}
+											{activeTab === 'ssh' && (
+												<GitTabSsh
+													actionBusy={actionBusy}
+													authPassword={authPassword}
+													authUsername={authUsername}
+													sshPassphrase={sshPassphrase}
+													sshPrivateKeyPath={sshPrivateKeyPath}
+													sshUsername={sshUsername}
+													onAuthPasswordChange={setAuthPassword}
+													onAuthUsernameChange={setAuthUsername}
+													onPickKeyFile={() => void pickSshPrivateKeyFile()}
+													onSshPassphraseChange={setSshPassphrase}
+													onSshPrivateKeyPathChange={setSshPrivateKeyPath}
+													onSshUsernameChange={setSshUsername}
+												/>
+											)}
+										</div>
+									</ScrollArea>
+								)}
+							</section>
+						</div>
+
+						<DialogFooter className="justify-between sm:justify-between">
+							<div
+								className="flex min-w-0 flex-1 items-center gap-2 text-xs
+									text-muted-foreground"
+							>
+								{busy || actionBusy ? (
+									<LoaderCircle className="size-3.5 animate-spin" />
+								) : (
+									<GitBranch className="size-3.5" />
+								)}
+								<div
+									className="flex min-w-0 flex-1 items-center gap-1.5
+										overflow-hidden"
+								>
+									<span className="shrink truncate">{branchLabel}</span>
+									<span className="shrink-0 text-muted-foreground">·</span>
+									<GitSummaryIcons
+										className="min-w-0 flex-1 overflow-hidden"
+										status={status}
+									/>
+								</div>
+							</div>
+							<div
+								className="shrink-0 flex flex-col-reverse gap-2 sm:flex-row
+									sm:justify-end"
+							>
+								<Button
+									disabled={!canOperate}
+									onClick={() => void refreshStatus()}
+									variant="outline"
+								>
+									<RefreshCw />
+								</Button>
+								<Button
+									disabled={!canOperate}
+									loading={actionBusy}
+									onClick={() => void pull()}
+									variant="outline"
+								>
+									<ArrowDownToLine />
+									拉取
+								</Button>
+								<Button
+									disabled={!canOperate}
+									loading={actionBusy}
+									onClick={() => void push()}
+									variant="outline"
+								>
+									<ArrowUpFromLine />
+									推送
+								</Button>
+							</div>
+						</DialogFooter>
 					</div>
+				</DialogPopup>
+			</Dialog>
 
-					<NativeDialogFooter className="justify-between sm:justify-between">
-						<div
-							className="flex min-w-0 flex-1 items-center gap-2 text-xs
-								text-muted-foreground"
-						>
-							{busy || actionBusy ? (
-								<LoaderCircle className="size-3.5 animate-spin" />
-							) : (
-								<GitBranch className="size-3.5" />
-							)}
-							<span className="min-w-0 truncate">{statusTooltip}</span>
-						</div>
-						<div
-							className="shrink-0 flex flex-col-reverse gap-2 sm:flex-row
-								sm:justify-end"
-						>
-							<Button
-								disabled={!canOperate}
-								onClick={() => void refreshStatus()}
-								variant="outline"
-							>
-								<RefreshCw />
-							</Button>
-							<Button
-								disabled={!canOperate}
-								loading={actionBusy}
-								onClick={() => void pull()}
-								variant="outline"
-							>
-								<ArrowDownToLine />
-								拉取
-							</Button>
-							<Button
-								disabled={!canOperate}
-								loading={actionBusy}
-								onClick={() => void push()}
-								variant="outline"
-							>
-								<ArrowUpFromLine />
-								推送
-							</Button>
-						</div>
-					</NativeDialogFooter>
-				</div>
-			</NativeDialog>
-
-			<NativeDialog
+			<Dialog
 				open={pendingHistoryAction !== null}
 				onOpenChange={(open) => !open && setPendingHistoryAction(null)}
-				className="max-w-[min(640px,calc(100vw-2rem))]"
 			>
-				<div className="flex h-auto min-h-0 min-w-0 flex-col overflow-hidden">
-					<NativeDialogHeader>
-						<NativeDialogTitle>
+				<DialogPopup
+					showCloseButton={false}
+					className="max-w-[min(640px,calc(100vw-2rem))]"
+				>
+					<DialogHeader>
+						<DialogTitle>
 							{pendingHistoryAction?.type === 'undo-last'
 								? '撤销最近提交'
 								: '回滚指定提交'}
-						</NativeDialogTitle>
-						<NativeDialogDescription>
+						</DialogTitle>
+						<DialogDescription>
 							{pendingHistoryAction?.type === 'undo-last'
 								? '会把最近一次提交从历史中移除，但保留改动到工作区。该操作只建议在还未推送时使用。'
 								: `会创建一个新的回滚提交，用来撤销这次提交的效果：${pendingHistoryAction?.summary ?? ''}`}
-						</NativeDialogDescription>
-					</NativeDialogHeader>
+						</DialogDescription>
+					</DialogHeader>
 
-					<NativeDialogFooter>
+					<DialogFooter>
 						<div className="flex w-full justify-end gap-2">
 							<Button
 								onClick={() => setPendingHistoryAction(null)}
@@ -1150,9 +1267,9 @@ export function GitPanel({
 									: '确认回滚'}
 							</Button>
 						</div>
-					</NativeDialogFooter>
-				</div>
-			</NativeDialog>
+					</DialogFooter>
+				</DialogPopup>
+			</Dialog>
 		</>
 	);
 }
