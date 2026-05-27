@@ -5,12 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SettingsDialog } from '@/components/system/settings-dialog';
 import { Button } from '@/components/ui/button';
 import {
-	NativeDialog,
-	NativeDialogDescription,
-	NativeDialogFooter,
-	NativeDialogHeader,
-	NativeDialogTitle,
-} from '@/components/ui/native-dialog';
+	Dialog,
+	DialogPopup,
+	DialogHeader,
+	DialogTitle,
+	DialogDescription,
+	DialogFooter,
+} from '@/components/ui/dialog';
 import { showErrorToast } from '@/components/ui/toast';
 import {
 	clearStoredMarkdownDrafts,
@@ -151,22 +152,17 @@ export default function Titlebar() {
 					</button>
 				</div>
 			</div>
-
-			<NativeDialog
-				className="max-w-md"
-				onOpenChange={setConfirmOpen}
-				open={confirmOpen}
-			>
-				<div className="flex min-h-0 flex-col overflow-hidden">
-					<NativeDialogHeader>
-						<NativeDialogTitle>工作区还有文档未保存</NativeDialogTitle>
-						<NativeDialogDescription>
+			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+				<DialogPopup showCloseButton={false} className="max-w-md">
+					<DialogHeader>
+						<DialogTitle>工作区还有文档未保存</DialogTitle>
+						<DialogDescription>
 							{savingBeforeClose
 								? '正在保存未完成的修改...'
 								: '关闭窗口前请选择：先保存修改，或放弃这些未保存的内容。'}
-						</NativeDialogDescription>
-					</NativeDialogHeader>
-					<NativeDialogFooter>
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
 						<Button
 							disabled={savingBeforeClose}
 							variant="outline"
@@ -187,9 +183,9 @@ export default function Titlebar() {
 						>
 							保存并关闭
 						</Button>
-					</NativeDialogFooter>
-				</div>
-			</NativeDialog>
+					</DialogFooter>
+				</DialogPopup>
+			</Dialog>
 		</>
 	);
 }

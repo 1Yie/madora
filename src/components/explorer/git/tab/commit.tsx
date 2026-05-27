@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, Minus, Plus, RefreshCw } from 'lucide-react';
-
+// import { AlertTriangle, Check, Minus, Plus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Check, Minus, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -87,7 +87,7 @@ export function GitTabCommit({
 	onCommit,
 	onCommitAll,
 	onCommitMessageChange,
-	onRefresh,
+	// onRefresh,
 	onStageFile,
 	onUnstageFile,
 }: GitTabCommitProps) {
@@ -130,13 +130,13 @@ export function GitTabCommit({
 							<Check />
 							提交所有更改
 						</Button>
-						<Button
+						{/* <Button
 							disabled={!canOperate}
 							onClick={onRefresh}
 							variant="outline"
 						>
 							<RefreshCw />
-						</Button>
+						</Button> */}
 					</div>
 				</div>
 				<Textarea
