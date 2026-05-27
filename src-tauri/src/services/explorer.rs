@@ -437,6 +437,28 @@ fn ensure_target_available(target_path: &Path) -> Result<(), String> {
     Err(format!("目标已存在: {}", target_path.display()))
 }
 
+fn copy_workspace_node_recursive(source_path: &Path, destination_path: &Path) -> Result<(), String> {
+    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+
+    if source_metadata.is_dir() {
+        fs::create_dir_all(destination_path).map_err(|error| error.to_string())?;
+
+        for entry in fs::read_dir(source_path).map_err(|error| error.to_string())? {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let child_source_path = entry.path();
+            let child_destination_path = destination_path.join(entry.file_name());
+
+            copy_workspace_node_recursive(&child_source_path, &child_destination_path)?;
+        }
+
+        return Ok(());
+    }
+
+    ensure_parent_exists(destination_path)?;
+    fs::copy(source_path, destination_path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub fn rename_workspace_node(
     root_path: &Path,
     target_path: &Path,
@@ -535,6 +557,41 @@ pub fn move_workspace_node(
     ensure_target_available(&destination_path)?;
 
     fs::rename(source_path, destination_path).map_err(|error| error.to_string())
+}
+
+pub fn copy_workspace_node(
+    root_path: &Path,
+    source_path: &Path,
+    destination_directory: &Path,
+) -> Result<(), String> {
+    ensure_within_root(root_path, source_path)?;
+    ensure_within_root(root_path, destination_directory)?;
+    ensure_existing_path(source_path)?;
+    ensure_existing_path(destination_directory)?;
+
+    if !destination_directory.is_dir() {
+        return Err("粘贴目标必须是文件夹".to_string());
+    }
+
+    if source_path == root_path {
+        return Err("不能复制工作区根目录".to_string());
+    }
+
+    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+
+    if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
+        return Err("不能将文件夹复制到它自己的子目录中".to_string());
+    }
+
+    let file_name = source_path
+        .file_name()
+        .ok_or_else(|| "无法确定源文件名".to_string())?;
+    let destination_path = destination_directory.join(file_name);
+
+    ensure_parent_exists(&destination_path)?;
+    ensure_target_available(&destination_path)?;
+
+    copy_workspace_node_recursive(source_path, &destination_path)
 }
 
 #[cfg(test)]
@@ -792,6 +849,46 @@ mod tests {
         let path = Path::new("/nonexistent/file.txt");
         let result = read_text_preview(path);
         assert!(result.is_err());
+    }
+
+    // ─── copy_workspace_node ────────────────────────────────────────
+
+    #[test]
+    fn copy_workspace_node_copies_file_and_keeps_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("workspace");
+        let source_directory = root.join("src");
+        let destination_directory = root.join("docs");
+        let source_file = source_directory.join("readme.md");
+        let destination_file = destination_directory.join("readme.md");
+
+        std::fs::create_dir_all(&source_directory).unwrap();
+        std::fs::create_dir_all(&destination_directory).unwrap();
+        std::fs::write(&source_file, b"hello copy").unwrap();
+
+        copy_workspace_node(&root, &source_file, &destination_directory).unwrap();
+
+        assert!(source_file.exists());
+        assert_eq!(std::fs::read_to_string(&destination_file).unwrap(), "hello copy");
+    }
+
+    #[test]
+    fn copy_workspace_node_copies_directory_recursively() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("workspace");
+        let source_directory = root.join("assets/icons");
+        let destination_directory = root.join("archive");
+        let source_file = source_directory.join("logo.svg");
+        let copied_file = destination_directory.join("icons/logo.svg");
+
+        std::fs::create_dir_all(&source_directory).unwrap();
+        std::fs::create_dir_all(&destination_directory).unwrap();
+        std::fs::write(&source_file, b"<svg />").unwrap();
+
+        copy_workspace_node(&root, &root.join("assets"), &destination_directory).unwrap();
+
+        assert!(root.join("assets").exists());
+        assert_eq!(std::fs::read_to_string(&copied_file).unwrap(), "<svg />");
     }
 
     // ─── normalize_markdown_file_name ────────────────────────────────

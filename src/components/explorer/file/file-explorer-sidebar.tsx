@@ -1,6 +1,7 @@
 import {
 	ChevronRight,
 	Clipboard,
+	Copy,
 	FileImage,
 	FilePenLine,
 	FileText,
@@ -14,7 +15,13 @@ import {
 	Scissors,
 	Trash2,
 } from 'lucide-react';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+	type FormEvent,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useState,
+} from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -40,14 +47,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-	NativeDialog,
-	NativeDialogClose,
-	NativeDialogDescription,
-	NativeDialogFooter,
-	NativeDialogHeader,
-	NativeDialogPanel,
-	NativeDialogTitle,
-} from '@/components/ui/native-dialog';
+	Dialog,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogPanel,
+	DialogPopup,
+	DialogTitle,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { showErrorToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -79,7 +86,7 @@ type FileExplorerSidebarProps = {
 	operationBusy: WorkspaceOperation;
 	clipboard: {
 		item: ExplorerClipboardItem;
-		mode: 'cut';
+		mode: 'copy' | 'cut';
 	} | null;
 	loadingPaths: Set<string>;
 	onCreateMarkdown: (
@@ -90,6 +97,7 @@ type FileExplorerSidebarProps = {
 		directoryName: string,
 		targetPath: string | null
 	) => Promise<void>;
+	onCopyNode: (node: ExplorerNode) => void;
 	onCutNode: (node: ExplorerNode) => void;
 	onDeleteNode: (targetPath: string) => Promise<void>;
 	onRestoreDeletedNode: (targetPath: string) => Promise<void>;
@@ -115,6 +123,12 @@ type PendingAction =
 	| { type: 'delete'; node: ExplorerNode }
 	| { type: 'restoreDeleted'; node: ExplorerNode }
 	| null;
+
+type ExplorerExpansionState = {
+	rootPath: string | null;
+	expandedPaths: Set<string>;
+	collapsedPaths: Set<string>;
+};
 
 type GitFileEntry = NonNullable<GitStatus['files']>[number];
 
@@ -470,6 +484,7 @@ function ContextMenuContent({
 		action:
 			| 'createMarkdown'
 			| 'createDirectory'
+			| 'copy'
 			| 'cut'
 			| 'delete'
 			| 'rename'
@@ -505,17 +520,23 @@ function ContextMenuContent({
 							<FilePenLine />
 							重命名
 						</MenuItem>
+						<MenuItem onClick={() => onAction('copy')}>
+							<Copy />
+							复制
+						</MenuItem>
 						<MenuItem onClick={() => onAction('cut')}>
 							<Scissors />
 							剪切
 						</MenuItem>
-						<MenuItem
-							disabled={pasteDisabled}
-							onClick={() => onAction('paste')}
-						>
-							<Clipboard />
-							粘贴到此处
-						</MenuItem>
+						{clipboard ? (
+							<MenuItem
+								disabled={pasteDisabled}
+								onClick={() => onAction('paste')}
+							>
+								<Clipboard />
+								粘贴到此处
+							</MenuItem>
+						) : null}
 						<MenuSeparator />
 						<MenuItem onClick={() => onAction('delete')} variant="destructive">
 							<Trash2 />
@@ -533,15 +554,21 @@ function ContextMenuContent({
 						<FolderPlus />
 						新建文件夹
 					</MenuItem>
-					<MenuItem disabled={pasteDisabled} onClick={() => onAction('paste')}>
-						<Clipboard />
-						粘贴到当前目录
-					</MenuItem>
+					{clipboard ? (
+						<MenuItem
+							disabled={pasteDisabled}
+							onClick={() => onAction('paste')}
+						>
+							<Clipboard />
+							粘贴到当前目录
+						</MenuItem>
+					) : null}
 				</>
 			)}
 			{clipboard ? (
 				<div className="px-2 py-1.5 text-muted-foreground text-xs">
-					已剪切: {clipboard.item.name}
+					{clipboard.mode === 'copy' ? '已复制' : '已剪切'}:{' '}
+					{clipboard.item.name}
 				</div>
 			) : null}
 		</ContextMenuPopup>
@@ -592,45 +619,35 @@ function CreateMarkdownDialog({
 	};
 
 	return (
-		<>
-			<NativeDialog onOpenChange={handleOpenChange} open={open}>
-				<form className="flex min-h-0 flex-col" onSubmit={handleSubmit}>
-					<NativeDialogClose
-						className="absolute end-2 top-2"
+		<ExplorerDialogForm
+			description="默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。"
+			footer={
+				<>
+					<Button
+						disabled={busy}
 						onClick={() => handleOpenChange(false)}
-					/>
-					<NativeDialogHeader>
-						<NativeDialogTitle>新建 Markdown 文档</NativeDialogTitle>
-						<NativeDialogDescription>
-							默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。
-						</NativeDialogDescription>
-					</NativeDialogHeader>
-					<NativeDialogPanel>
-						<div className="space-y-3">
-							<Input
-								autoFocus
-								nativeInput
-								onChange={(event) => setFileName(event.target.value)}
-								placeholder="untitled.md"
-								value={fileName}
-							/>
-						</div>
-					</NativeDialogPanel>
-					<NativeDialogFooter>
-						<Button
-							disabled={busy}
-							onClick={() => handleOpenChange(false)}
-							variant="outline"
-						>
-							取消
-						</Button>
-						<Button loading={busy} type="submit">
-							创建
-						</Button>
-					</NativeDialogFooter>
-				</form>
-			</NativeDialog>
-		</>
+						variant="outline"
+					>
+						取消
+					</Button>
+					<Button loading={busy} type="submit">
+						创建
+					</Button>
+				</>
+			}
+			onOpenChange={handleOpenChange}
+			onSubmit={handleSubmit}
+			open={open}
+			title="新建 Markdown 文档"
+		>
+			<Input
+				autoFocus
+				nativeInput
+				onChange={(event) => setFileName(event.target.value)}
+				placeholder="untitled.md"
+				value={fileName}
+			/>
+		</ExplorerDialogForm>
 	);
 }
 
@@ -678,12 +695,15 @@ function CreateDirectoryDialog({
 	onClose: () => void;
 	onConfirm: (directoryName: string) => Promise<void>;
 }) {
-	const [directoryName, setDirectoryName] = useState(() => '');
+	const open = node !== undefined;
 
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 
-		const trimmedDirectoryName = directoryName.trim();
+		const formData = new FormData(event.currentTarget);
+		const trimmedDirectoryName = String(
+			formData.get('directoryName') ?? ''
+		).trim();
 
 		if (!trimmedDirectoryName) {
 			showErrorToast('创建失败', '请输入文件夹名称');
@@ -697,41 +717,31 @@ function CreateDirectoryDialog({
 			void error;
 		}
 	};
-
 	return (
-		<NativeDialog
-			onOpenChange={(open) => !open && onClose()}
-			open={node !== undefined}
-		>
-			<form className="flex min-h-0 flex-col" onSubmit={handleSubmit}>
-				<NativeDialogClose className="absolute end-2 top-2" onClick={onClose} />
-				<NativeDialogHeader>
-					<NativeDialogTitle>新建文件夹</NativeDialogTitle>
-					<NativeDialogDescription>
-						默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。
-					</NativeDialogDescription>
-				</NativeDialogHeader>
-				<NativeDialogPanel>
-					<div className="space-y-3">
-						<Input
-							autoFocus
-							nativeInput
-							onChange={(event) => setDirectoryName(event.target.value)}
-							placeholder="new-folder"
-							value={directoryName}
-						/>
-					</div>
-				</NativeDialogPanel>
-				<NativeDialogFooter>
+		<ExplorerDialogForm
+			description="默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。"
+			footer={
+				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
 						取消
 					</Button>
 					<Button loading={busy} type="submit">
 						创建
 					</Button>
-				</NativeDialogFooter>
-			</form>
-		</NativeDialog>
+				</>
+			}
+			onOpenChange={(open) => !open && onClose()}
+			onSubmit={handleSubmit}
+			open={open}
+			title="新建文件夹"
+		>
+			<Input
+				autoFocus
+				name="directoryName"
+				nativeInput
+				placeholder="new-folder"
+			/>
+		</ExplorerDialogForm>
 	);
 }
 
@@ -746,12 +756,13 @@ function RenameNodeDialog({
 	onClose: () => void;
 	onConfirm: (newName: string) => Promise<void>;
 }) {
-	const [name, setName] = useState(() => node?.name ?? '');
+	const open = Boolean(node);
 
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 
-		const trimmedName = name.trim();
+		const formData = new FormData(event.currentTarget);
+		const trimmedName = String(formData.get('name') ?? '').trim();
 
 		if (!trimmedName) {
 			showErrorToast('重命名失败', '请输入名称');
@@ -765,42 +776,35 @@ function RenameNodeDialog({
 			void error;
 		}
 	};
-
 	return (
-		<NativeDialog
-			onOpenChange={(open) => !open && onClose()}
-			open={Boolean(node)}
-		>
-			<form className="flex min-h-0 flex-col" onSubmit={handleSubmit}>
-				<NativeDialogClose className="absolute end-2 top-2" onClick={onClose} />
-				<NativeDialogHeader>
-					<NativeDialogTitle>重命名</NativeDialogTitle>
-					<NativeDialogDescription>
-						{node?.kind === 'directory'
-							? '输入新的文件夹名称。'
-							: '输入新的文件名称。'}
-					</NativeDialogDescription>
-				</NativeDialogHeader>
-				<NativeDialogPanel>
-					<div className="space-y-3">
-						<Input
-							autoFocus
-							nativeInput
-							onChange={(event) => setName(event.target.value)}
-							value={name}
-						/>
-					</div>
-				</NativeDialogPanel>
-				<NativeDialogFooter>
+		<ExplorerDialogForm
+			description={
+				node?.kind === 'directory'
+					? '输入新的文件夹名称。'
+					: '输入新的文件名称。'
+			}
+			footer={
+				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
 						取消
 					</Button>
 					<Button loading={busy} type="submit">
 						保存
 					</Button>
-				</NativeDialogFooter>
-			</form>
-		</NativeDialog>
+				</>
+			}
+			onOpenChange={(open) => !open && onClose()}
+			onSubmit={handleSubmit}
+			open={open}
+			title="重命名"
+		>
+			<Input
+				autoFocus
+				defaultValue={node?.name ?? ''}
+				name="name"
+				nativeInput
+			/>
+		</ExplorerDialogForm>
 	);
 }
 
@@ -815,37 +819,70 @@ function DeleteNodeDialog({
 	onClose: () => void;
 	onConfirm: () => Promise<void>;
 }) {
+	const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		void onConfirm().catch(() => {});
+	};
+
 	return (
-		<NativeDialog
-			onOpenChange={(open) => !open && onClose()}
-			open={Boolean(node)}
-		>
-			<div className="flex min-h-0 flex-col">
-				<NativeDialogClose className="absolute end-2 top-2" onClick={onClose} />
-				<NativeDialogHeader>
-					<NativeDialogTitle>确认删除</NativeDialogTitle>
-					<NativeDialogDescription>
-						{node?.kind === 'directory'
-							? `删除文件夹 “${node?.name ?? ''}” 以及其中的所有内容？`
-							: `删除文件 “${node?.name ?? ''}”？`}
-					</NativeDialogDescription>
-				</NativeDialogHeader>
-				<NativeDialogFooter>
+		<ExplorerDialogForm
+			description={
+				node?.kind === 'directory'
+					? `删除文件夹 “${node?.name ?? ''}” 以及其中的所有内容？`
+					: `删除文件 “${node?.name ?? ''}”？`
+			}
+			footer={
+				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
 						取消
 					</Button>
-					<Button
-						loading={busy}
-						onClick={() => {
-							void onConfirm().catch(() => {});
-						}}
-						variant="destructive"
-					>
+					<Button type="submit" loading={busy} variant="destructive">
 						删除
 					</Button>
-				</NativeDialogFooter>
-			</div>
-		</NativeDialog>
+				</>
+			}
+			onOpenChange={(open) => !open && onClose()}
+			onSubmit={handleSubmit}
+			open={Boolean(node)}
+			title="确认删除"
+		/>
+	);
+}
+
+function ExplorerDialogForm({
+	children,
+	description,
+	footer,
+	onOpenChange,
+	onSubmit,
+	open,
+	title,
+}: {
+	children?: ReactNode;
+	description: ReactNode;
+	footer: ReactNode;
+	onOpenChange: (open: boolean) => void;
+	onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
+	open: boolean;
+	title: ReactNode;
+}) {
+	return (
+		<Dialog onOpenChange={onOpenChange} open={open}>
+			<DialogPopup showCloseButton={false}>
+				<form className="flex min-h-0 flex-col" onSubmit={onSubmit}>
+					<DialogHeader>
+						<DialogTitle>{title}</DialogTitle>
+						<DialogDescription>{description}</DialogDescription>
+					</DialogHeader>
+					{children ? (
+						<DialogPanel>
+							<div className="space-y-3 pt-4">{children}</div>
+						</DialogPanel>
+					) : null}
+					<DialogFooter>{footer}</DialogFooter>
+				</form>
+			</DialogPopup>
+		</Dialog>
 	);
 }
 
@@ -872,6 +909,7 @@ function FileTreeNode({
 		action:
 			| 'createMarkdown'
 			| 'createDirectory'
+			| 'copy'
 			| 'cut'
 			| 'delete'
 			| 'rename'
@@ -1089,6 +1127,7 @@ export function FileExplorerSidebar({
 	loadingPaths,
 	onCreateMarkdown,
 	onCreateDirectory,
+	onCopyNode,
 	onCutNode,
 	onDeleteNode,
 	onRestoreDeletedNode,
@@ -1102,7 +1141,11 @@ export function FileExplorerSidebar({
 	onExpandDirectory,
 	onSelectNode,
 }: FileExplorerSidebarProps) {
-	const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+	const [expansionState, setExpansionState] = useState<ExplorerExpansionState>({
+		collapsedPaths: new Set(),
+		expandedPaths: new Set(),
+		rootPath: null,
+	});
 	const [pendingAction, setPendingAction] = useState<PendingAction>(null);
 	const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 	const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
@@ -1110,25 +1153,36 @@ export function FileExplorerSidebar({
 		() => (root ? mergeDeletedGitNodes(root, gitStatusMap) : null),
 		[gitStatusMap, root]
 	);
+	const expansionRootPath = mergedRoot?.path ?? root?.path ?? null;
 
 	const resolvedExpandedPaths = useMemo(() => {
-		if (!mergedRoot) return new Set<string>();
+		if (!mergedRoot) {
+			return new Set<string>();
+		}
 
-		const nextPaths = new Set(expandedPaths);
+		const isCurrentRoot = expansionState.rootPath === expansionRootPath;
+		const collapsedPaths = isCurrentRoot
+			? expansionState.collapsedPaths
+			: new Set<string>();
+		const nextPaths = new Set(
+			isCurrentRoot ? expansionState.expandedPaths : []
+		);
 
-		// On initial load (no explicit expansion state), default to root expanded.
-		if (nextPaths.size === 0) {
+		// On initial load, default to root expanded unless the user explicitly collapsed it.
+		if (!collapsedPaths.has(mergedRoot.path) && nextPaths.size === 0) {
 			nextPaths.add(mergedRoot.path);
 		}
 
 		if (selectedPath) {
 			for (const ancestor of collectAncestorPaths(mergedRoot, selectedPath)) {
-				nextPaths.add(ancestor);
+				if (!collapsedPaths.has(ancestor)) {
+					nextPaths.add(ancestor);
+				}
 			}
 		}
 
 		return nextPaths;
-	}, [expandedPaths, mergedRoot, selectedPath]);
+	}, [expansionRootPath, expansionState, mergedRoot, selectedPath]);
 
 	useEffect(() => {
 		if (!mergedRoot) {
@@ -1153,16 +1207,30 @@ export function FileExplorerSidebar({
 	}, [loadingPaths, mergedRoot, onExpandDirectory, resolvedExpandedPaths]);
 
 	const toggleDirectory = (path: string) => {
-		setExpandedPaths((currentPaths) => {
-			const nextPaths = new Set(currentPaths);
+		const isExpanded = resolvedExpandedPaths.has(path);
 
-			if (nextPaths.has(path)) {
-				nextPaths.delete(path);
+		setExpansionState((currentState) => {
+			const isCurrentRoot = currentState.rootPath === expansionRootPath;
+			const nextExpandedPaths = new Set(
+				isCurrentRoot ? currentState.expandedPaths : []
+			);
+			const nextCollapsedPaths = new Set(
+				isCurrentRoot ? currentState.collapsedPaths : []
+			);
+
+			if (isExpanded) {
+				nextExpandedPaths.delete(path);
+				nextCollapsedPaths.add(path);
 			} else {
-				nextPaths.add(path);
+				nextExpandedPaths.add(path);
+				nextCollapsedPaths.delete(path);
 			}
 
-			return nextPaths;
+			return {
+				collapsedPaths: nextCollapsedPaths,
+				expandedPaths: nextExpandedPaths,
+				rootPath: expansionRootPath,
+			};
 		});
 	};
 
@@ -1175,6 +1243,7 @@ export function FileExplorerSidebar({
 		action:
 			| 'createMarkdown'
 			| 'createDirectory'
+			| 'copy'
 			| 'cut'
 			| 'delete'
 			| 'rename'
@@ -1205,6 +1274,11 @@ export function FileExplorerSidebar({
 				targetPath: node?.kind === 'directory' ? node.path : null,
 				type: 'createDirectory',
 			});
+			return;
+		}
+
+		if (action === 'copy' && node) {
+			onCopyNode(node);
 			return;
 		}
 
@@ -1296,7 +1370,6 @@ export function FileExplorerSidebar({
 						<ScrollArea
 							className="min-h-0 h-full flex-1 px-2"
 							data-native-dialog-scroll-lock
-							scrollFade
 						>
 							{mergedRoot ? (
 								<div className="space-y-1 py-2">
@@ -1357,11 +1430,6 @@ export function FileExplorerSidebar({
 			</aside>
 
 			<RenameNodeDialog
-				key={
-					pendingAction?.type === 'rename'
-						? pendingAction.node.path
-						: 'rename-closed'
-				}
 				busy={operationBusy === 'rename'}
 				node={pendingAction?.type === 'rename' ? pendingAction.node : null}
 				onClose={() => setPendingAction(null)}
@@ -1392,11 +1460,6 @@ export function FileExplorerSidebar({
 			/>
 
 			<CreateDirectoryDialog
-				key={
-					pendingAction?.type === 'createDirectory'
-						? (pendingAction.node?.path ?? 'create-directory-root')
-						: 'create-directory-closed'
-				}
 				busy={createBusy}
 				node={
 					pendingAction?.type === 'createDirectory'
@@ -1412,9 +1475,24 @@ export function FileExplorerSidebar({
 					const targetNode = pendingAction.node;
 
 					if (targetNode) {
-						setExpandedPaths((currentPaths) =>
-							new Set(currentPaths).add(targetNode.path)
-						);
+						setExpansionState((currentState) => {
+							const isCurrentRoot = currentState.rootPath === expansionRootPath;
+							const nextExpandedPaths = new Set(
+								isCurrentRoot ? currentState.expandedPaths : []
+							);
+							const nextCollapsedPaths = new Set(
+								isCurrentRoot ? currentState.collapsedPaths : []
+							);
+
+							nextExpandedPaths.add(targetNode.path);
+							nextCollapsedPaths.delete(targetNode.path);
+
+							return {
+								collapsedPaths: nextCollapsedPaths,
+								expandedPaths: nextExpandedPaths,
+								rootPath: expansionRootPath,
+							};
+						});
 					}
 
 					await onCreateDirectory(directoryName, pendingAction.targetPath);
@@ -1435,26 +1513,18 @@ export function FileExplorerSidebar({
 				}}
 			/>
 
-			<NativeDialog
-				onOpenChange={(open) => !open && setPendingAction(null)}
-				open={pendingAction?.type === 'restoreDeleted'}
-			>
-				<div className="flex min-h-0 flex-col">
-					<NativeDialogClose
-						className="absolute end-2 top-2"
-						onClick={() => setPendingAction(null)}
-					/>
-					<NativeDialogHeader>
-						<NativeDialogTitle>恢复已删除文件</NativeDialogTitle>
-						<NativeDialogDescription>
-							确认从 Git 恢复文件 “
-							{pendingAction?.type === 'restoreDeleted'
-								? pendingAction.node.name
-								: ''}
-							”？
-						</NativeDialogDescription>
-					</NativeDialogHeader>
-					<NativeDialogFooter>
+			<ExplorerDialogForm
+				description={
+					<>
+						确认从 Git 恢复文件 “
+						{pendingAction?.type === 'restoreDeleted'
+							? pendingAction.node.name
+							: ''}
+						”？
+					</>
+				}
+				footer={
+					<>
 						<Button
 							disabled={
 								operationBusy === 'delete' ||
@@ -1466,25 +1536,26 @@ export function FileExplorerSidebar({
 						>
 							取消
 						</Button>
-						<Button
-							disabled={operationBusy !== null}
-							onClick={() => {
-								if (pendingAction?.type !== 'restoreDeleted') {
-									return;
-								}
-
-								void onRestoreDeletedNode(pendingAction.node.path)
-									.then(() => {
-										setPendingAction(null);
-									})
-									.catch(() => {});
-							}}
-						>
+						<Button disabled={operationBusy !== null} type="submit">
 							恢复
 						</Button>
-					</NativeDialogFooter>
-				</div>
-			</NativeDialog>
+					</>
+				}
+				onOpenChange={(open) => !open && setPendingAction(null)}
+				onSubmit={(event) => {
+					event.preventDefault();
+
+					if (pendingAction?.type !== 'restoreDeleted') {
+						return;
+					}
+
+					void onRestoreDeletedNode(pendingAction.node.path)
+						.then(() => setPendingAction(null))
+						.catch(() => {});
+				}}
+				open={pendingAction?.type === 'restoreDeleted'}
+				title="恢复已删除文件"
+			/>
 		</>
 	);
 }

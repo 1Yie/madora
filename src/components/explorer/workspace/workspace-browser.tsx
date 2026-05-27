@@ -29,7 +29,7 @@ const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
 
-type ClipboardMode = 'cut';
+type ClipboardMode = 'copy' | 'cut';
 type WorkspaceOperation = 'create' | 'rename' | 'delete' | 'move' | null;
 
 function removeMarkdownDraftsFor(path: string): void {
@@ -820,6 +820,17 @@ export function WorkspaceBrowser() {
 		});
 	};
 
+	const copyNode = (node: ExplorerNode) => {
+		setClipboard({
+			item: {
+				name: node.name,
+				nodeKind: node.kind,
+				path: node.path,
+			},
+			mode: 'copy',
+		});
+	};
+
 	const pasteNode = async (destinationPath: string | null) => {
 		if (!root || !clipboard) {
 			return;
@@ -845,11 +856,16 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke('move_workspace_node', {
-				destinationDirectory,
-				rootPath: root.path,
-				sourcePath: clipboard.item.path,
-			});
+			await invoke(
+				clipboard.mode === 'copy'
+					? 'copy_workspace_node'
+					: 'move_workspace_node',
+				{
+					destinationDirectory,
+					rootPath: root.path,
+					sourcePath: clipboard.item.path,
+				}
+			);
 
 			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
 				rootPath: root.path,
@@ -1123,6 +1139,7 @@ export function WorkspaceBrowser() {
 					gitBusy={gitBusy}
 					gitStatus={gitStatus}
 					loadingPaths={loadingPaths}
+					onCopyNode={copyNode}
 					onCreateDirectory={createDirectory}
 					onCreateMarkdown={createMarkdownDocument}
 					onCutNode={cutNode}

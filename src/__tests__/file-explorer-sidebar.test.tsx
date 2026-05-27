@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import type { ExplorerNode } from '@/components/explorer/types';
@@ -73,6 +73,7 @@ function renderSidebar(props: SidebarProps = {}) {
 			operationBusy={null}
 			clipboard={null}
 			loadingPaths={emptyLoadingPaths}
+			onCopyNode={vi.fn()}
 			onCreateMarkdown={vi.fn()}
 			onCreateDirectory={vi.fn()}
 			onCutNode={vi.fn()}
@@ -122,5 +123,55 @@ describe('FileExplorerSidebar', () => {
 		};
 		renderSidebar({ root: emptyRoot });
 		expect(screen.getByText('未找到文件')).toBeInTheDocument();
+	});
+
+	it('allows collapsing the root directory even when a child is selected', () => {
+		renderSidebar({ selectedPath: '/workspace/readme.md' });
+
+		let collapsed = false;
+
+		for (const button of screen.getAllByLabelText('收起 workspace')) {
+			fireEvent.click(button);
+
+			if (screen.queryAllByText('readme.md').length === 0) {
+				collapsed = true;
+				break;
+			}
+		}
+
+		expect(collapsed).toBe(true);
+		expect(screen.getAllByLabelText('展开 workspace').length).toBeGreaterThan(
+			0
+		);
+		expect(screen.queryAllByText('readme.md')).toHaveLength(0);
+		expect(screen.queryAllByText('notes.txt')).toHaveLength(0);
+	});
+
+	it('hides paste action when clipboard is empty', async () => {
+		renderSidebar();
+
+		fireEvent.contextMenu(screen.getByRole('button', { name: 'readme.md' }));
+
+		expect(await screen.findByText('复制')).toBeInTheDocument();
+		expect(screen.getByText('剪切')).toBeInTheDocument();
+		expect(screen.queryByText('粘贴到此处')).not.toBeInTheDocument();
+	});
+
+	it('shows paste action only after copy or cut', async () => {
+		renderSidebar({
+			clipboard: {
+				item: {
+					name: 'notes.txt',
+					nodeKind: 'file',
+					path: '/workspace/notes.txt',
+				},
+				mode: 'copy',
+			},
+		});
+
+		fireEvent.contextMenu(screen.getByRole('button', { name: 'readme.md' }));
+
+		expect(await screen.findByText('粘贴到此处')).toBeInTheDocument();
+		expect(screen.getByText('已复制: notes.txt')).toBeInTheDocument();
 	});
 });

@@ -28,6 +28,7 @@ pub fn run() {
             explorer::rename_workspace_node,
             explorer::delete_workspace_node,
             explorer::move_workspace_node,
+            explorer::copy_workspace_node,
             git::git_status,
             git::git_init,
             git::git_set_remote,

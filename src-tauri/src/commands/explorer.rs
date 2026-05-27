@@ -150,3 +150,20 @@ pub async fn move_workspace_node(
     .await
     .map_err(|error| error.to_string())?
 }
+
+#[tauri::command]
+pub async fn copy_workspace_node(
+    root_path: String,
+    source_path: String,
+    destination_directory: String,
+) -> Result<(), String> {
+    let root_path = PathBuf::from(root_path);
+    let source_path = PathBuf::from(source_path);
+    let destination_directory = PathBuf::from(destination_directory);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        explorer::copy_workspace_node(&root_path, &source_path, &destination_directory)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
