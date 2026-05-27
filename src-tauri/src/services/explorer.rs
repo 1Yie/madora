@@ -879,7 +879,7 @@ mod tests {
         let source_directory = root.join("assets/icons");
         let destination_directory = root.join("archive");
         let source_file = source_directory.join("logo.svg");
-        let copied_file = destination_directory.join("icons/logo.svg");
+        let copied_file = destination_directory.join("assets/icons/logo.svg");
 
         std::fs::create_dir_all(&source_directory).unwrap();
         std::fs::create_dir_all(&destination_directory).unwrap();

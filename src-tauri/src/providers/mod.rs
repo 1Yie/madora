@@ -26,6 +26,7 @@ const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
 
 #[async_trait]
 pub trait CompletionProvider: Send + Sync {
+    #[allow(dead_code)]
     fn provider(&self) -> AiProvider;
 
     async fn request_fim_completion(
