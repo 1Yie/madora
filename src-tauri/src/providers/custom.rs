@@ -6,7 +6,9 @@ use crate::{
     prompt::PromptManager,
     providers::{
         anthropic::request_anthropic_compatible_fim,
+        anthropic::request_anthropic_compatible_fim_stream,
         openai::request_openai_compatible_fim,
+        openai::request_openai_compatible_fim_stream,
         CompletionProvider,
     },
 };
@@ -33,6 +35,38 @@ impl CompletionProvider for CustomProvider {
             }
             CustomProviderProtocol::OpenAi => {
                 request_openai_compatible_fim(client, prompt_manager, config, request).await
+            }
+        }
+    }
+
+    async fn request_fim_completion_stream(
+        &self,
+        client: &Client,
+        prompt_manager: &PromptManager,
+        config: &AiCompletionConfig,
+        request: &CompletionRequest,
+        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
+    ) -> Result<String, String> {
+        match config.custom_protocol.unwrap_or_default() {
+            CustomProviderProtocol::Anthropic => {
+                request_anthropic_compatible_fim_stream(
+                    client,
+                    prompt_manager,
+                    config,
+                    request,
+                    on_chunk,
+                )
+                .await
+            }
+            CustomProviderProtocol::OpenAi => {
+                request_openai_compatible_fim_stream(
+                    client,
+                    prompt_manager,
+                    config,
+                    request,
+                    on_chunk,
+                )
+                .await
             }
         }
     }

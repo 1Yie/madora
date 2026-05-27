@@ -36,6 +36,25 @@ pub trait CompletionProvider: Send + Sync {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String>;
+
+    async fn request_fim_completion_stream(
+        &self,
+        client: &Client,
+        prompt_manager: &PromptManager,
+        config: &AiCompletionConfig,
+        request: &CompletionRequest,
+        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
+    ) -> Result<String, String> {
+        let text = self
+            .request_fim_completion(client, prompt_manager, config, request)
+            .await?;
+
+        if !text.is_empty() {
+            on_chunk(text.clone())?;
+        }
+
+        Ok(text)
+    }
 }
 
 static ANTHROPIC_PROVIDER: anthropic::AnthropicProvider = anthropic::AnthropicProvider;

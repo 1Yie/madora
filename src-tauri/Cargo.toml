@@ -1,6 +1,6 @@
 [package]
 name = "madora"
-version = "0.1.9"
+version = "0.2.0"
 description = "Markdown editing, powered by AI"
 authors = ["ichiyo"]
 edition = "2021"
@@ -26,8 +26,9 @@ serde_json = "1"
 ignore = "0.4.25"
 base64 = "0.22"
 rfd = { version = "0.15.4", default-features = false, features = ["xdg-portal", "tokio"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
 chrono = "0.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
@@ -44,6 +45,7 @@ winreg = "0.10"
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"
+
 
 
 

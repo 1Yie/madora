@@ -1,5 +1,6 @@
+use futures_util::StreamExt;
+use reqwest::Response;
 use serde::Deserialize;
-
 
 use crate::{
     models::ai::{AiCompletionConfig, CompletionRequest},
@@ -34,6 +35,12 @@ pub struct ChatCompletionChoice {
 #[derive(Deserialize)]
 pub struct ChatCompletionResponse {
     pub choices: Option<Vec<ChatCompletionChoice>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SseEvent {
+    pub data: String,
+    pub event: Option<String>,
 }
 
 pub fn trim_trailing_slash(url: &str) -> &str {
@@ -162,6 +169,103 @@ pub fn take_chat_completion(payload: ChatCompletionResponse) -> String {
         .and_then(|choice| choice.message)
         .and_then(|message| message.content)
         .unwrap_or_default()
+}
+
+fn take_next_sse_block(buffer: &mut String) -> Option<String> {
+    let (separator_index, separator_len) = ["\r\n\r\n", "\n\n", "\r\r"]
+        .into_iter()
+        .filter_map(|separator| buffer.find(separator).map(|index| (index, separator.len())))
+        .min_by_key(|(index, _)| *index)?;
+    let raw_event = buffer[..separator_index].to_string();
+    *buffer = buffer[separator_index + separator_len..].to_string();
+
+    Some(raw_event)
+}
+
+fn parse_sse_event(raw_event: &str) -> Option<SseEvent> {
+    let mut data_lines = Vec::new();
+    let mut event = None;
+
+    for line in raw_event.lines() {
+        if line.starts_with(':') {
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("event:") {
+            event = Some(value.trim().to_string());
+            continue;
+        }
+
+        if let Some(value) = line.strip_prefix("data:") {
+            data_lines.push(value.trim_start().to_string());
+        }
+    }
+
+    if data_lines.is_empty() && event.is_none() {
+        return None;
+    }
+
+    Some(SseEvent {
+        data: data_lines.join("\n"),
+        event,
+    })
+}
+
+pub async fn stream_sse_response(
+    response: Response,
+    mut on_event: impl FnMut(SseEvent) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut buffer = String::new();
+    let mut pending_bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| format!("读取流式响应失败: {error}"))?;
+        pending_bytes.extend_from_slice(&chunk);
+
+        loop {
+            match std::str::from_utf8(&pending_bytes) {
+                Ok(text) => {
+                    buffer.push_str(text);
+                    pending_bytes.clear();
+                    break;
+                }
+                Err(error) if error.error_len().is_none() => {
+                    let valid_up_to = error.valid_up_to();
+                    if valid_up_to > 0 {
+                        let valid_text = std::str::from_utf8(&pending_bytes[..valid_up_to])
+                            .map_err(|parse_error| format!("解析流式响应失败: {parse_error}"))?;
+                        buffer.push_str(valid_text);
+                        pending_bytes.drain(..valid_up_to);
+                    }
+                    break;
+                }
+                Err(error) => {
+                    return Err(format!("解析流式响应失败: {error}"));
+                }
+            }
+        }
+
+        while let Some(raw_event) = take_next_sse_block(&mut buffer) {
+            if let Some(event) = parse_sse_event(&raw_event) {
+                on_event(event)?;
+            }
+        }
+    }
+
+    if !pending_bytes.is_empty() {
+        let text =
+            std::str::from_utf8(&pending_bytes).map_err(|error| format!("解析流式响应失败: {error}"))?;
+        buffer.push_str(text);
+    }
+
+    if !buffer.trim().is_empty() {
+        if let Some(event) = parse_sse_event(&buffer) {
+            on_event(event)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -523,5 +627,27 @@ mod tests {
         // Verify the default provider is DeepSeek via Default impl
         let config = AiCompletionConfig::default();
         assert_eq!(config.provider, None);
+    }
+
+    #[test]
+    fn take_next_sse_block_normalizes_crlf() {
+        let mut buffer = "data: first\r\n\r\ndata: second\r\n\r\n".to_string();
+
+        assert_eq!(take_next_sse_block(&mut buffer), Some("data: first".to_string()));
+        assert_eq!(take_next_sse_block(&mut buffer), Some("data: second".to_string()));
+        assert_eq!(take_next_sse_block(&mut buffer), None);
+    }
+
+    #[test]
+    fn parse_sse_event_collects_multiline_data() {
+        let event = parse_sse_event("event: delta\ndata: hello\ndata: world").unwrap();
+
+        assert_eq!(event.event, Some("delta".to_string()));
+        assert_eq!(event.data, "hello\nworld");
+    }
+
+    #[test]
+    fn parse_sse_event_ignores_comment_only_payload() {
+        assert_eq!(parse_sse_event(": keep-alive"), None);
     }
 }

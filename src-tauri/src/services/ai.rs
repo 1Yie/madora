@@ -5,6 +5,7 @@ use std::{
 };
 
 use reqwest::Client;
+use tauri::ipc::Channel;
 use tokio::sync::Notify;
 
 use crate::{
@@ -179,6 +180,16 @@ fn cache_completion(service: &AiCompletionService, cache_key: CompletionCacheKey
     cleanup_completion_cache(&mut cache);
 }
 
+fn send_completion_chunk(channel: &Channel<String>, chunk: String) -> Result<(), String> {
+    if chunk.is_empty() {
+        return Ok(());
+    }
+
+    channel
+        .send(chunk)
+        .map_err(|error| format!("发送补全片段失败: {error}"))
+}
+
 fn resolve_cache_api_url(provider: AiProvider, config: &AiCompletionConfig) -> String {
     let api_url = config
         .api_url
@@ -261,6 +272,69 @@ pub async fn generate_completion(
     in_flight.remove(&cache_key);
 
     result.map(|text| CompletionResult { text })
+}
+
+pub async fn generate_completion_stream(
+    service: &AiCompletionService,
+    config: &AiCompletionConfig,
+    request: &CompletionRequest,
+    channel: Channel<String>,
+) -> Result<(), String> {
+    let cache_key = build_completion_cache_key(config, request);
+
+    if let Some(text) = get_cached_completion(service, &cache_key) {
+        send_completion_chunk(&channel, text)?;
+        return Ok(());
+    }
+
+    let (in_flight_request, is_leader) = {
+        let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
+
+        if let Some(in_flight_request) = in_flight.get(&cache_key) {
+            (in_flight_request.clone(), false)
+        } else {
+            let in_flight_request = Arc::new(InFlightCompletionRequest {
+                notify: Notify::new(),
+                result: Mutex::new(None),
+            });
+
+            in_flight.insert(cache_key.clone(), in_flight_request.clone());
+            (in_flight_request, true)
+        }
+    };
+
+    if !is_leader {
+        let text = wait_for_in_flight_completion_request(&in_flight_request).await?;
+        send_completion_chunk(&channel, text)?;
+        return Ok(());
+    }
+
+    let provider = get_provider(resolve_provider(config));
+    let result = provider
+        .request_fim_completion_stream(
+            &service.client,
+            &service.prompt_manager,
+            config,
+            request,
+            &mut |chunk| send_completion_chunk(&channel, chunk),
+        )
+        .await;
+
+    if let Ok(text) = result.as_ref() {
+        cache_completion(service, cache_key.clone(), text.clone());
+    }
+
+    {
+        let mut shared_result = lock_unpoisoned(&in_flight_request.result);
+        *shared_result = Some(result.clone());
+    }
+
+    in_flight_request.notify.notify_waiters();
+
+    let mut in_flight = lock_unpoisoned(&service.completion_in_flight);
+    in_flight.remove(&cache_key);
+
+    result.map(|_| ())
 }
 
 #[cfg(test)]

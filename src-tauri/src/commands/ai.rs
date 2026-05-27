@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::{LazyLock, Mutex}};
 
-use tauri::State;
+use tauri::{ipc::Channel, State};
 
 use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
@@ -49,6 +49,19 @@ pub async fn generate_completion(
     config.api_key = require_api_key(provider)?;
 
     ai::generate_completion(service.inner(), &config, &request).await
+}
+
+#[tauri::command]
+pub async fn generate_completion_stream(
+    service: State<'_, ai::AiCompletionService>,
+    mut config: AiCompletionConfig,
+    request: CompletionRequest,
+    channel: Channel<String>,
+) -> Result<(), String> {
+    let provider = config.provider.unwrap_or_default();
+    config.api_key = require_api_key(provider)?;
+
+    ai::generate_completion_stream(service.inner(), &config, &request, channel).await
 }
 
 #[cfg(test)]
