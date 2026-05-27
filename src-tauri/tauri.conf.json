@@ -38,9 +38,11 @@
 				"files": {}
 			},
 			"deb": {
+				"desktopTemplate": "madora.desktop",
 				"files": {}
 			},
 			"rpm": {
+				"desktopTemplate": "madora.desktop",
 				"epoch": 0,
 				"files": {},
 				"release": "1"
@@ -51,5 +53,5 @@
 	},
 	"identifier": "in.ichiyo.madora",
 	"productName": "Madora",
-	"version": "0.1.9"
+	"version": "0.2.0"
 }
