@@ -8,7 +8,10 @@ use reqwest::Client;
 use tokio::sync::Notify;
 
 use crate::{
-    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
+    models::ai::{
+        AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult,
+        CustomProviderProtocol,
+    },
     prompt::PromptManager,
     providers::{default_api_url, default_model, get_provider},
 };
@@ -27,6 +30,7 @@ pub struct AiCompletionService {
 #[derive(Clone, Eq, Hash, PartialEq)]
 struct CompletionCacheKey {
     api_url: String,
+    custom_protocol: Option<CustomProviderProtocol>,
     model: String,
     prefix: String,
     provider: AiProvider,
@@ -103,11 +107,23 @@ fn build_completion_cache_key(
 
     CompletionCacheKey {
         api_url: resolve_cache_api_url(provider, config),
+        custom_protocol: resolve_cache_custom_protocol(provider, config),
         model: resolve_cache_model(provider, config),
         prefix: truncate_suffix_for_cache(&request.prefix),
         provider,
         suffix: request.suffix.as_deref().map(|s| truncate_suffix_for_cache(s)),
     }
+}
+
+fn resolve_cache_custom_protocol(
+    provider: AiProvider,
+    config: &AiCompletionConfig,
+) -> Option<CustomProviderProtocol> {
+    if provider == AiProvider::Custom {
+        return Some(config.custom_protocol.unwrap_or_default());
+    }
+
+    None
 }
 
 fn truncate_suffix_for_cache(value: &str) -> String {

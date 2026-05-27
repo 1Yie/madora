@@ -35,6 +35,7 @@ import {
 import { useAiSettings } from '@/components/system/ai-settings-provider';
 import { useTheme } from '@/components/system/theme-provider';
 import { Spinner } from '@/components/ui/spinner';
+import { showErrorToast } from '@/components/ui/toast';
 
 type UseEditorOptions = {
 	onChange?: (value: string) => void;
@@ -174,34 +175,48 @@ function getContinuedCompletionPreview(
 		return null;
 	}
 
-	let nextPreview: CompletionPreviewState | null = null;
+	let nextPreview: CompletionPreviewState | null = preview;
 
 	transaction.changes.iterChanges((fromA, toA, _fromB, toB, inserted) => {
+		if (!nextPreview) {
+			return;
+		}
+
 		const insertedText = inserted.toString();
 
-		if (toA <= preview.pos) {
-			const offset = insertedText.length - (toA - fromA);
-			nextPreview = { pos: preview.pos + offset, text: preview.text };
-			return;
-		}
-		if (fromA >= preview.pos + preview.text.length) {
-			nextPreview = preview;
-			return;
-		}
 		if (
-			fromA === preview.pos &&
-			toA === preview.pos &&
-			insertedText.length > 0
+			fromA === nextPreview.pos &&
+			toA === nextPreview.pos &&
+			insertedText.length > 0 &&
+			nextPreview.text.startsWith(insertedText)
 		) {
-			const remainingText = preview.text.slice(insertedText.length);
+			const remainingText = nextPreview.text.slice(insertedText.length);
 			nextPreview =
 				remainingText.length === 0 ? null : { pos: toB, text: remainingText };
 			return;
 		}
+
+		logCompletionDebug('preview-drop:doc-change');
 		nextPreview = null;
 	});
 
 	return nextPreview;
+}
+
+function transactionHasDeletion(transaction: Transaction): boolean {
+	let hasDeletion = false;
+
+	transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+		if (hasDeletion) {
+			return;
+		}
+
+		if (toA - fromA > inserted.length) {
+			hasDeletion = true;
+		}
+	});
+
+	return hasDeletion;
 }
 
 const internalCompletionEffect = StateEffect.define<true>();
@@ -591,6 +606,7 @@ export function useEditor({
 	const completionCacheRef = useRef<CompletionCacheEntry | null>(null);
 	const aiSettingsRef = useRef({
 		apiUrl: '',
+		customProtocol: 'openai' as 'anthropic' | 'openai',
 		enabled: true,
 		hasApiKey: false,
 		model: '',
@@ -601,7 +617,8 @@ export function useEditor({
 		tone: 'muted',
 	});
 
-	const { apiUrl, enabled, hasApiKey, model, provider } = useAiSettings();
+	const { apiUrl, customProtocol, enabled, hasApiKey, model, provider } =
+		useAiSettings();
 
 	const { resolvedTheme } = useTheme();
 
@@ -791,6 +808,8 @@ export function useEditor({
 						config: {
 							apiUrl:
 								settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
+							customProtocol:
+								settings.provider === 'custom' ? settings.customProtocol : null,
 							model: settings.model.trim().length > 0 ? settings.model : null,
 							provider: settings.provider,
 						},
@@ -848,8 +867,12 @@ export function useEditor({
 				);
 			} catch (error) {
 				if (requestId !== requestSequenceRef.current) return;
+				const errorMessage = getErrorMessage(error);
 				clearCompletionPreview();
-				setCompletionStatus({ message: getErrorMessage(error), tone: 'error' });
+				showErrorToast('AI 补全失败', errorMessage, {
+					descriptionStyle: 'code',
+				});
+				setCompletionStatus({ message: errorMessage, tone: 'error' });
 			} finally {
 				const wasPending =
 					pendingRequestRef.current?.requestSequence === requestId;
@@ -962,6 +985,7 @@ export function useEditor({
 	useEffect(() => {
 		aiSettingsRef.current = {
 			apiUrl,
+			customProtocol,
 			enabled,
 			hasApiKey,
 			model,
@@ -979,7 +1003,7 @@ export function useEditor({
 			hasApiKey
 		);
 		syncTooltip();
-	}, [apiUrl, enabled, hasApiKey, model, provider]);
+	}, [apiUrl, customProtocol, enabled, hasApiKey, model, provider]);
 
 	// resolvedTheme 变化时热更新编辑器主题
 	useEffect(() => {
@@ -1055,9 +1079,21 @@ export function useEditor({
 						const compositionInputUpdate = isCompositionInputUpdate(update);
 						const internalUpdate = isInternalCompletionUpdate(update);
 						const externalSyncUpdate = isExternalSyncUpdate(update);
+						const hasDeletionInput =
+							update.docChanged &&
+							update.transactions.some((tr) => transactionHasDeletion(tr));
 
 						if (update.docChanged && !externalSyncUpdate) {
 							handleChange(update.state.doc.toString());
+						}
+
+						if (
+							!internalUpdate &&
+							!externalSyncUpdate &&
+							hasDeletionInput &&
+							!compositionInputUpdate
+						) {
+							abortAllCompletion();
 						}
 
 						if (
@@ -1098,7 +1134,9 @@ export function useEditor({
 								tr.isUserEvent('input')
 							);
 							if (isUserInput && !compositionInputUpdate) {
-								scheduleCompletionRequest(update.view);
+								if (!hasDeletionInput) {
+									scheduleCompletionRequest(update.view);
+								}
 								scrollParentToCursor(
 									update.view,
 									update.view.state.selection.main.head

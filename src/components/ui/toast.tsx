@@ -8,8 +8,8 @@ import {
 	LoaderCircleIcon,
 	TriangleAlertIcon,
 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import type React from 'react';
-import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -52,49 +52,154 @@ function upsertReplayClassName(toast: {
 	return isEven ? 'animate-toast-success-even' : 'animate-toast-success-odd';
 }
 
-function getTopNativeDialogHost(): HTMLDialogElement | null {
-	const dialogs = Array.from(
-		document.querySelectorAll<HTMLDialogElement>(
-			"dialog[data-native-dialog-host='true']"
-		)
+function hasToastDescription(description?: React.ReactNode): boolean {
+	return (
+		description !== undefined && description !== null && description !== ''
 	);
+}
 
-	for (let index = dialogs.length - 1; index >= 0; index -= 1) {
-		const dialog = dialogs[index];
+type ErrorToastDescriptionStyle = 'default' | 'code';
 
-		if (dialog.open) {
-			return dialog;
+type ToastData = {
+	descriptionStyle?: ErrorToastDescriptionStyle;
+	tooltipStyle?: boolean;
+};
+
+function ErrorToastDescription({
+	description,
+}: {
+	description: React.ReactNode;
+}): React.ReactElement {
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const dragStateRef = useRef<{
+		pointerId: number;
+		startScrollLeft: number;
+		startX: number;
+	} | null>(null);
+	const [isDragging, setIsDragging] = useState(false);
+
+	const stopDragging = () => {
+		dragStateRef.current = null;
+		setIsDragging(false);
+	};
+
+	const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (event.button !== 0) {
+			return;
 		}
+
+		const viewport = containerRef.current;
+		if (!viewport || viewport.scrollWidth <= viewport.clientWidth) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		dragStateRef.current = {
+			pointerId: event.pointerId,
+			startScrollLeft: viewport.scrollLeft,
+			startX: event.clientX,
+		};
+		event.currentTarget.setPointerCapture(event.pointerId);
+	};
+
+	const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const dragState = dragStateRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		const viewport = containerRef.current;
+		if (!viewport) {
+			stopDragging();
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		const deltaX = event.clientX - dragState.startX;
+		if (!isDragging && Math.abs(deltaX) > 3) {
+			setIsDragging(true);
+		}
+		viewport.scrollLeft = dragState.startScrollLeft - deltaX;
+	};
+
+	const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (
+			dragStateRef.current?.pointerId === event.pointerId &&
+			event.currentTarget.hasPointerCapture(event.pointerId)
+		) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		stopDragging();
+	};
+
+	return (
+		<>
+			<Toast.Description className="sr-only" data-slot="toast-description" />
+			<div
+				ref={containerRef}
+				className="mt-1 max-w-full overflow-x-auto overflow-y-hidden rounded-md
+					border border-border/80 bg-muted/60 overscroll-x-contain
+					[scrollbar-width:thin]
+					[scrollbar-color:var(--color-border)_transparent]
+					[&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:bg-transparent
+					[&::-webkit-scrollbar-thumb]:rounded-full
+					[&::-webkit-scrollbar-thumb]:border-t-4
+					[&::-webkit-scrollbar-thumb]:border-solid
+					[&::-webkit-scrollbar-thumb]:border-transparent
+					[&::-webkit-scrollbar-thumb]:bg-clip-padding
+					[&::-webkit-scrollbar-thumb]:bg-border/80
+					hover:[&::-webkit-scrollbar-thumb]:bg-border"
+				onWheelCapture={(event) => event.stopPropagation()}
+			>
+				<div
+					className={cn(
+						`min-w-max whitespace-pre px-2.5 py-2 font-mono text-[11px]
+						leading-5 text-foreground`,
+						isDragging
+							? 'cursor-grabbing select-none'
+							: 'cursor-grab select-none'
+					)}
+					onLostPointerCapture={stopDragging}
+					onPointerCancel={handlePointerUp}
+					onPointerDown={handlePointerDown}
+					onPointerMove={handlePointerMove}
+					onPointerUp={handlePointerUp}
+				>
+					{description}
+				</div>
+			</div>
+		</>
+	);
+}
+
+function renderToastDescription(toast: {
+	description?: React.ReactNode;
+	data?: unknown;
+	type?: string;
+}): React.ReactNode {
+	if (!hasToastDescription(toast.description)) {
+		return null;
 	}
 
-	return null;
+	const descriptionStyle =
+		(toast.data as ToastData | undefined)?.descriptionStyle ?? 'default';
+
+	if (toast.type !== 'error' || descriptionStyle !== 'code') {
+		return (
+			<Toast.Description
+				className="text-muted-foreground"
+				data-slot="toast-description"
+			/>
+		);
+	}
+
+	return <ErrorToastDescription description={toast.description} />;
 }
 
 function useToastPortalContainer() {
-	const [container, setContainer] = useState<HTMLElement | null>(null);
-
-	useEffect(() => {
-		const syncContainer = () => {
-			setContainer(getTopNativeDialogHost() ?? document.body);
-		};
-
-		syncContainer();
-
-		const observer = new MutationObserver(syncContainer);
-
-		observer.observe(document.body, {
-			attributes: true,
-			attributeFilter: ['open'],
-			childList: true,
-			subtree: true,
-		});
-
-		return () => {
-			observer.disconnect();
-		};
-	}, []);
-
-	return container;
+	return document.body;
 }
 
 function Toasts({
@@ -105,7 +210,6 @@ function Toasts({
 	portalProps?: React.ComponentProps<typeof Toast.Portal>;
 }): React.ReactElement {
 	const { toasts } = Toast.useToastManager();
-	const swipeDirection = getSwipeDirection(position);
 	const container = useToastPortalContainer();
 
 	return (
@@ -200,16 +304,19 @@ function Toasts({
 								upsertReplayClassName(toast)
 							)}
 							data-position={position}
-							swipeDirection={swipeDirection}
+							swipeDirection={getSwipeDirection(position)}
 							toast={toast}
 						>
 							<Toast.Content
-								className="pointer-events-auto flex items-center justify-between
-									gap-1.5 overflow-hidden px-3.5 py-3 text-sm transition-opacity
+								className={cn(
+									`pointer-events-auto flex justify-between gap-1.5
+									overflow-hidden px-3.5 py-3 text-sm transition-opacity
 									duration-250 data-behind:not-data-expanded:pointer-events-none
-									data-behind:opacity-0 data-expanded:opacity-100"
+									data-behind:opacity-0 data-expanded:opacity-100`,
+									toast.type === 'error' ? 'items-start' : 'items-center'
+								)}
 							>
-								<div className="flex gap-2">
+								<div className="flex min-w-0 flex-1 gap-2">
 									{Icon && (
 										<div
 											className="[&>svg]:h-lh [&>svg]:w-4
@@ -227,15 +334,12 @@ function Toasts({
 										</div>
 									)}
 
-									<div className="flex flex-col gap-0.5">
+									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<Toast.Title
 											className="font-medium"
 											data-slot="toast-title"
 										/>
-										<Toast.Description
-											className="text-muted-foreground"
-											data-slot="toast-description"
-										/>
+										{renderToastDescription(toast)}
 									</div>
 								</div>
 								{toast.actionProps && (
@@ -314,11 +418,13 @@ function AnchoredToasts({
 									</Toast.Content>
 								) : (
 									<Toast.Content
-										className="pointer-events-auto flex items-center
-											justify-between gap-1.5 overflow-hidden px-3.5 py-3
-											text-sm"
+										className={cn(
+											`pointer-events-auto flex justify-between gap-1.5
+												overflow-hidden px-3.5 py-3 text-sm`,
+											toast.type === 'error' ? 'items-start' : 'items-center'
+										)}
 									>
-										<div className="flex gap-2">
+										<div className="flex min-w-0 flex-1 gap-2">
 											{Icon && (
 												<div
 													className="[&>svg]:h-lh [&>svg]:w-4
@@ -336,15 +442,12 @@ function AnchoredToasts({
 												</div>
 											)}
 
-											<div className="flex flex-col gap-0.5">
+											<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 												<Toast.Title
 													className="font-medium"
 													data-slot="toast-title"
 												/>
-												<Toast.Description
-													className="text-muted-foreground"
-													data-slot="toast-description"
-												/>
+												{renderToastDescription(toast)}
 											</div>
 										</div>
 										{toast.actionProps && (
@@ -374,9 +477,15 @@ export const anchoredToastManager: ReturnType<typeof Toast.createToastManager> =
 
 export function showErrorToast(
 	title: React.ReactNode,
-	description?: React.ReactNode
+	description?: React.ReactNode,
+	options?: {
+		descriptionStyle?: ErrorToastDescriptionStyle;
+	}
 ): string {
 	return toastManager.add({
+		data: options?.descriptionStyle
+			? { descriptionStyle: options.descriptionStyle }
+			: undefined,
 		description,
 		priority: 'high',
 		title,

@@ -39,66 +39,75 @@ impl CompletionProvider for AnthropicProvider {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String> {
-        let provider = self.provider();
-        let api_key = resolve_api_key(config)?;
-        let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
-        let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
-        let prompt_context = build_prompt_context(request);
-        let system_prompt =
-            prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
-        let user_prompt =
-            prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
-
-        let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
-        let (max_tokens, temperature) = if has_suffix {
-            (MAX_COMPLETION_TOKENS, 0.3)
-        } else {
-            (64usize, 0.2)
-        };
-
-        let response = client
-            .post(join_url(&api_url, "/v1/messages"))
-            .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .header("x-api-key", api_key)
-            .json(&json!({
-                "model": model,
-                "system": system_prompt,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": user_prompt,
-                    }
-                ],
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "stop_sequences": STOP_SEQUENCES,
-            }))
-            .send()
-            .await
-            .map_err(|error| format!("调用 {} completion 失败: {error}", provider.display_name()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "无法读取错误详情".to_string());
-
-            return Err(format!(
-                "{} completion API error ({status}): {body}",
-                provider.display_name()
-            ));
-        }
-
-        let payload = response
-            .json::<AnthropicMessageResponse>()
-            .await
-            .map_err(|error| format!("解析 {} 响应失败: {error}", provider.display_name()))?;
-
-        Ok(payload
-            .content
-            .and_then(|content| content.into_iter().next())
-            .and_then(|block| block.text)
-            .unwrap_or_default())
+        request_anthropic_compatible_fim(client, prompt_manager, config, request).await
     }
+}
+
+pub(crate) async fn request_anthropic_compatible_fim(
+    client: &Client,
+    prompt_manager: &PromptManager,
+    config: &AiCompletionConfig,
+    request: &CompletionRequest,
+) -> Result<String, String> {
+    let provider = config.provider.unwrap_or(AiProvider::Anthropic);
+    let api_key = resolve_api_key(config)?;
+    let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
+    let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
+    let prompt_context = build_prompt_context(request);
+    let system_prompt =
+        prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
+    let user_prompt =
+        prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
+
+    let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let (max_tokens, temperature) = if has_suffix {
+        (MAX_COMPLETION_TOKENS, 0.3)
+    } else {
+        (64usize, 0.2)
+    };
+
+    let response = client
+        .post(join_url(&api_url, "/v1/messages"))
+        .header("anthropic-version", ANTHROPIC_API_VERSION)
+        .header("x-api-key", api_key)
+        .json(&json!({
+            "model": model,
+            "system": system_prompt,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stop_sequences": STOP_SEQUENCES,
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("调用 {} completion 失败: {error}", provider.display_name()))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "无法读取错误详情".to_string());
+
+        return Err(format!(
+            "{} completion API error ({status}): {body}",
+            provider.display_name()
+        ));
+    }
+
+    let payload = response
+        .json::<AnthropicMessageResponse>()
+        .await
+        .map_err(|error| format!("解析 {} 响应失败: {error}", provider.display_name()))?;
+
+    Ok(payload
+        .content
+        .and_then(|content| content.into_iter().next())
+        .and_then(|block| block.text)
+        .unwrap_or_default())
 }

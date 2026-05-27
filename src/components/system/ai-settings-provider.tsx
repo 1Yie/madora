@@ -18,8 +18,11 @@ export type AiProvider =
 	| 'kimi'
 	| 'openai';
 
+export type CustomProviderProtocol = 'anthropic' | 'openai';
+
 type ProviderConfig = {
 	apiUrl: string;
+	customProtocol: CustomProviderProtocol;
 	model: string;
 };
 
@@ -35,6 +38,7 @@ type AiSettingsContextValue = ProviderConfig & {
 	deleteApiKey: () => Promise<void>;
 	saveApiKey: (apiKey: string) => Promise<void>;
 	setApiUrl: (apiUrl: string) => void;
+	setCustomProtocol: (protocol: CustomProviderProtocol) => void;
 	setEnabled: (enabled: boolean) => void;
 	setModel: (model: string) => void;
 	setProvider: (provider: AiProvider) => void;
@@ -80,7 +84,7 @@ const PROVIDERS: ProviderDefinition[] = [
 		label: 'Kimi',
 	},
 	{
-		description: '自定义 OpenAI 兼容接口。',
+		description: '自定义 OpenAI / Anthropic 兼容接口。',
 		defaultApiUrl: '',
 		defaultModel: '',
 		key: 'custom',
@@ -93,6 +97,8 @@ const AI_COMPLETION_ENABLED_STORAGE_KEY = 'madora-ai-completion-enabled';
 const AI_COMPLETION_PROVIDER_STORAGE_KEY = 'madora-ai-provider';
 const AI_COMPLETION_API_KEY_STORAGE_KEY = 'madora-ai-completion-api-key';
 const AI_COMPLETION_API_URL_STORAGE_KEY = 'madora-ai-completion-api-url';
+const AI_COMPLETION_CUSTOM_PROTOCOL_STORAGE_KEY =
+	'madora-ai-completion-custom-protocol';
 const AI_COMPLETION_MODEL_STORAGE_KEY = 'madora-ai-completion-model';
 const EDITOR_SAVE_MODE_STORAGE_KEY = 'madora-editor-save-mode';
 const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY =
@@ -114,6 +120,12 @@ function getProviderDefinition(provider: AiProvider): ProviderDefinition {
 
 function getProviderStorageKey(baseKey: string, provider: AiProvider) {
 	return `${baseKey}:${provider}`;
+}
+
+function isCustomProviderProtocol(
+	value: string | null
+): value is CustomProviderProtocol {
+	return value === 'anthropic' || value === 'openai';
 }
 
 function getProviderKeys(): AiProvider[] {
@@ -189,6 +201,7 @@ function getDefaultProviderConfig(provider: AiProvider): ProviderConfig {
 
 	return {
 		apiUrl: definition.defaultApiUrl,
+		customProtocol: provider === 'anthropic' ? 'anthropic' : 'openai',
 		model: definition.defaultModel,
 	};
 }
@@ -205,6 +218,18 @@ function readProviderConfig(provider: AiProvider): ProviderConfig {
 			getStoredValue(
 				getProviderStorageKey(AI_COMPLETION_API_URL_STORAGE_KEY, provider)
 			) ?? defaultConfig.apiUrl,
+		customProtocol: (() => {
+			const storedValue = getStoredValue(
+				getProviderStorageKey(
+					AI_COMPLETION_CUSTOM_PROTOCOL_STORAGE_KEY,
+					provider
+				)
+			);
+
+			return isCustomProviderProtocol(storedValue)
+				? storedValue
+				: defaultConfig.customProtocol;
+		})(),
 		model:
 			getStoredValue(
 				getProviderStorageKey(AI_COMPLETION_MODEL_STORAGE_KEY, provider)
@@ -381,6 +406,13 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 				config.apiUrl
 			);
 			window.localStorage.setItem(
+				getProviderStorageKey(
+					AI_COMPLETION_CUSTOM_PROTOCOL_STORAGE_KEY,
+					providerKey
+				),
+				config.customProtocol
+			);
+			window.localStorage.setItem(
 				getProviderStorageKey(AI_COMPLETION_MODEL_STORAGE_KEY, providerKey),
 				config.model
 			);
@@ -404,6 +436,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 	const value = useMemo<AiSettingsContextValue>(
 		() => ({
 			apiUrl: currentConfig.apiUrl,
+			customProtocol: currentConfig.customProtocol,
 			deleteApiKey: async () => {
 				await deleteSecureApiKey(provider);
 				setProviderApiKeyAvailability((prev) => ({
@@ -443,6 +476,12 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 					[provider]: { ...prev[provider], apiUrl },
 				}));
 			},
+			setCustomProtocol: (customProtocol) => {
+				setProviderConfigs((prev) => ({
+					...prev,
+					[provider]: { ...prev[provider], customProtocol },
+				}));
+			},
 			setEnabled,
 			setModel: (model) => {
 				setProviderConfigs((prev) => ({
@@ -456,6 +495,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 		}),
 		[
 			currentConfig.apiUrl,
+			currentConfig.customProtocol,
 			currentConfig.model,
 			hasApiKey,
 			enabled,

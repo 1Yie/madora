@@ -2,6 +2,7 @@ import { Sparkles, Check, Edit, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
+	type CustomProviderProtocol,
 	getProviderDefinitions,
 	useAiSettings,
 } from '@/components/system/ai-settings-provider';
@@ -9,15 +10,47 @@ import {
 	SettingsSectionCard,
 	ThemeOption,
 } from '@/components/system/setting/shared';
+import { providerIconMap } from '@/components/ui/provider-icons';
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Switch } from '@/components/ui/switch';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import providerModels from '@/assets/models.json';
+
+const CUSTOM_PROTOCOL_OPTIONS: Array<{
+	description: string;
+	label: string;
+	value: CustomProviderProtocol;
+}> = [
+	{
+		description: '适用于 /v1/chat/completions 一类 OpenAI 兼容接口。',
+		label: 'OpenAI Compatible',
+		value: 'openai',
+	},
+	{
+		description: '适用于 /v1/messages 一类 Anthropic 兼容接口。',
+		label: 'Anthropic Compatible',
+		value: 'anthropic',
+	},
+];
+
+type ProviderModelOption = {
+	name: string;
+	value: string;
+};
 
 export function EditorSettings() {
 	const {
 		apiUrl,
+		customProtocol,
 		deleteApiKey,
 		enabled,
 		hasApiKey,
@@ -28,6 +61,7 @@ export function EditorSettings() {
 		showHiddenFiles,
 
 		setApiUrl,
+		setCustomProtocol,
 		setEnabled,
 		setModel,
 		setProvider,
@@ -43,7 +77,15 @@ export function EditorSettings() {
 	const selectedProvider = getProviderDefinitions().find(
 		(item) => item.key === provider
 	);
-
+	const isCustom = provider === 'custom';
+	const availableModels =
+		(providerModels as Record<string, ProviderModelOption[]>)[provider] ?? [];
+	const selectedCustomProtocolOption = CUSTOM_PROTOCOL_OPTIONS.find(
+		(option) => option.value === customProtocol
+	);
+	const selectedModelLabel =
+		availableModels.find((item) => item.value === model)?.name ?? model;
+	const loadingModels = false;
 	useEffect(() => {
 		queueMicrotask(() => {
 			setApiKeyDraft('');
@@ -185,35 +227,76 @@ export function EditorSettings() {
 							Provider
 						</span>
 						<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-							{getProviderDefinitions().map((item) => (
-								<ThemeOption
-									key={item.key}
-									active={provider === item.key}
-									description={item.description}
-									label={item.label}
-									onClick={() => setProvider(item.key)}
-								/>
-							))}
+							{getProviderDefinitions().map((item) => {
+								const IconComponent = providerIconMap[item.key];
+								return (
+									<ThemeOption
+										key={item.key}
+										active={provider === item.key}
+										description={item.description}
+										label={item.label}
+										icon={IconComponent ? <IconComponent /> : undefined}
+										onClick={() => setProvider(item.key)}
+									/>
+								);
+							})}
 						</div>
 						<p className="text-xs text-muted-foreground">
 							当前配置会按 Provider 单独保存，切换后不会覆盖其他供应商的 Key
 							和模型。
 						</p>
 					</div>
-					<label className="block space-y-2">
-						<span className="text-sm font-medium text-foreground">API URL</span>
-						<Input
-							autoComplete="off"
-							placeholder={
-								selectedProvider?.defaultApiUrl || 'https://api.example.com'
-							}
-							value={apiUrl}
-							onChange={(event) => setApiUrl(event.target.value)}
-						/>
-						<p className="text-xs text-muted-foreground">
-							当前 Provider 的接口地址。
-						</p>
-					</label>
+					{isCustom && (
+						<label className="block space-y-2">
+							<span className="text-sm font-medium text-foreground">协议</span>
+							<Select
+								value={customProtocol}
+								onValueChange={(value) => {
+									if (value === 'openai' || value === 'anthropic') {
+										setCustomProtocol(value);
+									}
+								}}
+							>
+								<SelectTrigger>
+									<SelectValue placeholder="选择兼容协议...">
+										{selectedCustomProtocolOption?.label}
+									</SelectValue>
+								</SelectTrigger>
+								<SelectContent>
+									{CUSTOM_PROTOCOL_OPTIONS.map((option) => (
+										<SelectItem key={option.value} value={option.value}>
+											{option.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							<p className="text-xs text-muted-foreground">
+								{
+									CUSTOM_PROTOCOL_OPTIONS.find(
+										(option) => option.value === customProtocol
+									)?.description
+								}
+							</p>
+						</label>
+					)}
+					{isCustom && (
+						<label className="block space-y-2">
+							<span className="text-sm font-medium text-foreground">
+								API URL
+							</span>
+							<Input
+								autoComplete="off"
+								placeholder={
+									selectedProvider?.defaultApiUrl || 'https://api.example.com'
+								}
+								value={apiUrl}
+								onChange={(event) => setApiUrl(event.target.value)}
+							/>
+							<p className="text-xs text-muted-foreground">
+								自定义 Provider 的接口地址。
+							</p>
+						</label>
+					)}
 					<label className="block space-y-2">
 						<span className="text-sm font-medium text-foreground">API Key</span>
 						<InputGroup>
@@ -263,7 +346,7 @@ export function EditorSettings() {
 						<div className="space-y-1">
 							<p className="text-xs text-muted-foreground">
 								{hasApiKey
-									? '当前 Provider 已保存 API Key。重新输入并保存可覆盖旧值。'
+									? '当前 Provider 已保存 API Key，重新输入并保存可覆盖旧值。'
 									: '当前 Provider 尚未保存 API Key。'}
 							</p>
 							<p className="text-xs text-muted-foreground">
@@ -271,21 +354,49 @@ export function EditorSettings() {
 							</p>
 						</div>
 					</label>
-					<label className="block space-y-2">
-						<span className="text-sm font-medium text-foreground">Model</span>
-						<Input
-							autoComplete="off"
-							placeholder={selectedProvider?.defaultModel || 'model-name'}
-							value={model}
-							onChange={(event) => setModel(event.target.value)}
-						/>
-						<div className="space-y-1">
-							<p className="text-xs text-muted-foreground">模型名称。</p>
-							<p className="text-xs text-muted-foreground">
-								不同模型可能会有不同的功能和表现，具体请参考模型提供方的说明。
-							</p>
-						</div>
-					</label>
+					{isCustom ? (
+						<label className="block space-y-2">
+							<span className="text-sm font-medium text-foreground">Model</span>
+							<Input
+								autoComplete="off"
+								placeholder={selectedProvider?.defaultModel || 'model-name'}
+								value={model}
+								onChange={(event) => setModel(event.target.value)}
+							/>
+							<div className="space-y-1">
+								<p className="text-xs text-muted-foreground">模型名称。</p>
+								<p className="text-xs text-muted-foreground">
+									不同模型可能会有不同的功能和表现，具体请参考模型提供方的说明。
+								</p>
+							</div>
+						</label>
+					) : availableModels.length > 0 ? (
+						<label className="block space-y-2">
+							<span className="text-sm font-medium text-foreground">Model</span>
+							<Select
+								value={model}
+								onValueChange={(value) => value && setModel(value)}
+							>
+								<SelectTrigger>
+									<SelectValue
+										placeholder={loadingModels ? '加载中...' : '选择模型...'}
+									>
+										{selectedModelLabel || undefined}
+									</SelectValue>
+								</SelectTrigger>
+								<SelectContent>
+									{availableModels.map((option) => (
+										<SelectItem key={option.value} value={option.value}>
+											{option.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</label>
+					) : null}
+					{loadingModels && availableModels.length === 0 && (
+						<p className="text-xs text-muted-foreground">正在加载模型列表...</p>
+					)}
 				</div>
 			</SettingsSectionCard>
 		</div>

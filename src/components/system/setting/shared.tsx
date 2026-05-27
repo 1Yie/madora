@@ -51,11 +51,13 @@ export function ThemeOption({
 	active,
 	description,
 	label,
+	icon,
 	onClick,
 }: {
 	active: boolean;
 	description: string;
 	label: string;
+	icon?: ReactNode;
 	onClick: () => void;
 }) {
 	return (
@@ -71,7 +73,14 @@ export function ThemeOption({
 			onClick={onClick}
 		>
 			<div className="flex items-center justify-between gap-3">
-				<span className="text-sm font-medium">{label}</span>
+				<div className="flex items-center gap-2.5">
+					{icon && (
+						<div className="flex shrink-0 items-center justify-center">
+							{icon}
+						</div>
+					)}
+					<span className="text-sm font-medium">{label}</span>
+				</div>
 				<div className="flex items-center gap-2">
 					<span
 						className={cn(
@@ -79,7 +88,6 @@ export function ThemeOption({
 							active ? 'bg-primary' : 'bg-border'
 						)}
 					/>
-					{/* color swatch placeholder; actual color applied via --accent CSS var when used */}
 				</div>
 			</div>
 			<p className="mt-1 text-xs leading-5">{description}</p>

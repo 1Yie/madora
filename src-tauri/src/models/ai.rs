@@ -1,6 +1,20 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum CustomProviderProtocol {
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    #[serde(rename = "openai")]
+    OpenAi,
+}
+
+impl Default for CustomProviderProtocol {
+    fn default() -> Self {
+        Self::OpenAi
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum AiProvider {
     #[serde(rename = "anthropic")]
     Anthropic,
@@ -62,6 +76,7 @@ pub struct AiCompletionConfig {
     #[serde(default)]
     pub api_key: String,
     pub api_url: Option<String>,
+    pub custom_protocol: Option<CustomProviderProtocol>,
     pub model: Option<String>,
     pub provider: Option<AiProvider>,
 }

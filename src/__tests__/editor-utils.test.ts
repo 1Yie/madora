@@ -12,6 +12,11 @@ type CompletionStatus = {
 	tone: 'muted' | 'loading' | 'success' | 'error';
 };
 
+type CompletionPreviewState = {
+	pos: number;
+	text: string;
+};
+
 // isSameCompletionSnapshot — from use-editor.tsx:122
 function isSameCompletionSnapshot(
 	left: CompletionSnapshot | null,
@@ -50,6 +55,30 @@ function getDefaultCompletionStatus(
 	if (!enabled) return { message: 'AI 补全已关闭', tone: 'muted' };
 	if (!hasApiKey) return { message: '保存 API Key 后可用', tone: 'muted' };
 	return { message: 'AI 自动补全已就绪', tone: 'muted' };
+}
+
+function getContinuedCompletionPreview(
+	preview: CompletionPreviewState,
+	change: {
+		fromA: number;
+		insertedText: string;
+		toA: number;
+		toB: number;
+	}
+): CompletionPreviewState | null {
+	if (
+		change.fromA === preview.pos &&
+		change.toA === preview.pos &&
+		change.insertedText.length > 0 &&
+		preview.text.startsWith(change.insertedText)
+	) {
+		const remainingText = preview.text.slice(change.insertedText.length);
+		return remainingText.length === 0
+			? null
+			: { pos: change.toB, text: remainingText };
+	}
+
+	return null;
 }
 
 describe('isSameCompletionSnapshot', () => {
@@ -151,5 +180,34 @@ describe('getDefaultCompletionStatus', () => {
 		const status = getDefaultCompletionStatus(true, true);
 		expect(status.message).toBe('AI 自动补全已就绪');
 		expect(status.tone).toBe('muted');
+	});
+});
+
+describe('getContinuedCompletionPreview', () => {
+	it('keeps only the remaining suffix when typing the suggestion prefix', () => {
+		expect(
+			getContinuedCompletionPreview(
+				{ pos: 12, text: 'world' },
+				{ fromA: 12, insertedText: 'wo', toA: 12, toB: 14 }
+			)
+		).toEqual({ pos: 14, text: 'rld' });
+	});
+
+	it('drops the preview on deletions before the cursor', () => {
+		expect(
+			getContinuedCompletionPreview(
+				{ pos: 12, text: 'world' },
+				{ fromA: 11, insertedText: '', toA: 12, toB: 11 }
+			)
+		).toBeNull();
+	});
+
+	it('drops the preview when the typed text no longer matches the suggestion', () => {
+		expect(
+			getContinuedCompletionPreview(
+				{ pos: 12, text: 'world' },
+				{ fromA: 12, insertedText: 'x', toA: 12, toB: 13 }
+			)
+		).toBeNull();
 	});
 });

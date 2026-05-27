@@ -2,9 +2,13 @@ use async_trait::async_trait;
 use reqwest::Client;
 
 use crate::{
-    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
+    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CustomProviderProtocol},
     prompt::PromptManager,
-    providers::{openai::request_openai_compatible_fim, CompletionProvider},
+    providers::{
+        anthropic::request_anthropic_compatible_fim,
+        openai::request_openai_compatible_fim,
+        CompletionProvider,
+    },
 };
 
 pub struct CustomProvider;
@@ -22,6 +26,14 @@ impl CompletionProvider for CustomProvider {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String> {
-        request_openai_compatible_fim(client, prompt_manager, config, request).await
+        match config.custom_protocol.unwrap_or_default() {
+            CustomProviderProtocol::Anthropic => {
+                request_anthropic_compatible_fim(client, prompt_manager, config, request)
+                    .await
+            }
+            CustomProviderProtocol::OpenAi => {
+                request_openai_compatible_fim(client, prompt_manager, config, request).await
+            }
+        }
     }
 }
