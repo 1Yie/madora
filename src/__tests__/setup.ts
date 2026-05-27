@@ -46,6 +46,20 @@ if (typeof Element !== 'undefined' && !Element.prototype.scrollTo) {
 
 // ── Tauri invoke mock ──────────────────────────────────────────────────
 
+class ChannelMock<T = unknown> {
+	id = 0;
+	onmessage: (response: T) => void;
+
+	constructor(onmessage?: (response: T) => void) {
+		this.onmessage = onmessage ?? (() => undefined);
+	}
+
+	toJSON() {
+		return '__CHANNEL__:0';
+	}
+}
+
 vi.mock('@tauri-apps/api/core', () => ({
+	Channel: ChannelMock,
 	invoke: vi.fn(),
 }));

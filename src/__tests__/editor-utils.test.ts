@@ -13,6 +13,7 @@ type CompletionStatus = {
 };
 
 type CompletionPreviewState = {
+	streaming: boolean;
 	pos: number;
 	text: string;
 };
@@ -61,11 +62,20 @@ function getContinuedCompletionPreview(
 	preview: CompletionPreviewState,
 	change: {
 		fromA: number;
+		isCompositionInput?: boolean;
 		insertedText: string;
 		toA: number;
 		toB: number;
 	}
 ): CompletionPreviewState | null {
+	if (preview.streaming) {
+		return null;
+	}
+
+	if (change.isCompositionInput) {
+		return null;
+	}
+
 	if (
 		change.fromA === preview.pos &&
 		change.toA === preview.pos &&
@@ -75,10 +85,18 @@ function getContinuedCompletionPreview(
 		const remainingText = preview.text.slice(change.insertedText.length);
 		return remainingText.length === 0
 			? null
-			: { pos: change.toB, text: remainingText };
+			: { pos: change.toB, streaming: false, text: remainingText };
 	}
 
 	return null;
+}
+
+function shouldInterruptCompletionBeforeInput(inputType: string): boolean {
+	return (
+		inputType.startsWith('insert') ||
+		inputType.startsWith('delete') ||
+		inputType.startsWith('history')
+	);
 }
 
 describe('isSameCompletionSnapshot', () => {
@@ -187,16 +205,40 @@ describe('getContinuedCompletionPreview', () => {
 	it('keeps only the remaining suffix when typing the suggestion prefix', () => {
 		expect(
 			getContinuedCompletionPreview(
-				{ pos: 12, text: 'world' },
+				{ pos: 12, streaming: false, text: 'world' },
 				{ fromA: 12, insertedText: 'wo', toA: 12, toB: 14 }
 			)
-		).toEqual({ pos: 14, text: 'rld' });
+		).toEqual({ pos: 14, streaming: false, text: 'rld' });
+	});
+
+	it('drops the preview immediately when the suggestion is still streaming', () => {
+		expect(
+			getContinuedCompletionPreview(
+				{ pos: 12, streaming: true, text: 'world' },
+				{ fromA: 12, insertedText: 'w', toA: 12, toB: 13 }
+			)
+		).toBeNull();
+	});
+
+	it('drops the preview immediately on composition input', () => {
+		expect(
+			getContinuedCompletionPreview(
+				{ pos: 12, streaming: false, text: 'world' },
+				{
+					fromA: 12,
+					isCompositionInput: true,
+					insertedText: 'w',
+					toA: 12,
+					toB: 13,
+				}
+			)
+		).toBeNull();
 	});
 
 	it('drops the preview on deletions before the cursor', () => {
 		expect(
 			getContinuedCompletionPreview(
-				{ pos: 12, text: 'world' },
+				{ pos: 12, streaming: false, text: 'world' },
 				{ fromA: 11, insertedText: '', toA: 12, toB: 11 }
 			)
 		).toBeNull();
@@ -205,9 +247,29 @@ describe('getContinuedCompletionPreview', () => {
 	it('drops the preview when the typed text no longer matches the suggestion', () => {
 		expect(
 			getContinuedCompletionPreview(
-				{ pos: 12, text: 'world' },
+				{ pos: 12, streaming: false, text: 'world' },
 				{ fromA: 12, insertedText: 'x', toA: 12, toB: 13 }
 			)
 		).toBeNull();
+	});
+});
+
+describe('shouldInterruptCompletionBeforeInput', () => {
+	it('returns true for insertion input types', () => {
+		expect(shouldInterruptCompletionBeforeInput('insertText')).toBe(true);
+		expect(shouldInterruptCompletionBeforeInput('insertCompositionText')).toBe(
+			true
+		);
+	});
+
+	it('returns true for deletion and history input types', () => {
+		expect(shouldInterruptCompletionBeforeInput('deleteContentBackward')).toBe(
+			true
+		);
+		expect(shouldInterruptCompletionBeforeInput('historyUndo')).toBe(true);
+	});
+
+	it('returns false for unrelated input types', () => {
+		expect(shouldInterruptCompletionBeforeInput('formatBold')).toBe(false);
 	});
 });

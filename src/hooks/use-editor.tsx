@@ -21,7 +21,7 @@ import {
 	type TooltipView,
 	type ViewUpdate,
 } from '@codemirror/view';
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
@@ -34,7 +34,7 @@ import {
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
 import { useTheme } from '@/components/system/theme-provider';
-import { Spinner } from '@/components/ui/spinner';
+import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { showErrorToast } from '@/components/ui/toast';
 
 type UseEditorOptions = {
@@ -44,10 +44,6 @@ type UseEditorOptions = {
 
 	value: string;
 	viewRef?: MutableRefObject<EditorView | null>;
-};
-
-type CompletionResultData = {
-	text: string;
 };
 
 type CompletionStatusTone = 'muted' | 'loading' | 'success' | 'error';
@@ -64,6 +60,7 @@ type CompletionTooltipState = {
 };
 
 type CompletionPreviewState = {
+	streaming: boolean;
 	pos: number;
 	text: string;
 };
@@ -82,7 +79,7 @@ type CompletionCacheEntry = {
 	snapshot: CompletionSnapshot;
 };
 
-const AUTO_COMPLETION_DEBOUNCE_MS = 150;
+const AUTO_COMPLETION_DEBOUNCE_MS = 80;
 const AUTO_COMPLETION_COOLDOWN_MS = 250;
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
@@ -169,6 +166,16 @@ function getContinuedCompletionPreview(
 	preview: CompletionPreviewState,
 	transaction: Transaction
 ): CompletionPreviewState | null {
+	if (preview.streaming) {
+		logCompletionDebug('preview-drop:streaming-input');
+		return null;
+	}
+
+	if (transaction.isUserEvent('input.type.compose')) {
+		logCompletionDebug('preview-drop:composition-input');
+		return null;
+	}
+
 	const selection = transaction.newSelection;
 	if (selection.ranges.length !== 1 || !selection.main.empty) {
 		logCompletionDebug('preview-drop:invalid-selection');
@@ -192,7 +199,13 @@ function getContinuedCompletionPreview(
 		) {
 			const remainingText = nextPreview.text.slice(insertedText.length);
 			nextPreview =
-				remainingText.length === 0 ? null : { pos: toB, text: remainingText };
+				remainingText.length === 0
+					? null
+					: {
+							pos: toB,
+							streaming: false,
+							text: remainingText,
+						};
 			return;
 		}
 
@@ -289,7 +302,6 @@ const completionPreviewField = StateField.define<CompletionPreviewState | null>(
 			if (!value) return null;
 
 			if (transaction.docChanged) {
-				if (transaction.isUserEvent('input.type.compose')) return value;
 				return getContinuedCompletionPreview(value, transaction);
 			}
 
@@ -382,8 +394,11 @@ function createEditorTheme(dark: boolean) {
 				verticalAlign: 'top',
 				whiteSpace: 'pre-wrap',
 			},
-			'.cm-tooltip.cm-fim-tooltip': {
+			'.cm-tooltip': {
+				background: 'transparent !important',
 				border: 'none',
+			},
+			'.cm-tooltip.cm-fim-tooltip': {
 				backgroundColor: 'transparent',
 				boxShadow: 'none',
 				padding: '0',
@@ -492,6 +507,14 @@ function isCompositionInputUpdate(update: ViewUpdate): boolean {
 	return update.transactions.some((tr) => tr.isUserEvent('input.type.compose'));
 }
 
+function shouldInterruptCompletionBeforeInput(event: InputEvent): boolean {
+	return (
+		event.inputType.startsWith('insert') ||
+		event.inputType.startsWith('delete') ||
+		event.inputType.startsWith('history')
+	);
+}
+
 function isInternalCompletionUpdate(update: ViewUpdate): boolean {
 	return (
 		update.transactions.length > 0 &&
@@ -551,17 +574,11 @@ function renderCompletionPreview(
 	});
 }
 
-// Suppress react-refresh warning: this file exports a hook but contains a tiny
-// internal component used only for rendering the tooltip. Moving it out would
-// be noisier than a local rule disable.
 // eslint-disable-next-line react-refresh/only-export-components
 function CompletionTooltipContent() {
 	return (
-		<div
-			className="inline-flex items-center justify-center rounded-full border
-				border-primary/15 bg-background p-1 shadow"
-		>
-			<Spinner className="size-3 text-primary" />
+		<div className="inline-flex items-center justify-center bg-transparent">
+			<MathCurveLoader className="size-5 text-primary" />
 		</div>
 	);
 }
@@ -598,7 +615,7 @@ export function useEditor({
 	const autoCompletionTimerRef = useRef<number | null>(null);
 	const cooldownTimerRef = useRef<number | null>(null);
 	const editorRef = useRef<HTMLDivElement | null>(null);
-	const queuedRequestRef = useRef<CompletionSnapshot | null>(null);
+	const pendingLocalValuesRef = useRef<string[]>([]);
 	const pendingRequestRef = useRef<PendingCompletionRequest | null>(null);
 	const requestSequenceRef = useRef(0);
 	const scheduledSnapshotRef = useRef<CompletionSnapshot | null>(null);
@@ -688,7 +705,6 @@ export function useEditor({
 		clearScheduledCompletion('cancel');
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
-		queuedRequestRef.current = null;
 		setCompletionStatus(
 			getDefaultCompletionStatus(
 				aiSettingsRef.current.enabled,
@@ -702,7 +718,43 @@ export function useEditor({
 		}, AUTO_COMPLETION_COOLDOWN_MS);
 	});
 
+	const interruptCompletionForInput = useEffectEvent(() => {
+		const hasPendingRequest = pendingRequestRef.current !== null;
+		const hasScheduledRequest = scheduledSnapshotRef.current !== null;
+		if (!hasPendingRequest && !hasScheduledRequest) {
+			return false;
+		}
+		clearScheduledCompletion('cancel');
+		requestSequenceRef.current += 1;
+		pendingRequestRef.current = null;
+		setCompletionStatus(
+			getDefaultCompletionStatus(
+				aiSettingsRef.current.enabled,
+				aiSettingsRef.current.hasApiKey
+			)
+		);
+		logCompletionDebug('completion-interrupt:beforeinput');
+		return true;
+	});
+
 	const isInCooldown = () => cooldownTimerRef.current !== null;
+
+	const supersedePendingCompletion = useEffectEvent(
+		(snapshot: CompletionSnapshot, reason: 'request' | 'schedule') => {
+			const pendingRequest = pendingRequestRef.current;
+			if (!pendingRequest) return false;
+			if (isSameCompletionSnapshot(pendingRequest, snapshot)) return false;
+
+			requestSequenceRef.current += 1;
+			pendingRequestRef.current = null;
+			logCompletionDebug('request-supersede-active', {
+				reason,
+				requestId: pendingRequest.requestSequence,
+			});
+			syncTooltip();
+			return true;
+		}
+	);
 
 	const tryUseCache = useEffectEvent(
 		(view: EditorView, snapshot: CompletionSnapshot): boolean => {
@@ -718,6 +770,7 @@ export function useEditor({
 				effects: [
 					setCompletionPreviewEffect.of({
 						pos: snapshot.cursor,
+						streaming: false,
 						text: cache.completion,
 					}),
 					internalCompletionEffect.of(true),
@@ -772,12 +825,11 @@ export function useEditor({
 			if (pendingRequest) {
 				if (isSameCompletionSnapshot(pendingRequest, snapshot)) {
 					logCompletionDebug('request-skip:duplicate-inflight');
-				} else {
-					queuedRequestRef.current = snapshot;
-					logCompletionDebug('request-queue-latest');
+					syncTooltip();
+					return;
 				}
-				syncTooltip();
-				return;
+
+				supersedePendingCompletion(snapshot, 'request');
 			}
 
 			if (
@@ -800,26 +852,52 @@ export function useEditor({
 			scheduledSnapshotRef.current = null;
 			syncTooltip();
 			setCompletionStatus({ message: '正在生成 AI 建议...', tone: 'loading' });
+			let completion = '';
+			let didRenderChunk = false;
 
 			try {
-				const result = await invoke<CompletionResultData>(
-					'generate_completion',
-					{
-						config: {
-							apiUrl:
-								settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
-							customProtocol:
-								settings.provider === 'custom' ? settings.customProtocol : null,
-							model: settings.model.trim().length > 0 ? settings.model : null,
-							provider: settings.provider,
-						},
-						request: {
-							prefix: prompt,
-							suffix: suffix.length > 0 ? suffix : null,
-							title: title ?? null,
-						},
+				const channel = new Channel<string>((chunk) => {
+					if (requestId !== requestSequenceRef.current) return;
+					if (chunk.length === 0) return;
+
+					completion += chunk;
+
+					const currentView = viewRef.current;
+					if (!currentView) return;
+					if (!isSnapshotCurrent(currentView, snapshot)) return;
+
+					currentView.dispatch({
+						effects: [
+							setCompletionPreviewEffect.of({
+								pos: cursor,
+								streaming: true,
+								text: completion,
+							}),
+							internalCompletionEffect.of(true),
+						],
+					});
+
+					if (!didRenderChunk) {
+						scrollParentToCursor(currentView, cursor);
+						didRenderChunk = true;
 					}
-				);
+				});
+
+				await invoke<void>('generate_completion_stream', {
+					config: {
+						apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
+						customProtocol:
+							settings.provider === 'custom' ? settings.customProtocol : null,
+						model: settings.model.trim().length > 0 ? settings.model : null,
+						provider: settings.provider,
+					},
+					request: {
+						prefix: prompt,
+						suffix: suffix.length > 0 ? suffix : null,
+						title: title ?? null,
+					},
+					channel,
+				});
 
 				if (requestId !== requestSequenceRef.current) {
 					logCompletionDebug('request-cancelled', {
@@ -829,7 +907,6 @@ export function useEditor({
 					return;
 				}
 
-				const completion = result.text;
 				const currentView = viewRef.current;
 				if (!currentView) return;
 
@@ -854,13 +931,25 @@ export function useEditor({
 					completion,
 				};
 
-				currentView.dispatch({
-					effects: [
-						setCompletionPreviewEffect.of({ pos: cursor, text: completion }),
-						internalCompletionEffect.of(true),
-					],
-				});
-				scrollParentToCursor(currentView, cursor);
+				const currentPreview = currentView.state.field(completionPreviewField);
+				if (
+					!currentPreview ||
+					currentPreview.pos !== cursor ||
+					currentPreview.streaming ||
+					currentPreview.text !== completion
+				) {
+					currentView.dispatch({
+						effects: [
+							setCompletionPreviewEffect.of({
+								pos: cursor,
+								streaming: false,
+								text: completion,
+							}),
+							internalCompletionEffect.of(true),
+						],
+					});
+					if (!didRenderChunk) scrollParentToCursor(currentView, cursor);
+				}
 
 				setCompletionStatus(
 					getDefaultCompletionStatus(settings.enabled, settings.hasApiKey)
@@ -868,7 +957,9 @@ export function useEditor({
 			} catch (error) {
 				if (requestId !== requestSequenceRef.current) return;
 				const errorMessage = getErrorMessage(error);
-				clearCompletionPreview();
+				if (completion.length === 0) {
+					clearCompletionPreview();
+				}
 				showErrorToast('AI 补全失败', errorMessage, {
 					descriptionStyle: 'code',
 				});
@@ -891,18 +982,6 @@ export function useEditor({
 				}
 
 				syncTooltip();
-
-				const nextView = viewRef.current;
-				const queuedRequest = queuedRequestRef.current;
-				if (nextView && queuedRequest) {
-					queuedRequestRef.current = null;
-					if (
-						isSnapshotCurrent(nextView, queuedRequest) &&
-						requestSequenceRef.current === requestId
-					) {
-						void requestCompletion(nextView, queuedRequest);
-					}
-				}
 			}
 		}
 	);
@@ -926,11 +1005,12 @@ export function useEditor({
 
 		const pendingRequest = pendingRequestRef.current;
 		if (pendingRequest) {
-			if (!isSameCompletionSnapshot(queuedRequestRef.current, snapshot)) {
-				queuedRequestRef.current = snapshot;
+			if (isSameCompletionSnapshot(pendingRequest, snapshot)) {
+				syncTooltip();
+				return;
 			}
-			syncTooltip();
-			return;
+
+			supersedePendingCompletion(snapshot, 'schedule');
 		}
 
 		if (
@@ -995,7 +1075,7 @@ export function useEditor({
 
 		if (!viewRef.current) return;
 		clearScheduledCompletion();
-		queuedRequestRef.current = null;
+		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
 		clearCompletionPreview();
 		completionStatusRef.current = getDefaultCompletionStatus(
@@ -1041,6 +1121,19 @@ export function useEditor({
 							event.preventDefault();
 							return true;
 						},
+						beforeinput: (event) => {
+							if (
+								event instanceof InputEvent &&
+								shouldInterruptCompletionBeforeInput(event)
+							) {
+								interruptCompletionForInput();
+							}
+							return false;
+						},
+						compositionstart: () => {
+							interruptCompletionForInput();
+							return false;
+						},
 						compositionend: () => {
 							window.requestAnimationFrame(() => {
 								const currentView = viewRef.current;
@@ -1084,7 +1177,17 @@ export function useEditor({
 							update.transactions.some((tr) => transactionHasDeletion(tr));
 
 						if (update.docChanged && !externalSyncUpdate) {
-							handleChange(update.state.doc.toString());
+							const nextValue = update.state.doc.toString();
+							const pendingLocalValues = pendingLocalValuesRef.current;
+							if (
+								pendingLocalValues[pendingLocalValues.length - 1] !== nextValue
+							) {
+								pendingLocalValues.push(nextValue);
+								if (pendingLocalValues.length > 32) {
+									pendingLocalValues.splice(0, pendingLocalValues.length - 32);
+								}
+							}
+							handleChange(nextValue);
 						}
 
 						if (
@@ -1126,7 +1229,6 @@ export function useEditor({
 
 						if (update.focusChanged && !update.view.hasFocus) {
 							clearScheduledCompletion('cancel');
-							queuedRequestRef.current = null;
 						}
 
 						if (!internalUpdate && !externalSyncUpdate) {
@@ -1166,7 +1268,7 @@ export function useEditor({
 		view.focus();
 
 		return () => {
-			queuedRequestRef.current = null;
+			requestSequenceRef.current += 1;
 			pendingRequestRef.current = null;
 			if (autoCompletionTimerRef.current !== null)
 				window.clearTimeout(autoCompletionTimerRef.current);
@@ -1184,10 +1286,37 @@ export function useEditor({
 		if (!view) return;
 
 		const currentValue = view.state.doc.toString();
+		const pendingLocalValues = pendingLocalValuesRef.current;
+		const matchedPendingIndex = pendingLocalValues.indexOf(value);
+
+		if (matchedPendingIndex !== -1) {
+			pendingLocalValues.splice(0, matchedPendingIndex + 1);
+		}
+
 		if (currentValue === value) return;
+
+		if (matchedPendingIndex !== -1 && view.hasFocus) {
+			logCompletionDebug('external-sync-skip:stale-local-echo', {
+				cursor: view.state.selection.main.head,
+				incomingLength: value.length,
+				currentLength: currentValue.length,
+			});
+			return;
+		}
+
+		const nextSelection = EditorSelection.create(
+			view.state.selection.ranges.map((range) =>
+				EditorSelection.range(
+					Math.min(range.anchor, value.length),
+					Math.min(range.head, value.length)
+				)
+			),
+			view.state.selection.mainIndex
+		);
 
 		view.dispatch({
 			changes: { from: 0, to: currentValue.length, insert: value },
+			selection: nextSelection,
 			effects: externalSyncEffect.of(true),
 		});
 	}, [value]);
