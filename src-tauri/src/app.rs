@@ -4,6 +4,7 @@ use crate::{
     commands::{ai, explorer, git, project, secure_storage, utility, system},
     services::ai::AiCompletionService,
 };
+use tauri::Manager;
 
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -12,6 +13,13 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
@@ -58,7 +66,6 @@ pub fn run() {
             project::scan_project,
             system::show_window
         ])
-
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

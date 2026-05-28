@@ -47,6 +47,7 @@ export type GitStatus = {
 	branch: GitBranchStatus | null;
 	conflictedFiles: string[];
 	hasRepository: boolean;
+	hasGitDirectory: boolean;
 	hasStagedChanges: boolean;
 	hasUnstagedChanges: boolean;
 	hasUntrackedFiles: boolean;

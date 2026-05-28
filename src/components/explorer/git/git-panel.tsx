@@ -944,7 +944,11 @@ export function GitPanel({
 				<div
 					className="flex shrink-0 items-center gap-1.5 text-muted-foreground"
 				>
-					{!status?.hasRepository ? (
+					{!status?.hasRepository && status?.hasGitDirectory ? (
+						<span className="text-xs text-muted-foreground whitespace-nowrap">
+							该仓库不是由 Madora 创建的
+						</span>
+					) : !status?.hasRepository ? (
 						<Button
 							disabled={!canOperate}
 							onClick={() => void initRepository()}

@@ -19,12 +19,18 @@ const MAX_CONFLICT_MARKER_FILE_BYTES: u64 = 1024 * 1024;
 const CONFLICT_MARKER_SCAN_BYTES: usize = 8 * 1024;
 
 pub(crate) fn read_status_or_empty(root_path: &Path) -> GitResult<GitStatus> {
-	match repository::open_repo(root_path) {
-		Ok(repo) if !repository::is_editor_managed_repo(&repo) => Ok(repository::empty_status()),
-		Ok(repo) => read_repo_status(&repo),
-		Err(error) if error.code() == Some(ErrorCode::NotFound) => Ok(repository::empty_status()),
-		Err(error) => Err(error),
-	}
+    match repository::open_repo(root_path) {
+        Ok(repo) if !repository::is_editor_managed_repo(&repo) => Ok(GitStatus {
+            has_git_directory: true,
+            ..repository::empty_status()
+        }),
+        Ok(repo) => Ok(GitStatus {
+            has_git_directory: true,
+            ..read_repo_status(&repo)?
+        }),
+        Err(error) if error.code() == Some(ErrorCode::NotFound) => Ok(repository::empty_status()),
+        Err(error) => Err(error),
+    }
 }
 
 pub(crate) fn read_status(root_path: &Path) -> GitResult<GitStatus> {
@@ -102,7 +108,8 @@ pub(crate) fn read_repo_status(repo: &Repository) -> GitResult<GitStatus> {
 	Ok(GitStatus {
 		branch: repository::current_branch_status(repo)?,
 		conflicted_files,
-		has_repository: true,
+        has_repository: true,
+        has_git_directory: true,
 		has_staged_changes: staged_count > 0,
 		has_unstaged_changes: unstaged_count > 0,
 		has_untracked_files,

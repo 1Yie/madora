@@ -65,6 +65,7 @@ pub struct GitStatus {
     pub branch: Option<GitBranchStatus>,
     pub conflicted_files: Vec<String>,
     pub has_repository: bool,
+    pub has_git_directory: bool,
     pub has_staged_changes: bool,
     pub has_unstaged_changes: bool,
     pub has_untracked_files: bool,

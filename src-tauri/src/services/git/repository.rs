@@ -9,21 +9,22 @@ use crate::models::git::{
 use super::error::{GitResult, GitServiceError};
 
 pub(crate) fn empty_status() -> GitStatus {
-	GitStatus {
-		branch: None,
-		conflicted_files: Vec::new(),
-		has_repository: false,
-		has_staged_changes: false,
-		has_unstaged_changes: false,
-		has_untracked_files: false,
-		is_merging: false,
-		remotes: Vec::new(),
-		repository_state: GitRepositoryState::Clean,
-		staged_count: 0,
-		total_changed_count: 0,
-		unstaged_count: 0,
-		files: Vec::new(),
-	}
+    GitStatus {
+        branch: None,
+        conflicted_files: Vec::new(),
+        has_repository: false,
+        has_git_directory: false,
+        has_staged_changes: false,
+        has_unstaged_changes: false,
+        has_untracked_files: false,
+        is_merging: false,
+        remotes: Vec::new(),
+        repository_state: GitRepositoryState::Clean,
+        staged_count: 0,
+        total_changed_count: 0,
+        unstaged_count: 0,
+        files: Vec::new(),
+    }
 }
 
 pub(crate) fn open_repo(root_path: &Path) -> GitResult<Repository> {

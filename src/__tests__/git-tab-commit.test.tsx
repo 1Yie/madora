@@ -11,6 +11,7 @@ const emptyStatus: GitStatus = {
 	branch: null,
 	conflictedFiles: [],
 	hasRepository: true,
+	hasGitDirectory: false,
 	hasStagedChanges: false,
 	hasUnstagedChanges: false,
 	hasUntrackedFiles: false,
