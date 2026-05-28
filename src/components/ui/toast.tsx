@@ -65,6 +65,23 @@ type ToastData = {
 	tooltipStyle?: boolean;
 };
 
+function splitCodeBlockDescription(description: React.ReactNode): {
+	prefix: string | null;
+	codeBlock: React.ReactNode;
+} {
+	if (typeof description !== 'string') {
+		return { prefix: null, codeBlock: description };
+	}
+	const idx = description.lastIndexOf(': ');
+	if (idx === -1) {
+		return { prefix: null, codeBlock: description };
+	}
+	return {
+		prefix: description.slice(0, idx + 1),
+		codeBlock: description.slice(idx + 2),
+	};
+}
+
 function ErrorToastDescription({
 	description,
 }: {
@@ -77,6 +94,7 @@ function ErrorToastDescription({
 		startX: number;
 	} | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
+	const { prefix, codeBlock } = splitCodeBlockDescription(description);
 
 	const stopDragging = () => {
 		dragStateRef.current = null;
@@ -136,7 +154,16 @@ function ErrorToastDescription({
 
 	return (
 		<>
-			<Toast.Description className="sr-only" data-slot="toast-description" />
+			{prefix ? (
+				<Toast.Description
+					className="text-muted-foreground"
+					data-slot="toast-description"
+				>
+					{prefix}
+				</Toast.Description>
+			) : (
+				<Toast.Description className="sr-only" data-slot="toast-description" />
+			)}
 			<div
 				ref={containerRef}
 				className="mt-1 max-w-full overflow-x-auto overflow-y-hidden rounded-md
@@ -167,7 +194,7 @@ function ErrorToastDescription({
 					onPointerMove={handlePointerMove}
 					onPointerUp={handlePointerUp}
 				>
-					{description}
+					{codeBlock}
 				</div>
 			</div>
 		</>
