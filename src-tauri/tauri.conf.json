@@ -8,8 +8,8 @@
 			{
 				"decorations": false,
 				"height": 800,
-				"minHeight": 400,
-				"minWidth": 600,
+				"minHeight": 600,
+				"minWidth": 900,
 				"title": "Madora",
 				"transparent": false,
 				"visible": false,

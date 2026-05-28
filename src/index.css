@@ -6,12 +6,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+[data-slot='scroll-area-scrollbar'] {
+	cursor: default !important;
+}
+
 @layer base {
 	html,
 	body,
 	#root {
 		@apply h-screen overflow-hidden bg-background text-foreground;
 		margin: 0;
+	}
+	* {
+		scrollbar-gutter: auto;
 	}
 	html[data-native-dialog-open],
 	html[data-native-dialog-open] body {
