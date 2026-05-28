@@ -189,7 +189,43 @@ prompt_templates! {
         "/prompts/kimi/fim_user.md"
     ),
 
+    // MiMo
+    (
+        AiProvider::MiMo,
+        "fim_system",
+        "/prompts/mimo/fim_system.md"
+    ),
+    (
+        AiProvider::MiMo,
+        "fim_user",
+        "/prompts/mimo/fim_user.md"
+    ),
+
+    // MiniMax
+    (
+        AiProvider::MiniMax,
+        "fim_system",
+        "/prompts/minimax/fim_system.md"
+    ),
+    (
+        AiProvider::MiniMax,
+        "fim_user",
+        "/prompts/minimax/fim_user.md"
+    ),
+    // MiMo Coding Plan
+    (
+        AiProvider::MiMoCoding,
+        "fim_system",
+        "/prompts/mimo/fim_system.md"
+    ),
+    (
+        AiProvider::MiMoCoding,
+        "fim_user",
+        "/prompts/mimo/fim_user.md"
+    ),
+
     // OpenAI
+
     (
         AiProvider::OpenAi,
         "fim_system",

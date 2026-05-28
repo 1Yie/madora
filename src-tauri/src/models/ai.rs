@@ -24,6 +24,12 @@ pub enum AiProvider {
     DeepSeek,
     #[serde(rename = "kimi")]
     Kimi,
+    #[serde(rename = "mimo")]
+    MiMo,
+    #[serde(rename = "mimo-coding")]
+    MiMoCoding,
+    #[serde(rename = "minimax")]
+    MiniMax,
     #[serde(rename = "openai")]
     OpenAi,
 }
@@ -41,6 +47,9 @@ impl AiProvider {
             Self::Custom => "custom",
             Self::DeepSeek => "deepseek",
             Self::Kimi => "kimi",
+            Self::MiMo => "mimo",
+            Self::MiMoCoding => "mimo-coding",
+            Self::MiniMax => "minimax",
             Self::OpenAi => "openai",
         }
     }
@@ -51,6 +60,9 @@ impl AiProvider {
             Self::Custom => "Custom",
             Self::DeepSeek => "DeepSeek",
             Self::Kimi => "Kimi",
+            Self::MiMo => "Xiaomi MiMo",
+            Self::MiMoCoding => "Xiaomi MiMo Coding Plan",
+            Self::MiniMax => "MiniMax",
             Self::OpenAi => "OpenAI",
         }
     }
@@ -79,4 +91,11 @@ pub struct AiCompletionConfig {
     pub custom_protocol: Option<CustomProviderProtocol>,
     pub model: Option<String>,
     pub provider: Option<AiProvider>,
+    /// Whether to use HTTPS. Default true. Auto-prepended when URL has no scheme.
+    #[serde(default = "true_fn")]
+    pub use_ssl: bool,
+}
+
+fn true_fn() -> bool {
+    true
 }

@@ -69,7 +69,15 @@ pub fn resolve_api_url(config: &AiCompletionConfig, default_api_url: &str) -> Re
         return Err("请先在设置中填写 API URL".to_string());
     }
 
-    Ok(trim_trailing_slash(api_url).to_string())
+    let api_url = trim_trailing_slash(api_url).to_string();
+
+    // Auto-prepend https:// (or http:// when use_ssl is false) if no scheme present
+    if !api_url.starts_with("http://") && !api_url.starts_with("https://") {
+        let scheme = if config.use_ssl { "https://" } else { "http://" };
+        return Ok(format!("{scheme}{api_url}"));
+    }
+
+    Ok(api_url)
 }
 
 pub fn resolve_model<'a>(config: &'a AiCompletionConfig, default_model: &'a str) -> Result<&'a str, String> {
@@ -432,13 +440,14 @@ mod tests {
 
     #[test]
     fn resolve_api_key_empty_trimmed() {
-        let config = AiCompletionConfig {
-            api_key: "   ".into(),
-            api_url: None,
-            custom_protocol: None,
-            model: None,
-            provider: None,
-        };
+		let config = AiCompletionConfig {
+			api_key: "   ".into(),
+			api_url: None,
+			custom_protocol: None,
+			model: None,
+			provider: None,
+			use_ssl: true,
+		};
         assert!(resolve_api_key(&config).is_err());
     }
 

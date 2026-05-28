@@ -3,6 +3,9 @@ mod common;
 mod custom;
 mod deepseek;
 mod kimi;
+mod minimax;
+mod mimo;
+mod mimo_coding;
 mod openai;
 
 use async_trait::async_trait;
@@ -21,6 +24,12 @@ const DEEPSEEK_DEFAULT_API_URL: &str = "https://api.deepseek.com";
 const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-pro";
 const KIMI_DEFAULT_API_URL: &str = "https://api.moonshot.cn";
 const KIMI_DEFAULT_MODEL: &str = "moonshot-v1-8k";
+const MINIMAX_DEFAULT_API_URL: &str = "https://api.minimax.io";
+const MINIMAX_DEFAULT_MODEL: &str = "MiniMax-M2.7";
+const MIMO_DEFAULT_API_URL: &str = "https://api.xiaomimimo.com";
+const MIMO_DEFAULT_MODEL: &str = "mimo-v2.5-pro";
+const MIMO_CODING_DEFAULT_API_URL: &str = "https://token-plan-cn.xiaomimimo.com";
+const MIMO_CODING_DEFAULT_MODEL: &str = "mimo-v2.5-pro";
 const OPENAI_DEFAULT_API_URL: &str = "https://api.openai.com";
 const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
 
@@ -61,6 +70,9 @@ static ANTHROPIC_PROVIDER: anthropic::AnthropicProvider = anthropic::AnthropicPr
 static CUSTOM_PROVIDER: custom::CustomProvider = custom::CustomProvider;
 static DEEPSEEK_PROVIDER: deepseek::DeepSeekProvider = deepseek::DeepSeekProvider;
 static KIMI_PROVIDER: kimi::KimiProvider = kimi::KimiProvider;
+static MINIMAX_PROVIDER: minimax::MiniMaxProvider = minimax::MiniMaxProvider;
+static MIMO_PROVIDER: mimo::MiMoProvider = mimo::MiMoProvider;
+static MIMO_CODING_PROVIDER: mimo_coding::MiMoCodingProvider = mimo_coding::MiMoCodingProvider;
 static OPENAI_PROVIDER: openai::OpenAiProvider = openai::OpenAiProvider;
 
 pub fn get_provider(provider: AiProvider) -> &'static dyn CompletionProvider {
@@ -69,6 +81,9 @@ pub fn get_provider(provider: AiProvider) -> &'static dyn CompletionProvider {
         AiProvider::Custom => &CUSTOM_PROVIDER,
         AiProvider::DeepSeek => &DEEPSEEK_PROVIDER,
         AiProvider::Kimi => &KIMI_PROVIDER,
+        AiProvider::MiniMax => &MINIMAX_PROVIDER,
+        AiProvider::MiMo => &MIMO_PROVIDER,
+        AiProvider::MiMoCoding => &MIMO_CODING_PROVIDER,
         AiProvider::OpenAi => &OPENAI_PROVIDER,
     }
 }
@@ -79,6 +94,9 @@ pub fn default_api_url(provider: AiProvider) -> Option<&'static str> {
         AiProvider::Custom => None,
         AiProvider::DeepSeek => Some(DEEPSEEK_DEFAULT_API_URL),
         AiProvider::Kimi => Some(KIMI_DEFAULT_API_URL),
+        AiProvider::MiniMax => Some(MINIMAX_DEFAULT_API_URL),
+        AiProvider::MiMo => Some(MIMO_DEFAULT_API_URL),
+        AiProvider::MiMoCoding => Some(MIMO_CODING_DEFAULT_API_URL),
         AiProvider::OpenAi => Some(OPENAI_DEFAULT_API_URL),
     }
 }
@@ -89,6 +107,9 @@ pub fn default_model(provider: AiProvider) -> Option<&'static str> {
         AiProvider::Custom => None,
         AiProvider::DeepSeek => Some(DEEPSEEK_DEFAULT_MODEL),
         AiProvider::Kimi => Some(KIMI_DEFAULT_MODEL),
+        AiProvider::MiniMax => Some(MINIMAX_DEFAULT_MODEL),
+        AiProvider::MiMo => Some(MIMO_DEFAULT_MODEL),
+        AiProvider::MiMoCoding => Some(MIMO_CODING_DEFAULT_MODEL),
         AiProvider::OpenAi => Some(OPENAI_DEFAULT_MODEL),
     }
 }
