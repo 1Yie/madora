@@ -16,6 +16,9 @@ export type AiProvider =
 	| 'custom'
 	| 'deepseek'
 	| 'kimi'
+	| 'minimax'
+	| 'mimo'
+	| 'mimo-coding'
 	| 'openai';
 
 export type CustomProviderProtocol = 'anthropic' | 'openai';
@@ -24,6 +27,7 @@ type ProviderConfig = {
 	apiUrl: string;
 	customProtocol: CustomProviderProtocol;
 	model: string;
+	useSsl: boolean;
 };
 
 type ProviderApiKeyAvailability = Record<AiProvider, boolean>;
@@ -44,10 +48,10 @@ type AiSettingsContextValue = ProviderConfig & {
 	setProvider: (provider: AiProvider) => void;
 	setSaveMode: (saveMode: SaveMode) => void;
 	setShowHiddenFiles: (showHiddenFiles: boolean) => void;
+	setUseSsl: (useSsl: boolean) => void;
 };
 
 type ProviderDefinition = {
-	description: string;
 	defaultApiUrl: string;
 	defaultModel: string;
 	key: AiProvider;
@@ -56,35 +60,48 @@ type ProviderDefinition = {
 
 const PROVIDERS: ProviderDefinition[] = [
 	{
-		description: 'DeepSeek 官方接口。',
 		defaultApiUrl: 'https://api.deepseek.com',
 		defaultModel: 'deepseek-v4-pro',
 		key: 'deepseek',
 		label: 'DeepSeek',
 	},
 	{
-		description: 'OpenAI / ChatGPT 标准接口。',
 		defaultApiUrl: 'https://api.openai.com',
 		defaultModel: 'gpt-4o-mini',
 		key: 'openai',
 		label: 'OpenAI',
 	},
 	{
-		description: 'Anthropic Claude 接口。',
 		defaultApiUrl: 'https://api.anthropic.com',
-		defaultModel: 'claude-3-5-sonnet-latest',
+		defaultModel: 'claude-sonnet-4-6',
 		key: 'anthropic',
 		label: 'Anthropic',
 	},
 	{
-		description: 'Kimi / Moonshot OpenAI 兼容接口。',
 		defaultApiUrl: 'https://api.moonshot.cn',
 		defaultModel: 'moonshot-v1-8k',
 		key: 'kimi',
 		label: 'Kimi',
 	},
 	{
-		description: '自定义 OpenAI / Anthropic 兼容接口。',
+		defaultApiUrl: 'https://api.minimax.io',
+		defaultModel: 'MiniMax-M2.7',
+		key: 'minimax',
+		label: 'MiniMax',
+	},
+	{
+		defaultApiUrl: 'https://api.xiaomimimo.com',
+		defaultModel: 'mimo-v2.5-pro',
+		key: 'mimo',
+		label: 'Xiaomi MiMo',
+	},
+	{
+		defaultApiUrl: 'https://token-plan-cn.xiaomimimo.com',
+		defaultModel: 'mimo-v2.5-pro',
+		key: 'mimo-coding',
+		label: 'Xiaomi MiMo Coding Plan',
+	},
+	{
 		defaultApiUrl: '',
 		defaultModel: '',
 		key: 'custom',
@@ -101,6 +118,7 @@ const AI_COMPLETION_CUSTOM_PROTOCOL_STORAGE_KEY =
 	'madora-ai-completion-custom-protocol';
 const AI_COMPLETION_MODEL_STORAGE_KEY = 'madora-ai-completion-model';
 const EDITOR_SAVE_MODE_STORAGE_KEY = 'madora-editor-save-mode';
+const AI_COMPLETION_USE_SSL_STORAGE_KEY = 'madora-ai-completion-use-ssl';
 const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY =
 	'madora-explorer-show-hidden-files';
 
@@ -140,6 +158,9 @@ function createProviderApiKeyAvailability(
 		custom: initialValue,
 		deepseek: initialValue,
 		kimi: initialValue,
+		minimax: initialValue,
+		mimo: initialValue,
+		'mimo-coding': initialValue,
 		openai: initialValue,
 	};
 }
@@ -203,6 +224,7 @@ function getDefaultProviderConfig(provider: AiProvider): ProviderConfig {
 		apiUrl: definition.defaultApiUrl,
 		customProtocol: provider === 'anthropic' ? 'anthropic' : 'openai',
 		model: definition.defaultModel,
+		useSsl: true,
 	};
 }
 
@@ -234,6 +256,14 @@ function readProviderConfig(provider: AiProvider): ProviderConfig {
 			getStoredValue(
 				getProviderStorageKey(AI_COMPLETION_MODEL_STORAGE_KEY, provider)
 			) ?? defaultConfig.model,
+		useSsl: (() => {
+			const storedValue = getStoredValue(
+				getProviderStorageKey(AI_COMPLETION_USE_SSL_STORAGE_KEY, provider)
+			);
+			return storedValue === null
+				? defaultConfig.useSsl
+				: storedValue === 'true';
+		})(),
 	};
 }
 
@@ -243,6 +273,9 @@ function readInitialProviderConfigs(): Record<AiProvider, ProviderConfig> {
 		custom: readProviderConfig('custom'),
 		deepseek: readProviderConfig('deepseek'),
 		kimi: readProviderConfig('kimi'),
+		minimax: readProviderConfig('minimax'),
+		mimo: readProviderConfig('mimo'),
+		'mimo-coding': readProviderConfig('mimo-coding'),
 		openai: readProviderConfig('openai'),
 	};
 }
@@ -416,6 +449,10 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 				getProviderStorageKey(AI_COMPLETION_MODEL_STORAGE_KEY, providerKey),
 				config.model
 			);
+			window.localStorage.setItem(
+				getProviderStorageKey(AI_COMPLETION_USE_SSL_STORAGE_KEY, providerKey),
+				String(config.useSsl)
+			);
 		}
 	}, [providerConfigs]);
 
@@ -469,6 +506,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			},
 			saveMode,
 			showHiddenFiles,
+			useSsl: currentConfig.useSsl,
 
 			setApiUrl: (apiUrl) => {
 				setProviderConfigs((prev) => ({
@@ -492,11 +530,18 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			setProvider,
 			setSaveMode,
 			setShowHiddenFiles,
+			setUseSsl: (useSsl) => {
+				setProviderConfigs((prev) => ({
+					...prev,
+					[provider]: { ...prev[provider], useSsl },
+				}));
+			},
 		}),
 		[
 			currentConfig.apiUrl,
 			currentConfig.customProtocol,
 			currentConfig.model,
+			currentConfig.useSsl,
 			hasApiKey,
 			enabled,
 			provider,
