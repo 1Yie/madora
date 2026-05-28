@@ -5,10 +5,9 @@ import {
 	getVersion,
 } from '@tauri-apps/api/app';
 import { useEffect, useState } from 'react';
-
 import logo from '@/assets/icon.png';
 import packageJson from '../../../../package.json';
-import { AboutStat } from '@/components/system/setting/shared';
+import { Stat } from '@/components/system/setting/shared';
 import { ExternalLinkAnchor } from '@/components/ui/external-link';
 
 type AppInfo = {
@@ -36,28 +35,51 @@ async function readAppInfo(): Promise<AppInfo> {
 			getTauriVersion(),
 			getIdentifier(),
 		]);
-
 		return { identifier, name, tauriVersion, version };
 	} catch {
 		return FALLBACK_APP_INFO;
 	}
 }
 
-export function AboutSettings() {
+function useAppInfo() {
 	const [appInfo, setAppInfo] = useState<AppInfo>(FALLBACK_APP_INFO);
 
 	useEffect(() => {
 		let active = true;
-
-		void readAppInfo().then((nextInfo) => {
-			if (!active) return;
-			setAppInfo(nextInfo);
+		void readAppInfo().then((info) => {
+			if (active) setAppInfo(info);
 		});
-
 		return () => {
 			active = false;
 		};
 	}, []);
+
+	return appInfo;
+}
+
+export function AboutSettings() {
+	const appInfo = useAppInfo();
+
+	const stats: Array<{ label: string; value: React.ReactNode }> = [
+		{ label: 'Version', value: appInfo.version },
+		{ label: 'By', value: 'ichiyo' },
+		{
+			label: 'Website',
+			value: (
+				<ExternalLinkAnchor href={WEBSITE_URL}>
+					{WEBSITE_URL}
+				</ExternalLinkAnchor>
+			),
+		},
+		{
+			label: 'Source Code',
+			value: (
+				<ExternalLinkAnchor href={SOURCE_CODE_URL}>
+					{SOURCE_CODE_URL}
+				</ExternalLinkAnchor>
+			),
+		},
+	];
 
 	return (
 		<div className="space-y-4">
@@ -73,8 +95,11 @@ export function AboutSettings() {
 								className="size-12 shrink-0 rounded-2xl"
 								src={logo}
 							/>
-							<h1 className="text-3xl font-medium tracking-tight">
-								<span className="text-muted-foreground">Madora</span>
+							<h1
+								className="text-3xl font-medium tracking-tight
+									text-muted-foreground"
+							>
+								Madora
 							</h1>
 						</div>
 						<p className="font-mono text-4xl font-medium tracking-tight">
@@ -84,24 +109,9 @@ export function AboutSettings() {
 						</p>
 					</div>
 					<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-						<AboutStat label="Version" value={appInfo.version} />
-						<AboutStat label="By" value="ichiyo" />
-						<AboutStat
-							label="Website"
-							value={
-								<ExternalLinkAnchor href={WEBSITE_URL}>
-									{WEBSITE_URL}
-								</ExternalLinkAnchor>
-							}
-						/>
-						<AboutStat
-							label="Source Code"
-							value={
-								<ExternalLinkAnchor href={SOURCE_CODE_URL}>
-									{SOURCE_CODE_URL}
-								</ExternalLinkAnchor>
-							}
-						/>
+						{stats.map(({ label, value }) => (
+							<Stat key={label} label={label} value={value} />
+						))}
 					</div>
 				</div>
 			</section>

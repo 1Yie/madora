@@ -25,13 +25,7 @@ export function SettingsSectionCard({
 	);
 }
 
-export function AboutStat({
-	label,
-	value,
-}: {
-	label: string;
-	value: ReactNode;
-}) {
+export function Stat({ label, value }: { label: string; value: ReactNode }) {
 	return (
 		<div className="rounded-xl border border-border bg-background px-4 py-3">
 			<div className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -47,15 +41,15 @@ export function AboutStat({
 	);
 }
 
-export function ThemeOption({
+export function Option({
 	active,
-	description,
 	label,
 	icon,
+	description,
 	onClick,
 }: {
 	active: boolean;
-	description: string;
+	description?: string;
 	label: string;
 	icon?: ReactNode;
 	onClick: () => void;
@@ -90,7 +84,57 @@ export function ThemeOption({
 					/>
 				</div>
 			</div>
-			<p className="mt-1 text-xs leading-5">{description}</p>
+			{description && <p className="mt-1 text-xs leading-5">{description}</p>}
 		</button>
+	);
+}
+
+export function SettingRow({
+	title,
+	description,
+	children,
+}: {
+	title: ReactNode;
+	description?: ReactNode;
+	children: ReactNode;
+}) {
+	return (
+		<div
+			className="flex items-center justify-between gap-4 rounded-xl border
+				border-border bg-background px-4 py-3"
+		>
+			<div className="min-w-0 space-y-0.5">
+				<div className="text-sm font-medium text-foreground">{title}</div>
+				{description && (
+					<p className="text-xs text-muted-foreground">{description}</p>
+				)}
+			</div>
+			<div className="shrink-0">{children}</div>
+		</div>
+	);
+}
+
+export function FieldBlock({
+	label,
+	hint,
+	children,
+	icon,
+}: {
+	label: string;
+	hint?: ReactNode;
+	children: ReactNode;
+	icon?: ReactNode;
+}) {
+	return (
+		<div className="space-y-1.5">
+			<div className="flex items-center gap-1.5">
+				{icon && (
+					<span className="text-muted-foreground [&>svg]:size-3.5">{icon}</span>
+				)}
+				<span className="text-sm font-medium text-foreground">{label}</span>
+			</div>
+			{children}
+			{hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+		</div>
 	);
 }
