@@ -4,7 +4,9 @@ import { Cog } from 'lucide-react';
 import Anthropic from '@lobehub/icons/es/Anthropic';
 import DeepSeek from '@lobehub/icons/es/DeepSeek';
 import Kimi from '@lobehub/icons/es/Kimi';
+import Minimax from '@lobehub/icons/es/Minimax';
 import OpenAI from '@lobehub/icons/es/OpenAI';
+import XiaomiMiMo from '@lobehub/icons/es/XiaomiMiMo';
 
 export type ProviderIconProps = {
 	className?: string;
@@ -40,6 +42,20 @@ export function KimiIcon({ className, size }: ProviderIconProps) {
 }
 
 /**
+ * MiniMax — official brand icon from @lobehub/icons.
+ */
+export function MiniMaxIcon({ className, size }: ProviderIconProps) {
+	return <Minimax className={className} size={size} />;
+}
+
+/**
+ * Xiaomi MiMo — official brand icon from @lobehub/icons.
+ */
+export function MiMoIcon({ className, size }: ProviderIconProps) {
+	return <XiaomiMiMo className={className} size={size} />;
+}
+
+/**
  * Custom — generic settings icon (no brand).
  */
 export function CustomIcon({ className, size = '1em' }: ProviderIconProps) {
@@ -55,5 +71,8 @@ export const providerIconMap: Record<
 	openai: OpenAIIcon,
 	anthropic: AnthropicIcon,
 	kimi: KimiIcon,
+	minimax: MiniMaxIcon,
+	mimo: MiMoIcon,
+	'mimo-coding': MiMoIcon,
 	custom: CustomIcon,
 };

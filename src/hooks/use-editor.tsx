@@ -628,14 +628,22 @@ export function useEditor({
 		hasApiKey: false,
 		model: '',
 		provider: 'deepseek',
+		useSsl: true,
 	});
 	const completionStatusRef = useRef<CompletionStatus>({
 		message: '保存 API Key 后可用',
 		tone: 'muted',
 	});
 
-	const { apiUrl, customProtocol, enabled, hasApiKey, model, provider } =
-		useAiSettings();
+	const {
+		apiUrl,
+		customProtocol,
+		enabled,
+		hasApiKey,
+		model,
+		provider,
+		useSsl,
+	} = useAiSettings();
 
 	const { resolvedTheme } = useTheme();
 
@@ -890,6 +898,7 @@ export function useEditor({
 							settings.provider === 'custom' ? settings.customProtocol : null,
 						model: settings.model.trim().length > 0 ? settings.model : null,
 						provider: settings.provider,
+						useSsl: settings.useSsl,
 					},
 					request: {
 						prefix: prompt,
@@ -1070,6 +1079,7 @@ export function useEditor({
 			hasApiKey,
 			model,
 			provider,
+			useSsl,
 		};
 		completionCacheRef.current = null;
 
@@ -1083,7 +1093,7 @@ export function useEditor({
 			hasApiKey
 		);
 		syncTooltip();
-	}, [apiUrl, customProtocol, enabled, hasApiKey, model, provider]);
+	}, [apiUrl, customProtocol, enabled, hasApiKey, model, provider, useSsl]);
 
 	// resolvedTheme 变化时热更新编辑器主题
 	useEffect(() => {
