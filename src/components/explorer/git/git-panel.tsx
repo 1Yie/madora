@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DialogSidebar } from '@/components/ui/dialog-sidebar';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import {
@@ -1003,11 +1004,11 @@ export function GitPanel({
 			<Dialog onOpenChange={setWorkbenchOpen} open={workbenchOpen}>
 				<DialogPopup
 					showCloseButton={false}
-					className="max-h-[min(88vh,840px)] max-w-[min(980px,calc(100vw-2rem))]
+					className="max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]
 						overflow-hidden"
 				>
 					<div
-						className="flex h-[min(88vh,720px)] min-h-0 min-w-0 flex-col
+						className="flex h-[calc(100vh-5rem)] min-h-0 min-w-0 flex-col
 							overflow-hidden"
 					>
 						<DialogClose
@@ -1019,65 +1020,14 @@ export function GitPanel({
 						<div
 							className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
 						>
-							<aside
-								className="border-r border-border bg-muted md:w-56 md:shrink-0"
-							>
-								<ScrollArea
-									className="max-h-60 md:h-full md:max-h-none overflow-x-hidden"
-								>
-									<nav className="flex flex-col gap-1 p-3">
-										{workbenchSections.map((section) => {
-											const Icon = section.icon;
-											const isActive = activeTab === section.id;
-
-											return (
-												<button
-													key={section.id}
-													aria-current={isActive ? 'page' : undefined}
-													type="button"
-													className={cn(
-														`flex items-start gap-3 rounded-xl px-3 py-3
-														text-left transition-colors`,
-														isActive
-															? 'bg-primary/10 text-foreground'
-															: `text-muted-foreground hover:bg-accent
-																hover:text-foreground`
-													)}
-													onClick={() => {
-														if (section.id === 'history') {
-															void loadGitLog();
-														}
-														setActiveTab(section.id);
-													}}
-												>
-													<span
-														className={cn(
-															'mt-0.5 rounded-lg border p-2',
-															isActive
-																? 'border-primary/30 bg-primary/10 text-primary'
-																: `border-border bg-background
-																	text-muted-foreground`
-														)}
-													>
-														<Icon className="size-4" />
-													</span>
-													<span className="min-w-0">
-														<span className="block text-sm font-medium">
-															{section.label}
-														</span>
-														<span
-															className="mt-1 block text-xs leading-5
-																text-muted-foreground"
-														>
-															{section.description}
-														</span>
-													</span>
-												</button>
-											);
-										})}
-									</nav>
-								</ScrollArea>
-							</aside>
+							<DialogSidebar
+								items={workbenchSections}
+								activeId={activeTab}
+								onSelect={(id) => {
+									if (id === 'history') void loadGitLog();
+									setActiveTab(id as GitWorkbenchTab);
+								}}
+							/>
 							<section
 								className="flex min-h-0 min-w-0 flex-1 pt-4 flex-col
 									overflow-hidden bg-popover"

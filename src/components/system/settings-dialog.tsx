@@ -4,9 +4,12 @@ import { AboutSettings } from '@/components/system/setting/about';
 import { AppearanceSettings } from '@/components/system/setting/appearance';
 import { EditorSettings } from '@/components/system/setting/editor';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
+import {
+	DialogSidebar,
+	type DialogSidebarItem,
+} from '@/components/ui/dialog-sidebar';
 import {
 	settingsSections,
 	type SettingsSectionId,
@@ -42,11 +45,11 @@ export function SettingsDialog() {
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogPopup
 					showCloseButton={false}
-					className="max-h-[min(85vh,720px)] max-w-[min(960px,calc(100vw-2rem))]
+					className="max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]
 						overflow-hidden"
 				>
 					<div
-						className="flex h-[min(70vh,620px)] min-h-0 min-w-0 flex-col
+						className="flex h-[calc(100vh-5rem)] min-h-0 min-w-0 flex-col
 							overflow-hidden"
 					>
 						<DialogClose
@@ -58,61 +61,11 @@ export function SettingsDialog() {
 						<div
 							className="flex min-h-0 min-w-0 flex-1 overflow-hidden flex-row"
 						>
-							<aside
-								className="border-b bg-muted md:w-64 md:shrink-0 md:border-b-0
-									md:border-r"
-							>
-								<ScrollArea
-									className="max-h-60 md:h-full md:max-h-none overflow-x-hidden"
-								>
-									<nav className="flex flex-col gap-1 p-3">
-										{settingsSections.map((section) => {
-											const Icon = section.icon;
-											const isActive = currentSection.id === section.id;
-
-											return (
-												<button
-													key={section.id}
-													aria-current={isActive ? 'page' : undefined}
-													type="button"
-													className={cn(
-														`flex items-start gap-3 rounded-xl px-3 py-3
-														text-left transition-colors`,
-														isActive
-															? 'bg-primary/10 text-foreground'
-															: `text-muted-foreground hover:bg-accent
-																hover:text-foreground`
-													)}
-													onClick={() => setActiveSection(section.id)}
-												>
-													<span
-														className={cn(
-															'mt-0.5 rounded-lg border p-2',
-															isActive
-																? 'border-primary/30 bg-primary/10 text-primary'
-																: `border-border bg-background
-																	text-muted-foreground`
-														)}
-													>
-														<Icon className="size-4" />
-													</span>
-													<span className="min-w-0">
-														<span className="block text-sm font-medium">
-															{section.label}
-														</span>
-														<span
-															className="mt-1 block text-xs leading-5
-																text-muted-foreground"
-														>
-															{section.description}
-														</span>
-													</span>
-												</button>
-											);
-										})}
-									</nav>
-								</ScrollArea>
-							</aside>
+							<DialogSidebar
+								items={settingsSections as DialogSidebarItem[]}
+								activeId={activeSection}
+								onSelect={(id) => setActiveSection(id as SettingsSectionId)}
+							/>
 							<section
 								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
 									bg-popover"
