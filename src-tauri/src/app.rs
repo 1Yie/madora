@@ -94,24 +94,19 @@ pub fn run() {
 /// unwanted browser-level UI on Windows.
 #[cfg(target_os = "windows")]
 fn configure_windows_webview(app: &tauri::App) {
-    use tauri::webview::WebviewExtWindows;
-
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
 
-    let webview = window.as_ref();
-
-    let Ok(controller) = webview.controller() else {
-        return;
-    };
-    let Ok(core) = controller.CoreWebView2() else {
-        return;
-    };
-    let Ok(settings) = core.Settings() else {
-        return;
-    };
-
-    // Disable the URL tooltip on link hover (the main complaint)
-    let _ = settings.SetIsStatusBarEnabled(false);
+    let _ = window.with_webview(|webview| {
+        let controller = webview.controller();
+        let Ok(core) = controller.CoreWebView2() else {
+            return;
+        };
+        let Ok(settings) = core.Settings() else {
+            return;
+        };
+        // Disable the URL tooltip on link hover (the main complaint)
+        let _ = settings.SetIsStatusBarEnabled(false);
+    });
 }
