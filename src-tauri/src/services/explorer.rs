@@ -219,8 +219,9 @@ fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
     if trimmed_file_name.contains('/') || trimmed_file_name.contains('\\') {
         return Err("文件名不能包含路径分隔符".to_string());
     }
-
-    if trimmed_file_name.to_ascii_lowercase().ends_with(".md") {
+    if trimmed_file_name.to_ascii_lowercase().ends_with(".md")
+        || trimmed_file_name.to_ascii_lowercase().ends_with(".mdx")
+    {
         return Ok(trimmed_file_name.to_string());
     }
 
