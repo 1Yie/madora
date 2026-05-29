@@ -1,17 +1,14 @@
 use std::env;
 
 use crate::{
-    commands::{ai, explorer, git, project, secure_storage, utility, system},
+    commands::{ai, explorer, git, project, secure_storage, system, utility},
     services::ai::AiCompletionService,
 };
 use tauri::Manager;
-
+use tauri_plugin_prevent_default::Flags;
+#[cfg(target_os = "windows")]
+use tauri_plugin_prevent_default::PlatformOptions;
 pub fn run() {
-    #[cfg(target_os = "linux")]
-    {
-        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    }
-
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -21,10 +18,33 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin({
+            let builder = tauri_plugin_prevent_default::Builder::new().with_flags(Flags::all());
+            #[cfg(target_os = "windows")]
+            let builder = builder.platform(
+                PlatformOptions::new()
+                    .browser_accelerator_keys(false)
+                    .default_context_menus(false)
+                    .default_script_dialogs(false)
+                    .dev_tools(false)
+                    .built_in_error_page(false)
+                    .general_autofill(false)
+                    .password_autosave(false)
+                    .pinch_zoom(false)
+                    .swipe_navigation(false)
+                    .zoom_control(false),
+            );
+            builder.build()
+        })
+        .setup(|_app| {
+            #[cfg(target_os = "windows")]
+            configure_windows_webview(_app);
+
+            Ok(())
+        })
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
             utility::greet,
-            // theme
             crate::commands::theme::get_system_theme,
             explorer::pick_workspace_folder,
             explorer::scan_workspace_folder,
@@ -68,4 +88,30 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Disable WebView2 status bar (link hover URL tooltip) and other
+/// unwanted browser-level UI on Windows.
+#[cfg(target_os = "windows")]
+fn configure_windows_webview(app: &tauri::App) {
+    use tauri::webview::WebviewExtWindows;
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    let webview = window.as_ref();
+
+    let Ok(controller) = webview.controller() else {
+        return;
+    };
+    let Ok(core) = controller.CoreWebView2() else {
+        return;
+    };
+    let Ok(settings) = core.Settings() else {
+        return;
+    };
+
+    // Disable the URL tooltip on link hover (the main complaint)
+    let _ = settings.SetIsStatusBarEnabled(false);
 }
