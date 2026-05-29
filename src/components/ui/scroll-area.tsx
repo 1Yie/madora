@@ -1,4 +1,3 @@
-// components/ui/scroll-area.tsx
 'use client';
 
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
@@ -24,7 +23,7 @@ export function ScrollArea({
 		>
 			<ScrollAreaPrimitive.Viewport
 				className={cn(
-					'h-full rounded-[inherit] outline-none',
+					'h-full rounded-[inherit] outline-none will-change-transform',
 					`focus-visible:ring-2 focus-visible:ring-ring
 					focus-visible:ring-offset-1 focus-visible:ring-offset-background`,
 					`data-has-overflow-y:overscroll-y-contain
