@@ -403,6 +403,11 @@ export function WorkspaceBrowser() {
 	};
 
 	const selectNode = async (node: ExplorerNode) => {
+		// Don't reload if already viewing this file
+		if (selectedNodePath === node.path) {
+			return;
+		}
+
 		if (node.kind === 'directory') {
 			setSelectedNodePath(node.path);
 			clearPreviewState();
