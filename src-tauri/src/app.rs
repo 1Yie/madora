@@ -100,10 +100,10 @@ fn configure_windows_webview(app: &tauri::App) {
 
     let _ = window.with_webview(|webview| {
         let controller = webview.controller();
-        let Ok(core) = unsafe { controller.CoreWebView2() } else {
+        let Ok(core) = (unsafe { controller.CoreWebView2() }) else {
             return;
         };
-        let Ok(settings) = unsafe { core.Settings() } else {
+        let Ok(settings) = (unsafe { core.Settings() }) else {
             return;
         };
         // Disable the URL tooltip on link hover (the main complaint)
