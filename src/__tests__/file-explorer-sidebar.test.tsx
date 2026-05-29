@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import type { ExplorerNode } from '@/components/explorer/types';
 import type { GitStatus } from '@/components/explorer/git/git-types';
 
 afterEach(() => {
+	cleanup();
 	vi.clearAllMocks();
 });
 
@@ -89,6 +90,7 @@ function renderSidebar(props: SidebarProps = {}) {
 			onRenameNode={vi.fn()}
 			onExpandDirectory={vi.fn()}
 			onSelectNode={vi.fn()}
+			onClearClipboard={vi.fn()}
 			{...props}
 		/>
 	);
@@ -174,5 +176,130 @@ describe('FileExplorerSidebar', () => {
 
 		expect(await screen.findByText('粘贴到此处')).toBeInTheDocument();
 		expect(screen.getByText('已复制: notes.txt')).toBeInTheDocument();
+	});
+
+	describe('keyboard shortcuts', () => {
+		it('Ctrl+C copies the selected node', () => {
+			const onCopyNode = vi.fn();
+			renderSidebar({
+				selectedPath: '/workspace/readme.md',
+				onCopyNode,
+			});
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'c', ctrlKey: true });
+
+			expect(onCopyNode).toHaveBeenCalledOnce();
+			expect(onCopyNode).toHaveBeenCalledWith(
+				expect.objectContaining({ path: '/workspace/readme.md' })
+			);
+		});
+
+		it('Ctrl+X cuts the selected node', () => {
+			const onCutNode = vi.fn();
+			renderSidebar({
+				selectedPath: '/workspace/readme.md',
+				onCutNode,
+			});
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'x', ctrlKey: true });
+
+			expect(onCutNode).toHaveBeenCalledOnce();
+			expect(onCutNode).toHaveBeenCalledWith(
+				expect.objectContaining({ path: '/workspace/readme.md' })
+			);
+		});
+
+		it('Ctrl+V pastes when clipboard has content', () => {
+			const onPasteNode = vi.fn();
+			renderSidebar({
+				selectedPath: '/workspace/readme.md',
+				clipboard: {
+					item: {
+						name: 'notes.txt',
+						nodeKind: 'file',
+						path: '/workspace/notes.txt',
+					},
+					mode: 'copy',
+				},
+				onPasteNode,
+			});
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'v', ctrlKey: true });
+
+			expect(onPasteNode).toHaveBeenCalledOnce();
+			expect(onPasteNode).toHaveBeenCalledWith('/workspace/readme.md');
+		});
+
+		it('Ctrl+V does nothing when clipboard is empty', () => {
+			const onPasteNode = vi.fn();
+			renderSidebar({
+				selectedPath: '/workspace/readme.md',
+				clipboard: null,
+				onPasteNode,
+			});
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'v', ctrlKey: true });
+
+			expect(onPasteNode).not.toHaveBeenCalled();
+		});
+
+		it('Delete key opens delete confirmation dialog', async () => {
+			renderSidebar({ selectedPath: '/workspace/readme.md' });
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'Delete' });
+
+			expect(await screen.findByText(/确认删除/)).toBeInTheDocument();
+		});
+
+		it('F2 key opens rename dialog', async () => {
+			renderSidebar({ selectedPath: '/workspace/readme.md' });
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'F2' });
+
+			expect(await screen.findByText(/重命名/)).toBeInTheDocument();
+		});
+
+		it('shortcuts do nothing when no node is selected', () => {
+			const onCopyNode = vi.fn();
+			const onCutNode = vi.fn();
+			const onPasteNode = vi.fn();
+			renderSidebar({
+				selectedPath: null,
+				clipboard: {
+					item: {
+						name: 'notes.txt',
+						nodeKind: 'file',
+						path: '/workspace/notes.txt',
+					},
+					mode: 'copy',
+				},
+				onCopyNode,
+				onCutNode,
+				onPasteNode,
+			});
+
+			const button = screen.getByRole('button', { name: 'readme.md' });
+			button.focus();
+			fireEvent.keyDown(button, { key: 'c', ctrlKey: true });
+			fireEvent.keyDown(button, { key: 'x', ctrlKey: true });
+			// Ctrl+V with clipboard should still work (pastes to root)
+			fireEvent.keyDown(button, { key: 'v', ctrlKey: true });
+
+			expect(onCopyNode).not.toHaveBeenCalled();
+			expect(onCutNode).not.toHaveBeenCalled();
+			expect(onPasteNode).toHaveBeenCalledWith(null);
+		});
 	});
 });

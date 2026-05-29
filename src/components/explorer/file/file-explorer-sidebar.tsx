@@ -20,6 +20,7 @@ import {
 	type ReactNode,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from 'react';
 
@@ -56,7 +57,7 @@ import {
 	DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { showErrorToast } from '@/components/ui/toast';
+import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
 import type { GitStatus } from '../git/git-types';
@@ -110,6 +111,7 @@ type FileExplorerSidebarProps = {
 	onRenameNode: (targetPath: string, newName: string) => Promise<void>;
 	onExpandDirectory: (node: ExplorerNode) => void;
 	onSelectNode: (node: ExplorerNode) => void;
+	onClearClipboard: () => void;
 };
 
 type PendingAction =
@@ -495,6 +497,7 @@ function ContextMenuContent({
 	target: ExplorerNode | null;
 }) {
 	const canCreateDirectory = target === null || target.kind === 'directory';
+	const canCreateDocument = canCreateDirectory;
 
 	return (
 		<ContextMenuPopup align="start" sideOffset={6}>
@@ -506,10 +509,12 @@ function ContextMenuContent({
 					</MenuItem>
 				) : (
 					<>
-						<MenuItem onClick={() => onAction('createMarkdown')}>
-							<FileText />
-							新建 Markdown 文档
-						</MenuItem>
+						{canCreateDocument ? (
+							<MenuItem onClick={() => onAction('createMarkdown')}>
+								<FileText />
+								新建文档
+							</MenuItem>
+						) : null}
 						{canCreateDirectory ? (
 							<MenuItem onClick={() => onAction('createDirectory')}>
 								<FolderPlus />
@@ -548,7 +553,7 @@ function ContextMenuContent({
 				<>
 					<MenuItem onClick={() => onAction('createMarkdown')}>
 						<FileText />
-						新建 Markdown 文档
+						新建文档
 					</MenuItem>
 					<MenuItem onClick={() => onAction('createDirectory')}>
 						<FolderPlus />
@@ -599,7 +604,6 @@ function CreateMarkdownDialog({
 			reset();
 		}
 	};
-
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 
@@ -607,6 +611,16 @@ function CreateMarkdownDialog({
 
 		if (!trimmedFileName) {
 			showErrorToast('创建失败', '请输入文件名');
+			return;
+		}
+
+		const lowerName = trimmedFileName.toLowerCase();
+		if (
+			lowerName.includes('.') &&
+			!lowerName.endsWith('.md') &&
+			!lowerName.endsWith('.mdx')
+		) {
+			showErrorToast('创建失败', '文件名只能以 .md 或 .mdx 结尾');
 			return;
 		}
 
@@ -638,13 +652,13 @@ function CreateMarkdownDialog({
 			onOpenChange={handleOpenChange}
 			onSubmit={handleSubmit}
 			open={open}
-			title="新建 Markdown 文档"
+			title="新建文档"
 		>
 			<Input
 				autoFocus
 				nativeInput
 				onChange={(event) => setFileName(event.target.value)}
-				placeholder="untitled.md"
+				placeholder="untitled.md / untitled.mdx"
 				value={fileName}
 			/>
 		</ExplorerDialogForm>
@@ -673,7 +687,7 @@ function CreateEntryMenu({
 			<DropdownMenuContent align="center" sideOffset={6}>
 				<DropdownMenuItem disabled={busy} onClick={onCreateMarkdown}>
 					<FileText />
-					新建 Markdown 文档
+					新建文档
 				</DropdownMenuItem>
 				<DropdownMenuItem disabled={busy} onClick={onCreateDirectory}>
 					<FolderPlus />
@@ -895,6 +909,7 @@ function FileTreeNode({
 	node,
 	onContextAction,
 	onExpandDirectory,
+	onHoverNode,
 	onSelectNode,
 	selectedPath,
 	toggleDirectory,
@@ -918,13 +933,19 @@ function FileTreeNode({
 		node: ExplorerNode
 	) => void;
 	onExpandDirectory: (node: ExplorerNode) => void;
+	onHoverNode: (node: ExplorerNode | null) => void;
 	onSelectNode: (node: ExplorerNode) => void;
 	selectedPath: string | null;
 	toggleDirectory: (path: string) => void;
 }) {
+	const [contextMenuOpen, setContextMenuOpen] = useState(false);
 	const isDirectory = node.kind === 'directory';
-	const isSelected = selectedPath === node.path;
+	const isActuallySelected = selectedPath === node.path;
+	const isSelected = isActuallySelected || contextMenuOpen;
 	const isExpanded = isDirectory && expandedPaths.has(node.path);
+	const isCopied =
+		clipboard?.mode === 'copy' && clipboard.item.path === node.path;
+	const isCut = clipboard?.mode === 'cut' && clipboard.item.path === node.path;
 	const pasteDisabled = !clipboard || clipboard.item.path === node.path;
 	const gitState = isDirectory
 		? getAggregatedDirectoryGitState(node, gitStatusMap)
@@ -935,8 +956,15 @@ function FileTreeNode({
 		const isLoading = loadingPaths.has(node.path);
 
 		return (
-			<div className="py-0.5">
-				<ContextMenuRoot>
+			<div
+				className={cn(
+					'py-0.5',
+					isCopied && 'border-l-2 border-primary/40',
+					isCut && 'border-l-2 border-destructive/40 opacity-50'
+				)}
+				onMouseEnter={() => onHoverNode(node)}
+			>
+				<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 					<ContextMenuTrigger>
 						<div
 							className="flex w-full items-center gap-1"
@@ -983,7 +1011,15 @@ function FileTreeNode({
 										: `text-sidebar-foreground hover:bg-sidebar-accent
 											hover:text-sidebar-accent-foreground`
 								)}
-								onClick={() => onSelectNode(node)}
+								onClick={() => {
+									const nextExpanded = !isExpanded;
+									toggleDirectory(node.path);
+									onSelectNode(node);
+
+									if (nextExpanded && !node.loaded && !isLoading) {
+										onExpandDirectory(node);
+									}
+								}}
 							>
 								{isLoading ? (
 									<LoaderCircle className="size-4 shrink-0 animate-spin" />
@@ -998,8 +1034,6 @@ function FileTreeNode({
 										className={cn(
 											`ml-auto shrink-0 font-mono text-[11px] font-semibold
 												uppercase`,
-											// Always use the standard git badge style so selection doesn't add a
-											// background; this keeps the badge color consistent like VS Code.
 											getGitBadgeClassName(gitState)
 										)}
 									>
@@ -1033,6 +1067,7 @@ function FileTreeNode({
 										node={child}
 										onContextAction={onContextAction}
 										onExpandDirectory={onExpandDirectory}
+										onHoverNode={onHoverNode}
 										onSelectNode={onSelectNode}
 										selectedPath={selectedPath}
 										toggleDirectory={toggleDirectory}
@@ -1067,18 +1102,27 @@ function FileTreeNode({
 	const Icon = node.fileKind === 'image' ? FileImage : FileText;
 
 	return (
-		<div className="py-0.5">
-			<ContextMenuRoot>
+		<div
+			className={cn(
+				'py-0.5',
+				isCopied && 'border-l-2 border-primary/40',
+				isCut && 'border-l-2 border-destructive/40 opacity-50'
+			)}
+			onMouseEnter={() => onHoverNode(node)}
+		>
+			<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 				<ContextMenuTrigger>
 					<button
 						type="button"
 						className={cn(
 							`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left
 							text-sm transition-colors`,
-							isSelected
+							isActuallySelected
 								? 'bg-sidebar-primary text-sidebar-primary-foreground'
-								: `text-sidebar-foreground hover:bg-sidebar-accent
-									hover:text-sidebar-accent-foreground`
+								: contextMenuOpen
+									? 'bg-sidebar-accent text-sidebar-accent-foreground'
+									: `text-sidebar-foreground hover:bg-sidebar-accent
+										hover:text-sidebar-accent-foreground`
 						)}
 						onClick={() => void onSelectNode(node)}
 						style={{ paddingLeft: `${depth * 14 + 32}px` }}
@@ -1094,7 +1138,6 @@ function FileTreeNode({
 								className={cn(
 									`ml-auto shrink-0 font-mono text-[11px] font-semibold
 										uppercase`,
-									// Keep badge appearance unchanged on selection (no added bg).
 									getGitBadgeClassName(gitState)
 								)}
 							>
@@ -1105,7 +1148,6 @@ function FileTreeNode({
 				</ContextMenuTrigger>
 				<ContextMenuContent
 					clipboard={clipboard}
-					isDeletedGitEntry={isDeletedGitEntry}
 					onAction={(action) => onContextAction(action, node)}
 					pasteDisabled={!clipboard}
 					target={node}
@@ -1140,6 +1182,7 @@ export function FileExplorerSidebar({
 	onRenameNode,
 	onExpandDirectory,
 	onSelectNode,
+	onClearClipboard,
 }: FileExplorerSidebarProps) {
 	const [expansionState, setExpansionState] = useState<ExplorerExpansionState>({
 		collapsedPaths: new Set(),
@@ -1169,7 +1212,7 @@ export function FileExplorerSidebar({
 		);
 
 		// On initial load, default to root expanded unless the user explicitly collapsed it.
-		if (!collapsedPaths.has(mergedRoot.path) && nextPaths.size === 0) {
+		if (!collapsedPaths.has(mergedRoot.path)) {
 			nextPaths.add(mergedRoot.path);
 		}
 
@@ -1233,6 +1276,66 @@ export function FileExplorerSidebar({
 			};
 		});
 	};
+
+	const hoveredNodeRef = useRef<ExplorerNode | null>(null);
+
+	useEffect(() => {
+		function onKeyDown(e: KeyboardEvent) {
+			if (pendingAction !== null) return;
+
+			// Never intercept inside native inputs (rename/create dialogs)
+			const tag = (e.target as HTMLElement).tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+			// Prefer the node under the mouse cursor, fall back to selection
+			const node =
+				hoveredNodeRef.current ??
+				(selectedPath && mergedRoot
+					? findNodeByPath(mergedRoot, selectedPath)
+					: null);
+			const mod = e.ctrlKey || e.metaKey;
+			if (mod && e.key === 'c' && node) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				onCopyNode(node);
+				showSuccessToast(`已复制 "${node.name}"`);
+			} else if (mod && e.key === 'x' && node) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				onCutNode(node);
+				showSuccessToast(`已剪切 "${node.name}"`);
+			} else if (mod && e.key === 'v' && clipboard) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				void onPasteNode(node?.path ?? null);
+				showSuccessToast(`已粘贴 "${clipboard.item.name}"`);
+			} else if (e.key === 'Delete' && node) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				setPendingAction({ node, type: 'delete' });
+			} else if (e.key === 'F2' && node) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				setPendingAction({ node, type: 'rename' });
+			} else if (e.key === 'Escape' && clipboard) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				onClearClipboard();
+				showSuccessToast('已取消剪贴板操作');
+			}
+		}
+		document.addEventListener('keydown', onKeyDown);
+		return () => document.removeEventListener('keydown', onKeyDown);
+	}, [
+		clipboard,
+		mergedRoot,
+		onClearClipboard,
+		onCopyNode,
+		onCutNode,
+		onPasteNode,
+		pendingAction,
+		selectedPath,
+	]);
 
 	const canPasteToRoot = useMemo(
 		() => Boolean(root && clipboard),
@@ -1384,6 +1487,7 @@ export function FileExplorerSidebar({
 											void handleContextAction(action, node);
 										}}
 										onExpandDirectory={onExpandDirectory}
+										onHoverNode={(node) => (hoveredNodeRef.current = node)}
 										onSelectNode={onSelectNode}
 										selectedPath={selectedPath}
 										toggleDirectory={toggleDirectory}

@@ -1161,6 +1161,7 @@ export function WorkspaceBrowser() {
 					onRenameNode={renameNode}
 					onExpandDirectory={expandDirectory}
 					onSelectNode={selectNode}
+					onClearClipboard={() => setClipboard(null)}
 					operationBusy={operationBusy}
 					root={root}
 					selectedPath={selectedNodePath}
