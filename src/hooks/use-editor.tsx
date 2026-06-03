@@ -25,12 +25,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
-import {
-	useEffect,
-	useEffectEvent,
-	useRef,
-	type MutableRefObject,
-} from 'react';
+import { useEffect, useEffectEvent, useRef, type RefObject } from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
 import { useTheme } from '@/components/system/theme-provider';
@@ -43,7 +38,7 @@ type UseEditorOptions = {
 	title?: string;
 
 	value: string;
-	viewRef?: MutableRefObject<EditorView | null>;
+	viewRef?: RefObject<EditorView | null>;
 };
 
 type CompletionStatusTone = 'muted' | 'loading' | 'success' | 'error';
@@ -63,6 +58,7 @@ type CompletionPreviewState = {
 	streaming: boolean;
 	pos: number;
 	text: string;
+	hidden?: boolean;
 };
 
 type CompletionSnapshot = {
@@ -272,68 +268,107 @@ const completionTooltipField = StateField.define<CompletionTooltipState | null>(
 );
 
 class CompletionPreviewWidget extends WidgetType {
-	constructor(private readonly text: string) {
+	constructor(
+		private readonly text: string,
+		private readonly hidden: boolean
+	) {
 		super();
 	}
 	eq(other: CompletionPreviewWidget) {
-		return other.text === this.text;
+		return other.text === this.text && other.hidden === this.hidden;
 	}
 	toDOM() {
 		const dom = document.createElement('span');
 		dom.className = 'cm-fim-preview';
 		dom.setAttribute('aria-hidden', 'true');
 		dom.textContent = this.text;
+		if (!this.hidden) {
+			requestAnimationFrame(() => {
+				dom.style.opacity = '1';
+			});
+		}
 		return dom;
+	}
+	updateDOM(dom: HTMLElement): boolean {
+		dom.textContent = this.text;
+		if (this.hidden) {
+			requestAnimationFrame(() => {
+				dom.style.opacity = '0';
+			});
+		} else {
+			dom.style.opacity = '0';
+			requestAnimationFrame(() => {
+				dom.style.opacity = '1';
+			});
+		}
+		return true;
 	}
 	ignoreEvent() {
 		return true;
 	}
 }
 
-const completionPreviewField = StateField.define<CompletionPreviewState | null>(
-	{
-		create() {
-			return null;
-		},
-		update(value, transaction) {
-			for (const effect of transaction.effects) {
-				if (effect.is(setCompletionPreviewEffect)) return effect.value;
-			}
-			if (!value) return null;
+const INITIAL_PREVIEW_STATE: CompletionPreviewState = {
+	pos: 0,
+	text: '',
+	streaming: false,
+	hidden: true,
+};
 
-			if (transaction.docChanged) {
-				return getContinuedCompletionPreview(value, transaction);
-			}
-
-			if (transaction.selection) {
-				const prev = transaction.startState.selection.main;
-				const next = transaction.state.selection.main;
-				const selectionActuallyChanged =
-					prev.from !== next.from || prev.to !== next.to;
-				if (
-					selectionActuallyChanged &&
-					(transaction.state.selection.ranges.length !== 1 ||
-						!transaction.state.selection.main.empty ||
-						transaction.state.selection.main.head !== value.pos)
-				) {
-					return null;
+const completionPreviewField = StateField.define<CompletionPreviewState>({
+	create() {
+		return INITIAL_PREVIEW_STATE;
+	},
+	update(value, transaction) {
+		for (const effect of transaction.effects) {
+			if (effect.is(setCompletionPreviewEffect)) {
+				const newVal = effect.value;
+				if (newVal === null) {
+					return { ...value, hidden: true, text: '' };
 				}
+				return newVal;
 			}
-			return value;
-		},
-		provide: (field) =>
-			EditorView.decorations.compute([field], (state) => {
-				const preview = state.field(field);
-				if (!preview || preview.text.length === 0) return Decoration.set([]);
-				return Decoration.set([
-					Decoration.widget({
-						side: 1,
-						widget: new CompletionPreviewWidget(preview.text),
-					}).range(preview.pos),
-				]);
-			}),
-	}
-);
+		}
+		if (value.hidden) return value;
+
+		if (transaction.docChanged) {
+			const continued = getContinuedCompletionPreview(value, transaction);
+			if (continued === null) {
+				return { ...value, hidden: true, text: '' };
+			}
+			return continued;
+		}
+
+		if (transaction.selection) {
+			const prev = transaction.startState.selection.main;
+			const next = transaction.state.selection.main;
+			const selectionActuallyChanged =
+				prev.from !== next.from || prev.to !== next.to;
+			if (
+				selectionActuallyChanged &&
+				(transaction.state.selection.ranges.length !== 1 ||
+					!transaction.state.selection.main.empty ||
+					transaction.state.selection.main.head !== value.pos)
+			) {
+				return { ...value, hidden: true, text: '' };
+			}
+		}
+		return value;
+	},
+	provide: (field) =>
+		EditorView.decorations.compute([field], (state) => {
+			const preview = state.field(field);
+			return Decoration.set([
+				Decoration.widget({
+					side: 1,
+					widget: new CompletionPreviewWidget(
+						preview.text,
+						preview.hidden ?? false
+					),
+				}).range(preview.pos),
+			]);
+		}),
+});
 
 const themeCompartment = new Compartment();
 
@@ -393,6 +428,8 @@ function createEditorTheme(dark: boolean) {
 				userSelect: 'none',
 				verticalAlign: 'top',
 				whiteSpace: 'pre-wrap',
+				opacity: 0,
+				transition: 'opacity 0.15s ease',
 			},
 			'.cm-tooltip': {
 				background: 'transparent !important',
@@ -403,6 +440,11 @@ function createEditorTheme(dark: boolean) {
 				boxShadow: 'none',
 				padding: '0',
 				maxWidth: 'none',
+				animation: 'cm-fim-tooltip-fade-in 0.1s ease',
+			},
+			'@keyframes cm-fim-tooltip-fade-in': {
+				from: { opacity: 0 },
+				to: { opacity: 1 },
 			},
 			'&.cm-focused': { outline: 'none' },
 		},
@@ -538,11 +580,12 @@ function renderCompletionTooltip(
 	status: CompletionStatus,
 	hasPendingRequest: boolean
 ) {
-	const nextTooltip = shouldShowCompletionTooltip(
+	const shouldShow = shouldShowCompletionTooltip(
 		view,
 		status,
 		hasPendingRequest
-	)
+	);
+	const nextTooltip = shouldShow
 		? { message: '', pos: view.state.selection.main.head, tone: status.tone }
 		: null;
 
@@ -554,6 +597,12 @@ function renderCompletionTooltip(
 	) {
 		return;
 	}
+
+	// fade-out: apply CSS transition directly to the tooltip DOM before clearing
+	if (currentTooltip && !nextTooltip && mountedTooltipDom) {
+		mountedTooltipDom.style.opacity = '0';
+	}
+
 	view.dispatch({
 		effects: [
 			setCompletionTooltipEffect.of(nextTooltip),
@@ -577,16 +626,22 @@ function renderCompletionPreview(
 // eslint-disable-next-line react-refresh/only-export-components
 function CompletionTooltipContent() {
 	return (
-		<div className="inline-flex items-center justify-center bg-transparent">
+		<div
+			className="inline-flex items-center justify-center rounded-full
+				bg-background/60 backdrop-blur-md p-0.5"
+		>
 			<MathCurveLoader className="size-5 text-primary" />
 		</div>
 	);
 }
+let mountedTooltipDom: HTMLElement | null = null;
 
 function createCompletionTooltipView(): TooltipView {
 	const dom = document.createElement('div');
+	mountedTooltipDom = dom;
 	let root: Root | null = createRoot(dom);
 	dom.className = 'cm-fim-tooltip';
+	dom.style.transition = 'opacity 0.15s ease';
 	root.render(<CompletionTooltipContent />);
 
 	return {
@@ -597,6 +652,7 @@ function createCompletionTooltipView(): TooltipView {
 			dom.style.transform = shiftX ? `translateX(${shiftX}px)` : '';
 		},
 		destroy() {
+			mountedTooltipDom = null;
 			const rootToUnmount = root;
 			root = null;
 			Promise.resolve().then(() => rootToUnmount?.unmount());
@@ -686,7 +742,7 @@ export function useEditor({
 
 	const clearCompletionPreview = useEffectEvent(() => {
 		const view = viewRef.current;
-		if (!view || !view.state.field(completionPreviewField)) return;
+		if (!view || view.state.field(completionPreviewField).hidden) return;
 		logCompletionDebug('preview-clear');
 		syncPreview(null);
 
@@ -699,7 +755,7 @@ export function useEditor({
 
 	const abortAllCompletion = useEffectEvent(() => {
 		const view = viewRef.current;
-		if (view && view.state.field(completionPreviewField)) {
+		if (view && !view.state.field(completionPreviewField).hidden) {
 			syncPreview(null);
 		}
 		clearScheduledCompletion('cancel');
@@ -764,7 +820,8 @@ export function useEditor({
 
 			logCompletionDebug('cache-hit', { cursor: snapshot.cursor });
 			const currentPreview = view.state.field(completionPreviewField);
-			if (currentPreview && currentPreview.pos === snapshot.cursor) return true;
+			if (!currentPreview.hidden && currentPreview.pos === snapshot.cursor)
+				return true;
 
 			view.dispatch({
 				effects: [
@@ -933,7 +990,7 @@ export function useEditor({
 
 				const currentPreview = currentView.state.field(completionPreviewField);
 				if (
-					!currentPreview ||
+					currentPreview.hidden ||
 					currentPreview.pos !== cursor ||
 					currentPreview.streaming ||
 					currentPreview.text !== completion
@@ -1034,7 +1091,7 @@ export function useEditor({
 		const preview = view.state.field(completionPreviewField);
 		const cursor = view.state.selection.main.head;
 
-		if (!preview || preview.pos !== cursor || preview.text.length === 0)
+		if (preview.hidden || preview.pos !== cursor || preview.text.length === 0)
 			return false;
 
 		clearScheduledCompletion();
@@ -1054,7 +1111,7 @@ export function useEditor({
 	});
 
 	const cancelCompletionPreview = useEffectEvent((view: EditorView) => {
-		if (view.state.field(completionPreviewField)) {
+		if (!view.state.field(completionPreviewField).hidden) {
 			clearCompletionPreview();
 			return true;
 		}

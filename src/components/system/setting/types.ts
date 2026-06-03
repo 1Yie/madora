@@ -1,6 +1,6 @@
-import { Keyboard, Palette, Settings2 } from 'lucide-react';
+import { Keyboard, Palette, Settings2, ShieldCheck } from 'lucide-react';
 
-export type SettingsSectionId = 'appearance' | 'editor' | 'about';
+export type SettingsSectionId = 'appearance' | 'editor' | 'license' | 'about';
 
 export type SettingsSection = {
 	id: SettingsSectionId;
@@ -21,6 +21,12 @@ export const settingsSections: SettingsSection[] = [
 		label: '编辑器',
 		description: '输入与编辑',
 		icon: Keyboard,
+	},
+	{
+		id: 'license',
+		label: '许可证',
+		description: '激活与管理',
+		icon: ShieldCheck,
 	},
 	{
 		id: 'about',

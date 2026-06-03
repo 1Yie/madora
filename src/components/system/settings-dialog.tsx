@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { AboutSettings } from '@/components/system/setting/about';
 import { AppearanceSettings } from '@/components/system/setting/appearance';
 import { EditorSettings } from '@/components/system/setting/editor';
+import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
+import { LicenseSettings } from '@/components/system/setting/license';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
@@ -15,8 +17,16 @@ import {
 	type SettingsSectionId,
 } from '@/components/system/setting/types';
 
-function SettingsContent({ section }: { section: SettingsSectionId }) {
+function SettingsContent({
+	section,
+	onRequestLicenseActivation,
+}: {
+	section: SettingsSectionId;
+	onRequestLicenseActivation: () => void;
+}) {
 	if (section === 'editor') return <EditorSettings />;
+	if (section === 'license')
+		return <LicenseSettings onRequestActivation={onRequestLicenseActivation} />;
 	if (section === 'about') return <AboutSettings />;
 	return <AppearanceSettings />;
 }
@@ -25,6 +35,7 @@ export function SettingsDialog() {
 	const [open, setOpen] = useState(false);
 	const [activeSection, setActiveSection] =
 		useState<SettingsSectionId>('appearance');
+	const [showLicenseActivation, setShowLicenseActivation] = useState(false);
 
 	const currentSection =
 		settingsSections.find((section) => section.id === activeSection) ??
@@ -83,7 +94,12 @@ export function SettingsDialog() {
 												{currentSection.description}
 											</h3>
 										</div>
-										<SettingsContent section={currentSection.id} />
+										<SettingsContent
+											section={currentSection.id}
+											onRequestLicenseActivation={() =>
+												setShowLicenseActivation(true)
+											}
+										/>
 									</div>
 								</ScrollArea>
 							</section>
@@ -91,6 +107,12 @@ export function SettingsDialog() {
 					</div>
 				</DialogPopup>
 			</Dialog>
+
+			{/* Mounted at the same level as the settings dialog, not nested inside it */}
+			<LicenseActivationDialog
+				open={showLicenseActivation}
+				onOpenChange={setShowLicenseActivation}
+			/>
 		</>
 	);
 }

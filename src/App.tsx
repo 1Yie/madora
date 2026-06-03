@@ -6,6 +6,7 @@ import {
 	SetupWizard,
 	shouldShowSetupWizard,
 } from '@/components/system/setup-wizard';
+import { LicenseBanner } from '@/components/system/license-banner';
 import Titlebar from './components/system/top-bar';
 import { useWindowResize } from '@/hooks/use-window-resize';
 
@@ -44,6 +45,7 @@ function App() {
 	return (
 		<div className="flex h-screen flex-col bg-background text-foreground">
 			<Titlebar />
+			<LicenseBanner />
 			{showSetupWizard && (
 				<SetupWizard onComplete={() => setShowSetupWizard(false)} />
 			)}

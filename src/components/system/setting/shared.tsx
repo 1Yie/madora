@@ -7,7 +7,7 @@ export function SettingsSectionCard({
 	children,
 }: {
 	title: string;
-	description: string;
+	description?: string;
 	children: ReactNode;
 }) {
 	return (

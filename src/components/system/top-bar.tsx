@@ -117,7 +117,7 @@ export default function Titlebar() {
 			<div
 				data-tauri-drag-region
 				className="flex h-9 items-center justify-between border-b border-border
-					bg-muted/80 text-foreground select-none"
+					bg-muted/80 text-foreground select-none z-50"
 			>
 				<div className="flex items-center ml-4 gap-2 pointer-events-none">
 					<span className="text-sm font-medium text-muted-foreground">

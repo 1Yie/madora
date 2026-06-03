@@ -4,5 +4,6 @@ pub mod git;
 pub mod project;
 pub mod secure_storage;
 pub mod utility;
+pub mod license;
 pub mod theme;
 pub mod system;
