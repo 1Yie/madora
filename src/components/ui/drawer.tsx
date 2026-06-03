@@ -11,7 +11,6 @@ import type React from 'react';
 import { createContext, useContext } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 type DrawerPosition = 'right' | 'left' | 'top' | 'bottom';
 
@@ -399,9 +398,21 @@ export function DrawerPanel({
 
 	if (scrollable) {
 		return (
-			<ScrollArea className="touch-auto" scrollFade={scrollFade}>
+			<div className="overflow-auto size-full min-h-0 touch-auto relative">
 				{content}
-			</ScrollArea>
+				{scrollFade && (
+					<>
+						<div
+							className="pointer-events-none absolute inset-x-0 top-0 h-6 z-10
+								bg-gradient-to-b from-popover to-transparent"
+						/>
+						<div
+							className="pointer-events-none absolute inset-x-0 bottom-0 h-6
+								z-10 bg-gradient-to-t from-popover to-transparent"
+						/>
+					</>
+				)}
+			</div>
 		);
 	}
 

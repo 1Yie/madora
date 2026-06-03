@@ -9,6 +9,7 @@ import {
 import { LicenseBanner } from '@/components/system/license-banner';
 import Titlebar from './components/system/top-bar';
 import { useWindowResize } from '@/hooks/use-window-resize';
+import { useOverlayScrollbars } from '@/hooks/use-overlay-scrollbars';
 
 function App() {
 	const [showSetupWizard, setShowSetupWizard] = useState(() =>
@@ -16,6 +17,7 @@ function App() {
 	);
 
 	useWindowResize();
+	useOverlayScrollbars();
 
 	useLayoutEffect(() => {
 		const isDev = import.meta.env.DEV;

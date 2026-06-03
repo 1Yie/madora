@@ -26,7 +26,6 @@ import {
 	DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { DialogSidebar } from '@/components/ui/dialog-sidebar';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
@@ -829,7 +828,7 @@ export function GitPanel({
 						</Tooltip>
 						<PopoverPopup className="p-0 m-0">
 							<div className="flex max-h-80 flex-col gap-2">
-								<ScrollArea className="min-h-0 flex-1">
+								<div className="overflow-auto size-full min-h-0 flex-1">
 									{branches.length === 0 ? (
 										<p
 											className="px-3 py-4 text-center text-xs
@@ -863,7 +862,7 @@ export function GitPanel({
 											</Button>
 										))
 									)}
-								</ScrollArea>
+								</div>
 								<div className="shrink-0 border-border">
 									<div className="flex items-center gap-2">
 										<Input
@@ -1070,7 +1069,7 @@ export function GitPanel({
 									/>
 								)}
 								{activeTab !== 'history' && activeTab !== 'commit' && (
-									<ScrollArea className="min-h-0 flex-1">
+									<div className="overflow-auto size-full min-h-0 flex-1">
 										<div className="space-y-6 p-4 sm:p-6">
 											{activeTab === 'remote' && (
 												<GitTabRemote
@@ -1104,7 +1103,7 @@ export function GitPanel({
 												/>
 											)}
 										</div>
-									</ScrollArea>
+									</div>
 								)}
 							</section>
 						</div>

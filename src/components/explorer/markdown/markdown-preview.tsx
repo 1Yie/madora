@@ -6,7 +6,6 @@ import rehypeKatex from 'rehype-katex';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { HighlightedCodeBlock } from './code-block-highlight';
 
 type MarkdownPreviewProps = {
@@ -65,7 +64,7 @@ const components: ComponentProps<typeof Markdown>['components'] = {
 
 export function MarkdownPreview({ className, content }: MarkdownPreviewProps) {
 	return (
-		<ScrollArea className={cn('h-full', className)}>
+		<div className={cn('overflow-auto size-full min-h-0 h-full', className)}>
 			<div className="prose-custom p-6">
 				<Markdown
 					components={components}
@@ -75,6 +74,6 @@ export function MarkdownPreview({ className, content }: MarkdownPreviewProps) {
 					{content}
 				</Markdown>
 			</div>
-		</ScrollArea>
+		</div>
 	);
 }

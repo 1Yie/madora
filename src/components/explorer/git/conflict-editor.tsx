@@ -3,7 +3,6 @@ import { Check, ChevronsLeftRight } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { explorerBottomSectionHeightClassName } from '../layout';
 import { cn } from '@/lib/utils';
 
@@ -122,7 +121,7 @@ export function ConflictEditor({
 			className="flex h-full min-h-0 flex-col border-l border-border
 				bg-background"
 		>
-			<ScrollArea className="min-h-0 flex-1">
+			<div className="overflow-auto size-full min-h-0 flex-1">
 				<div className="divide-y divide-border">
 					{blocks.map((block, i) => {
 						if (block.type !== 'conflict') {
@@ -273,7 +272,7 @@ export function ConflictEditor({
 						);
 					})}
 				</div>
-			</ScrollArea>
+			</div>
 
 			<div
 				className={cn(

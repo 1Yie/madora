@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { SaveMode } from '@/components/system/ai-settings-provider';
 import { useEditor } from '@/hooks/use-editor';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
 import { explorerEditorStatusBarClassName } from '../layout';
@@ -316,9 +315,9 @@ export function MarkdownEditor({
 							style={{ left: gutterWidth }}
 						/>
 					)}
-					<ScrollArea className="h-full">
+					<div className="overflow-auto size-full min-h-0 h-full">
 						<div className="h-full" ref={editorRef} />
-					</ScrollArea>
+					</div>
 				</ContextMenuTrigger>
 				<ContextMenuPopup align="start" sideOffset={6}>
 					<MenuItem onClick={handleCut}>

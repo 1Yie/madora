@@ -6,7 +6,6 @@ import {
 	type BundledTheme,
 } from 'shiki';
 import { useTheme } from '@/components/system/theme-provider';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 type HighlightedCodeBlockProps = {
 	lang: string;
@@ -97,12 +96,12 @@ export function HighlightedCodeBlock({
 			: highlightedHtml || plainTextBlock(code);
 
 	return (
-		<ScrollArea
-			className="my-6 rounded-lg border border-border bg-muted [&_pre]:m-0
-				[&_pre]:bg-transparent! [&_pre]:px-4 [&_pre]:py-4 [&_code]:text-sm
-				[&_code]:leading-relaxed"
+		<div
+			className="overflow-auto size-full min-h-0 my-6 rounded-lg border
+				border-border bg-muted [&_pre]:m-0 [&_pre]:bg-transparent! [&_pre]:px-4
+				[&_pre]:py-4 [&_code]:text-sm [&_code]:leading-relaxed"
 		>
 			<div className="min-w-fit" dangerouslySetInnerHTML={{ __html: html }} />
-		</ScrollArea>
+		</div>
 	);
 }

@@ -5,7 +5,6 @@ import { ChevronsUpDownIcon, XIcon } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 export const ComboboxContext: React.Context<{
 	chipsRef: React.RefObject<Element | null> | null;
@@ -360,17 +359,24 @@ export function ComboboxList({
 	...props
 }: ComboboxPrimitive.List.Props): React.ReactElement {
 	return (
-		<ScrollArea scrollbarGutter scrollFade>
+		<div className="overflow-auto size-full min-h-0 relative">
 			<ComboboxPrimitive.List
 				className={cn(
-					`not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1
-					in-data-has-overflow-y:pe-3`,
+					'not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1',
 					className
 				)}
 				data-slot="combobox-list"
 				{...props}
 			/>
-		</ScrollArea>
+			<div
+				className="pointer-events-none absolute inset-x-0 top-0 h-6 z-10
+					bg-gradient-to-b from-popover to-transparent"
+			/>
+			<div
+				className="pointer-events-none absolute inset-x-0 bottom-0 h-6 z-10
+					bg-gradient-to-t from-popover to-transparent"
+			/>
+		</div>
 	);
 }
 

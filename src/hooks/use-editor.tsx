@@ -134,18 +134,28 @@ function isSnapshotCurrent(
 }
 
 /**
- * Scroll the parent ScrollArea viewport to ensure the cursor at the given
+ * Scroll the parent overflow container to ensure the cursor at the given
  * document position is visible. CodeMirror's internal scrollIntoView cannot
  * work because .cm-scroller has overflow: hidden, so we must scroll the
- * ScrollArea viewport that wraps the editor.
+ * overflow container that wraps the editor.
  */
 function scrollParentToCursor(view: EditorView, pos: number): void {
 	requestAnimationFrame(() => {
 		const coords = view.coordsAtPos(pos);
 		if (!coords) return;
 
-		const viewport = view.dom.closest('[data-slot="scroll-area-viewport"]');
+		let viewport = view.dom.closest('.overflow-auto') as HTMLElement | null;
 		if (!viewport) return;
+
+		const osRoot = viewport.closest('[data-overlayscrollbars]');
+		if (osRoot) {
+			const osViewport = osRoot.querySelector(
+				'[data-overlayscrollbars-viewport]'
+			) as HTMLElement | null;
+			if (osViewport) {
+				viewport = osViewport;
+			}
+		}
 
 		const viewportRect = viewport.getBoundingClientRect();
 		const margin = 24;

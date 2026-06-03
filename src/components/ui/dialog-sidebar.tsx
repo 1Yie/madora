@@ -1,7 +1,6 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import type React from 'react';
 
 export type DialogSidebarItem = {
@@ -31,7 +30,10 @@ export function DialogSidebar({
 				className
 			)}
 		>
-			<ScrollArea className="max-h-60 md:h-full md:max-h-none overflow-x-hidden">
+			<div
+				className="overflow-auto size-full min-h-0 max-h-60 md:h-full
+					md:max-h-none overflow-x-hidden"
+			>
 				<nav className="flex flex-col gap-1 p-3">
 					{items.map((section) => {
 						const Icon = section.icon;
@@ -77,7 +79,7 @@ export function DialogSidebar({
 						);
 					})}
 				</nav>
-			</ScrollArea>
+			</div>
 		</aside>
 	);
 }

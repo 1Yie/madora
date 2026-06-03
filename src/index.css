@@ -3,12 +3,9 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
 @import 'katex/dist/katex.css';
+@import 'overlayscrollbars/overlayscrollbars.css';
 
 @custom-variant dark (&:is(.dark *));
-
-[data-slot='scroll-area-scrollbar'] {
-	cursor: default !important;
-}
 
 @layer base {
 	html,
@@ -16,9 +13,6 @@
 	#root {
 		@apply h-screen overflow-hidden bg-background text-foreground;
 		margin: 0;
-	}
-	* {
-		scrollbar-gutter: auto;
 	}
 	html[data-native-dialog-open],
 	html[data-native-dialog-open] body {
@@ -269,6 +263,40 @@
 	--sidebar-accent-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);
 	--sidebar-ring: oklch(0.556 0 0);
+}
+
+.os-theme-madora.os-scrollbar {
+	--os-size: 10px;
+	--os-padding-perpendicular: 2px;
+	--os-padding-axis: 12px;
+	--os-handle-perpendicular-size: 50%;
+	--os-handle-perpendicular-size-hover: 100%;
+	--os-handle-perpendicular-size-active: 100%;
+
+	pointer-events: none;
+}
+
+.os-theme-madora.os-scrollbar:hover {
+	--os-size: 12px;
+}
+
+.os-theme-madora.os-scrollbar .os-scrollbar-track {
+	background: transparent;
+	pointer-events: none;
+}
+
+.os-theme-madora.os-scrollbar .os-scrollbar-handle {
+	background: color-mix(in srgb, var(--color-foreground) 14%, transparent);
+	border-radius: 4px;
+	pointer-events: auto;
+}
+
+.os-theme-madora.os-scrollbar .os-scrollbar-handle:hover {
+	background: color-mix(in srgb, var(--color-foreground) 32%, transparent);
+}
+
+.os-theme-madora.os-scrollbar .os-scrollbar-handle:active {
+	background: color-mix(in srgb, var(--color-foreground) 44%, transparent);
 }
 
 .madora-code-block {

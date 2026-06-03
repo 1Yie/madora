@@ -1,7 +1,5 @@
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 export type TableVariant = 'default' | 'card';
 
 export function Table({
@@ -12,8 +10,8 @@ export function Table({
 	variant?: TableVariant;
 }): React.ReactElement {
 	return (
-		<ScrollArea
-			className="relative w-full"
+		<div
+			className={cn('overflow-auto size-full min-h-0', 'relative w-full')}
 			data-slot="table-container"
 			data-variant={variant}
 		>
@@ -26,7 +24,7 @@ export function Table({
 				data-slot="table"
 				{...props}
 			/>
-		</ScrollArea>
+		</div>
 	);
 }
 

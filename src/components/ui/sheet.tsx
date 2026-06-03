@@ -7,7 +7,6 @@ import { XIcon } from 'lucide-react';
 import type React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 export const Sheet: typeof SheetPrimitive.Root = SheetPrimitive.Root;
 
@@ -229,13 +228,25 @@ export function SheetPanel({
 	};
 
 	return (
-		<ScrollArea scrollFade={scrollFade}>
+		<div className="overflow-auto size-full min-h-0 relative">
 			{useRender({
 				defaultTagName: 'div',
 				props: mergeProps<'div'>(defaultProps, props),
 				render,
 			})}
-		</ScrollArea>
+			{scrollFade && (
+				<>
+					<div
+						className="pointer-events-none absolute inset-x-0 top-0 h-6 z-10
+							bg-gradient-to-b from-popover to-transparent"
+					/>
+					<div
+						className="pointer-events-none absolute inset-x-0 bottom-0 h-6 z-10
+							bg-gradient-to-t from-popover to-transparent"
+					/>
+				</>
+			)}
+		</div>
 	);
 }
 

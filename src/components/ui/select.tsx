@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 export const Select: typeof SelectPrimitive.Root = SelectPrimitive.Root;
 
@@ -163,14 +162,14 @@ export function SelectPopup({
 							before:shadow-[0_1px_--theme(--color-black/4%)]
 							dark:before:shadow-[0_-1px_--theme(--color-white/6%)]"
 					>
-						<ScrollArea>
+						<div className="overflow-auto size-full min-h-0">
 							<SelectPrimitive.List
 								className={cn('p-1', className)}
 								data-slot="select-list"
 							>
 								{children}
 							</SelectPrimitive.List>
-						</ScrollArea>
+						</div>
 					</div>
 					<SelectPrimitive.ScrollDownArrow
 						className="bottom-0 z-50 flex h-6 w-full cursor-default items-center

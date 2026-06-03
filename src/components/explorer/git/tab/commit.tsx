@@ -2,7 +2,6 @@
 import { AlertTriangle, Check, Info, Minus, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import {
 	Tooltip,
@@ -166,7 +165,7 @@ export function GitTabCommit({
 
 			<div className="min-h-0 flex-1 flex flex-col overflow-hidden pt-2">
 				{hasFiles ? (
-					<ScrollArea className="min-h-0 flex-1 px-6 pb-6">
+					<div className="overflow-auto size-full min-h-0 flex-1 px-6 pb-6">
 						<div className="space-y-3">
 							{conflictedFiles.length > 0 && (
 								<div>
@@ -288,7 +287,7 @@ export function GitTabCommit({
 								</div>
 							)}
 						</div>
-					</ScrollArea>
+					</div>
 				) : (
 					<div
 						className="flex h-full flex-col items-center justify-center gap-3

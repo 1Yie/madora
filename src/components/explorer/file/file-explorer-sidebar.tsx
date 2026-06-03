@@ -46,7 +46,7 @@ import {
 	EmptyTitle,
 } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import {
 	Dialog,
 	DialogDescription,
@@ -58,6 +58,8 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
 import { cn } from '@/lib/utils';
 
 import type { GitStatus } from '../git/git-types';
@@ -900,6 +902,35 @@ function ExplorerDialogForm({
 	);
 }
 
+type FlatItem =
+	| { type: 'node'; node: ExplorerNode; depth: number }
+	| { type: 'loading'; depth: number }
+	| { type: 'empty'; depth: number };
+
+function flattenTree(
+	node: ExplorerNode,
+	expandedPaths: Set<string>,
+	depth = 0
+): FlatItem[] {
+	const items: FlatItem[] = [{ type: 'node', node, depth }];
+
+	if (node.kind === 'directory' && expandedPaths.has(node.path)) {
+		if (node.loaded) {
+			if (node.children.length === 0) {
+				items.push({ type: 'empty', depth: depth + 1 });
+			} else {
+				for (const child of node.children) {
+					items.push(...flattenTree(child, expandedPaths, depth + 1));
+				}
+			}
+		} else {
+			items.push({ type: 'loading', depth: depth + 1 });
+		}
+	}
+
+	return items;
+}
+
 function FileTreeNode({
 	clipboard,
 	depth,
@@ -994,10 +1025,7 @@ function FileTreeNode({
 								}}
 							>
 								<ChevronRight
-									className={cn(
-										'size-4 shrink-0 transition-transform',
-										isExpanded && 'rotate-90'
-									)}
+									className={cn('size-4 shrink-0', isExpanded && 'rotate-90')}
 								/>
 							</button>
 							<button
@@ -1052,49 +1080,6 @@ function FileTreeNode({
 						target={node}
 					/>
 				</ContextMenuRoot>
-				{isExpanded && (
-					<div>
-						{node.loaded ? (
-							node.children.length > 0 ? (
-								node.children.map((child) => (
-									<FileTreeNode
-										clipboard={clipboard}
-										depth={depth + 1}
-										expandedPaths={expandedPaths}
-										gitStatusMap={gitStatusMap}
-										key={child.path}
-										loadingPaths={loadingPaths}
-										node={child}
-										onContextAction={onContextAction}
-										onExpandDirectory={onExpandDirectory}
-										onHoverNode={onHoverNode}
-										onSelectNode={onSelectNode}
-										selectedPath={selectedPath}
-										toggleDirectory={toggleDirectory}
-									/>
-								))
-							) : (
-								<div
-									className="rounded-md px-2 py-3 text-muted-foreground text-xs"
-									style={{ paddingLeft: `${depth * 14 + 44}px` }}
-								>
-									未找到文件
-								</div>
-							)
-						) : (
-							<div
-								className="px-2 py-1.5"
-								style={{ paddingLeft: `${depth * 14 + 44}px` }}
-							>
-								<div className="space-y-2 py-1">
-									<Skeleton className="h-4 w-40" />
-									<Skeleton className="h-4 w-32" />
-									<Skeleton className="h-4 w-36" />
-								</div>
-							</div>
-						)}
-					</div>
-				)}
 			</div>
 		);
 	}
@@ -1278,6 +1263,28 @@ export function FileExplorerSidebar({
 	};
 
 	const hoveredNodeRef = useRef<ExplorerNode | null>(null);
+	const viewportRef = useRef<HTMLDivElement>(null);
+
+	const flatItems = useMemo(() => {
+		if (!mergedRoot) return [];
+		return flattenTree(mergedRoot, resolvedExpandedPaths);
+	}, [mergedRoot, resolvedExpandedPaths]);
+
+	const virtualizer = useVirtualizer({
+		count: flatItems.length,
+		getScrollElement: () => {
+			const el = viewportRef.current;
+			if (!el) return null;
+			const osRoot = el.closest('[data-overlayscrollbars]');
+			if (osRoot) {
+				return (osRoot.querySelector('[data-overlayscrollbars-viewport]') ??
+					el) as HTMLElement;
+			}
+			return el;
+		},
+		estimateSize: () => 36,
+		overscan: 20,
+	});
 
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -1470,28 +1477,79 @@ export function FileExplorerSidebar({
 
 				<ContextMenuRoot>
 					<ContextMenuTrigger className="min-h-0 flex flex-1">
-						<ScrollArea
-							className="min-h-0 h-full flex-1 px-2"
+						<div
+							ref={viewportRef}
+							className="overflow-auto size-full min-h-0 px-2"
 							data-native-dialog-scroll-lock
 						>
 							{mergedRoot ? (
-								<div className="space-y-1 py-2">
-									<FileTreeNode
-										clipboard={clipboard}
-										depth={0}
-										expandedPaths={resolvedExpandedPaths}
-										gitStatusMap={gitStatusMap}
-										loadingPaths={loadingPaths}
-										node={mergedRoot}
-										onContextAction={(action, node) => {
-											void handleContextAction(action, node);
-										}}
-										onExpandDirectory={onExpandDirectory}
-										onHoverNode={(node) => (hoveredNodeRef.current = node)}
-										onSelectNode={onSelectNode}
-										selectedPath={selectedPath}
-										toggleDirectory={toggleDirectory}
-									/>
+								<div
+									style={{
+										height: `${virtualizer.getTotalSize()}px`,
+										position: 'relative',
+									}}
+								>
+									{virtualizer.getVirtualItems().map((virtualItem) => {
+										const item = flatItems[virtualItem.index];
+										return (
+											<div
+												key={virtualItem.key}
+												data-index={virtualItem.index}
+												ref={virtualizer.measureElement}
+												style={{
+													position: 'absolute',
+													top: 0,
+													left: 0,
+													width: '100%',
+													transform: `translateY(${virtualItem.start}px)`,
+												}}
+											>
+												{item.type === 'loading' ? (
+													<div
+														className="px-2 py-1.5"
+														style={{
+															paddingLeft: `${item.depth * 14 + 44}px`,
+														}}
+													>
+														<div className="space-y-2 py-1">
+															<Skeleton className="h-4 w-40" />
+															<Skeleton className="h-4 w-32" />
+															<Skeleton className="h-4 w-36" />
+														</div>
+													</div>
+												) : item.type === 'empty' ? (
+													<div
+														className="rounded-md px-2 py-3
+															text-muted-foreground text-xs"
+														style={{
+															paddingLeft: `${item.depth * 14 + 44}px`,
+														}}
+													>
+														未找到文件
+													</div>
+												) : (
+													<FileTreeNode
+														clipboard={clipboard}
+														depth={item.depth}
+														expandedPaths={resolvedExpandedPaths}
+														gitStatusMap={gitStatusMap}
+														loadingPaths={loadingPaths}
+														node={item.node}
+														onContextAction={(action, node) => {
+															void handleContextAction(action, node);
+														}}
+														onExpandDirectory={onExpandDirectory}
+														onHoverNode={(node) =>
+															(hoveredNodeRef.current = node)
+														}
+														onSelectNode={onSelectNode}
+														selectedPath={selectedPath}
+														toggleDirectory={toggleDirectory}
+													/>
+												)}
+											</div>
+										);
+									})}
 								</div>
 							) : (
 								<Empty className="px-4 py-10">
@@ -1508,7 +1566,7 @@ export function FileExplorerSidebar({
 									</EmptyHeader>
 								</Empty>
 							)}
-						</ScrollArea>
+						</div>
 					</ContextMenuTrigger>
 					<ContextMenuContent
 						clipboard={clipboard}

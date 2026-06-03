@@ -98,7 +98,6 @@ export function CommandDialogPopup({
 						data-nested-dialog-open:origin-top data-ending-style:scale-98
 						data-starting-style:scale-98 data-ending-style:opacity-0
 						data-starting-style:opacity-0
-						**:data-[slot=scroll-area-viewport]:data-has-overflow-y:pe-1
 						dark:before:shadow-[0_-1px_--theme(--color-white/6%)]`,
 						className
 					)}
@@ -190,8 +189,7 @@ export function CommandPanel({
 				[clip-path:inset(0_1px)]
 				not-has-[+[data-slot=command-footer]]:[clip-path:inset(0_1px_1px_1px_round_0_0_calc(var(--radius-2xl)-1px)_calc(var(--radius-2xl)-1px))]
 				before:pointer-events-none before:absolute before:inset-0
-				before:rounded-t-[calc(var(--radius-xl)-1px)]
-				**:data-[slot=scroll-area-scrollbar]:mt-2`,
+				before:rounded-t-[calc(var(--radius-xl)-1px)]`,
 				className
 			)}
 			{...props}

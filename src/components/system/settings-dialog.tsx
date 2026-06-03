@@ -6,7 +6,6 @@ import { EditorSettings } from '@/components/system/setting/editor';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { LicenseSettings } from '@/components/system/setting/license';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
 import {
 	DialogSidebar,
@@ -81,7 +80,7 @@ export function SettingsDialog() {
 								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
 									bg-popover"
 							>
-								<ScrollArea className="min-h-0 flex-1">
+								<div className="overflow-auto size-full min-h-0 flex-1">
 									<div className="space-y-6 p-4 sm:p-6">
 										<div className="space-y-1">
 											<p
@@ -101,7 +100,7 @@ export function SettingsDialog() {
 											}
 										/>
 									</div>
-								</ScrollArea>
+								</div>
 							</section>
 						</div>
 					</div>

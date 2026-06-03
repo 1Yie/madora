@@ -9,7 +9,6 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
 	Sheet,
@@ -426,10 +425,7 @@ export function SidebarContent({
 	...props
 }: React.ComponentProps<'div'>): React.ReactElement {
 	return (
-		<ScrollArea
-			className="**:data-[slot=scroll-area-scrollbar]:hidden"
-			scrollFade
-		>
+		<div className="overflow-auto size-full min-h-0 relative">
 			<div
 				className={cn(
 					`flex min-h-0 flex-1 flex-col gap-2
@@ -440,7 +436,15 @@ export function SidebarContent({
 				data-slot="sidebar-content"
 				{...props}
 			/>
-		</ScrollArea>
+			<div
+				className="pointer-events-none absolute inset-x-0 top-0 h-6 z-10
+					bg-gradient-to-b from-popover to-transparent"
+			/>
+			<div
+				className="pointer-events-none absolute inset-x-0 bottom-0 h-6 z-10
+					bg-gradient-to-t from-popover to-transparent"
+			/>
+		</div>
 	);
 }
 

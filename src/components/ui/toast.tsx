@@ -167,17 +167,7 @@ function ErrorToastDescription({
 			<div
 				ref={containerRef}
 				className="mt-1 max-w-full overflow-x-auto overflow-y-hidden rounded-md
-					border border-border/80 bg-muted/60 overscroll-x-contain
-					[scrollbar-width:thin]
-					[scrollbar-color:var(--color-border)_transparent]
-					[&::-webkit-scrollbar]:h-3 [&::-webkit-scrollbar-track]:bg-transparent
-					[&::-webkit-scrollbar-thumb]:rounded-full
-					[&::-webkit-scrollbar-thumb]:border-t-4
-					[&::-webkit-scrollbar-thumb]:border-solid
-					[&::-webkit-scrollbar-thumb]:border-transparent
-					[&::-webkit-scrollbar-thumb]:bg-clip-padding
-					[&::-webkit-scrollbar-thumb]:bg-border/80
-					hover:[&::-webkit-scrollbar-thumb]:bg-border"
+					border border-border/80 bg-muted/60 overscroll-x-contain"
 				onWheelCapture={(event) => event.stopPropagation()}
 			>
 				<div
