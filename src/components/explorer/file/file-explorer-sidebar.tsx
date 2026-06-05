@@ -25,6 +25,7 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useLayoutEffect,
 	useState,
 } from 'react';
 
@@ -961,10 +962,38 @@ function FileTreeNode({
 	toggleDirectory: (path: string) => void;
 }) {
 	const [contextMenuOpen, setContextMenuOpen] = useState(false);
+	const chevronRef = useRef<SVGSVGElement>(null);
+	const userToggledRef = useRef(false);
 	const isDirectory = node.kind === 'directory';
 	const isActuallySelected = selectedPath === node.path;
 	const isSelected = isActuallySelected || contextMenuOpen;
 	const isExpanded = isDirectory && expandedPaths.has(node.path);
+
+	// Set initial rotation on mount (no transition)
+	useLayoutEffect(() => {
+		if (chevronRef.current) {
+			chevronRef.current.style.transform = isExpanded
+				? 'rotate(90deg)'
+				: 'rotate(0deg)';
+		}
+	}, []);
+
+	// Animate rotation only on user click
+	useEffect(() => {
+		if (!userToggledRef.current || !chevronRef.current) return;
+		userToggledRef.current = false;
+
+		const el = chevronRef.current;
+		el.style.transition = 'transform 150ms ease';
+		el.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+
+		const timer = setTimeout(() => {
+			el.style.transition = '';
+		}, 200);
+
+		return () => clearTimeout(timer);
+	}, [isExpanded]);
+
 	const isCopied =
 		clipboard?.mode === 'copy' && clipboard.item.path === node.path;
 	const isCut = clipboard?.mode === 'cut' && clipboard.item.path === node.path;
@@ -1007,6 +1036,7 @@ function FileTreeNode({
 											hover:text-sidebar-accent-foreground`
 								)}
 								onClick={() => {
+									userToggledRef.current = true;
 									const nextExpanded = !isExpanded;
 									toggleDirectory(node.path);
 
@@ -1015,9 +1045,7 @@ function FileTreeNode({
 									}
 								}}
 							>
-								<ChevronRight
-									className={cn('size-4 shrink-0', isExpanded && 'rotate-90')}
-								/>
+								<ChevronRight ref={chevronRef} className="size-4 shrink-0" />
 							</button>
 							<button
 								type="button"
@@ -1031,6 +1059,7 @@ function FileTreeNode({
 											hover:text-sidebar-accent-foreground`
 								)}
 								onClick={() => {
+									userToggledRef.current = true;
 									const nextExpanded = !isExpanded;
 									toggleDirectory(node.path);
 									onSelectNode(node);
