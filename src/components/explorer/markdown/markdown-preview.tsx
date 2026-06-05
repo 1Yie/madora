@@ -141,7 +141,7 @@ const components = (
 			<table className="my-0!">{children}</table>
 		</div>
 	),
-	img: ({ src, alt, ...props }) => (
+	img: ({ src, alt, node, ...props }) => (
 		<img
 			src={resolveImageSrc(src, filePath, rootPath)}
 			alt={alt}

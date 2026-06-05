@@ -1232,7 +1232,7 @@ export function FileExplorerSidebar({
 		() => (root ? mergeDeletedGitNodes(root, gitStatusMap) : null),
 		[gitStatusMap, root]
 	);
-	const bookmarkVisibilityScopeKey = `${root?.path ?? ''}:${gitStatus?.branch ?? ''}`;
+	const bookmarkVisibilityScopeKey = `${root?.path ?? ''}:${gitStatus?.branch?.name ?? ''}`;
 
 	// Resolve bookmark visibility against the current branch/worktree only.
 	const [bookmarkVisibility, setBookmarkVisibility] =
