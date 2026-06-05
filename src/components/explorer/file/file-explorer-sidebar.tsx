@@ -9,6 +9,7 @@ import {
 	FilePenLine,
 	FileText,
 	FileUp,
+	FilePlus,
 	Folder,
 	FolderPlus,
 	FolderOpen,
@@ -1169,6 +1170,9 @@ export function FileExplorerSidebar({
 		}
 	});
 	const [bookmarksExpanded, setBookmarksExpanded] = useState(true);
+	const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(
+		null
+	);
 	const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 	const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
 	const mergedRoot = useMemo(
@@ -1279,6 +1283,19 @@ export function FileExplorerSidebar({
 		estimateSize: () => 36,
 		overscan: 20,
 	});
+
+	useEffect(() => {
+		if (!pendingScrollToPath || flatItems.length === 0) return;
+
+		const idx = flatItems.findIndex(
+			(item) => item.type === 'node' && item.node.path === pendingScrollToPath
+		);
+
+		if (idx >= 0) {
+			virtualizer.scrollToIndex(idx, { align: 'center' });
+			setPendingScrollToPath(null);
+		}
+	}, [pendingScrollToPath, flatItems, virtualizer]);
 
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -1443,15 +1460,51 @@ export function FileExplorerSidebar({
 	};
 
 	const showCurrentFileInTree = () => {
-		if (!selectedPath || flatItems.length === 0) return;
+		if (!selectedPath || !mergedRoot) return;
 
-		const idx = flatItems.findIndex(
+		// Check if the file is already visible in the tree
+		const alreadyVisible = flatItems.some(
 			(item) => item.type === 'node' && item.node.path === selectedPath
 		);
 
-		if (idx >= 0) {
-			virtualizer.scrollToIndex(idx, { align: 'center' });
+		if (alreadyVisible) {
+			const idx = flatItems.findIndex(
+				(item) => item.type === 'node' && item.node.path === selectedPath
+			);
+
+			if (idx >= 0) {
+				virtualizer.scrollToIndex(idx, { align: 'center' });
+			}
+
+			return;
 		}
+
+		// Expand all ancestor directories so the file appears in flatItems
+		const ancestors = collectAncestorPaths(mergedRoot, selectedPath);
+
+		setExpansionState((currentState) => {
+			const isCurrentRoot = currentState.rootPath === expansionRootPath;
+			const nextExpanded = new Set(
+				isCurrentRoot ? currentState.expandedPaths : []
+			);
+			const nextCollapsed = new Set(
+				isCurrentRoot ? currentState.collapsedPaths : []
+			);
+
+			for (const ancestor of ancestors) {
+				nextExpanded.add(ancestor);
+				nextCollapsed.delete(ancestor);
+			}
+
+			return {
+				collapsedPaths: nextCollapsed,
+				expandedPaths: nextExpanded,
+				rootPath: expansionRootPath,
+			};
+		});
+
+		// Scroll after re-render when flatItems includes the file
+		setPendingScrollToPath(selectedPath);
 	};
 
 	const toggleBookmark = (path: string) => {
@@ -1509,8 +1562,8 @@ export function FileExplorerSidebar({
 						</Button>
 					</div>
 					<div
-						className="flex items-center justify-center gap-1 border-t
-							border-sidebar-border px-2 py-1.5"
+						className="flex items-center gap-1 border-t border-sidebar-border
+							px-2 py-1.5"
 					>
 						<Button
 							aria-label="新建文件夹"
@@ -1539,7 +1592,7 @@ export function FileExplorerSidebar({
 							size="icon-sm"
 							variant="ghost"
 						>
-							<FileText className="size-4" />
+							<FilePlus className="size-4" />
 						</Button>
 
 						<div className="mx-1 h-4 w-px bg-border" />
@@ -1615,6 +1668,7 @@ export function FileExplorerSidebar({
 								/>
 								<span className="ml-auto text-xs">{bookmarkPaths.length}</span>
 							</button>
+
 							{bookmarksExpanded && (
 								<div className="mt-0.5 space-y-0.5">
 									{bookmarkPaths.map((path) => {
