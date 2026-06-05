@@ -285,7 +285,10 @@ describe('FileExplorerSidebar', () => {
 		vi.mocked(pathExists).mockImplementation(async () => bookmarkExists);
 
 		const view = renderSidebar({
-			gitStatus: { ...emptyStatus, branch: 'branch-a' },
+			gitStatus: {
+				...emptyStatus,
+				branch: { name: 'branch-a', upstream: null, ahead: 0, behind: 0 },
+			},
 		});
 
 		await waitFor(() => {
@@ -296,7 +299,10 @@ describe('FileExplorerSidebar', () => {
 		view.rerender(
 			<FileExplorerSidebar
 				{...createSidebarProps({
-					gitStatus: { ...emptyStatus, branch: 'branch-b' },
+					gitStatus: {
+						...emptyStatus,
+						branch: { name: 'branch-b', upstream: null, ahead: 0, behind: 0 },
+					},
 				})}
 			/>
 		);
@@ -309,7 +315,10 @@ describe('FileExplorerSidebar', () => {
 		view.rerender(
 			<FileExplorerSidebar
 				{...createSidebarProps({
-					gitStatus: { ...emptyStatus, branch: 'branch-a' },
+					gitStatus: {
+						...emptyStatus,
+						branch: { name: 'branch-a', upstream: null, ahead: 0, behind: 0 },
+					},
 				})}
 			/>
 		);
