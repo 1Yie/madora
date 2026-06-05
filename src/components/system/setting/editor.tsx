@@ -162,10 +162,7 @@ export function EditorSettings() {
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard
-				description="配置编辑区域的相关功能"
-				title="输入行为"
-			>
+			<SettingsSectionCard title="输入行为">
 				<div className="space-y-2">
 					<SettingRow
 						title="自动保存"
@@ -196,7 +193,7 @@ export function EditorSettings() {
 				</div>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard description="配置 AI 自动补全功能" title="AI 补全">
+			<SettingsSectionCard title="AI 配置">
 				<div className="space-y-5">
 					<SettingRow
 						title={

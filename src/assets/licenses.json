@@ -1,0 +1,297 @@
+[
+	{
+		"license": "MIT",
+		"name": "@base-ui/react",
+		"url": "https://github.com/mui/base-ui"
+	},
+	{
+		"license": "MIT",
+		"name": "@codemirror/lang-markdown",
+		"url": "https://github.com/codemirror/lang-markdown"
+	},
+	{
+		"license": "MIT",
+		"name": "@codemirror/state",
+		"url": "https://github.com/codemirror/state"
+	},
+	{
+		"license": "MIT",
+		"name": "@codemirror/view",
+		"url": "https://code.haverbeke.berlin/codemirror/view"
+	},
+	{
+		"license": "OFL-1.1",
+		"name": "@fontsource-variable/geist",
+		"url": "https://github.com/fontsource/font-files"
+	},
+	{
+		"license": "MIT",
+		"name": "@lobehub/icons",
+		"url": "https://github.com/lobehub/lobe-icons"
+	},
+	{
+		"license": "MIT",
+		"name": "@shikijs/rehype",
+		"url": "https://github.com/shikijs/shiki"
+	},
+	{
+		"license": "MIT",
+		"name": "@tailwindcss/vite",
+		"url": "https://github.com/tailwindlabs/tailwindcss"
+	},
+	{
+		"license": "MIT",
+		"name": "@tanstack/react-virtual",
+		"url": "https://github.com/TanStack/virtual"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "@tauri-apps/api",
+		"url": "https://github.com/tauri-apps/tauri"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "@tauri-apps/plugin-opener",
+		"url": "https://github.com/tauri-apps/plugins-workspace"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "async-trait",
+		"url": "https://github.com/dtolnay/async-trait"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "base64",
+		"url": "https://github.com/marshallpierce/rust-base64"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "chardetng",
+		"url": "https://docs.rs/chardetng"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "chrono",
+		"url": "https://github.com/chronotope/chrono"
+	},
+	{
+		"license": "Apache-2.0",
+		"name": "class-variance-authority",
+		"url": "https://github.com/joe-bell/cva"
+	},
+	{
+		"license": "MIT",
+		"name": "clsx",
+		"url": "https://github.com/lukeed/clsx"
+	},
+	{
+		"license": "MIT",
+		"name": "codemirror",
+		"url": "https://github.com/codemirror/basic-setup"
+	},
+	{
+		"license": "MIT",
+		"name": "dotenv",
+		"url": "https://github.com/dotenv-rs/dotenv"
+	},
+	{
+		"license": "(Apache-2.0 OR MIT) AND BSD-3-Clause",
+		"name": "encoding_rs",
+		"url": "https://docs.rs/encoding_rs"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "futures-util",
+		"url": "https://rust-lang.github.io/futures-rs"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "getrandom",
+		"url": "https://github.com/rust-random/getrandom"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "git2",
+		"url": "https://github.com/rust-lang/git2-rs"
+	},
+	{
+		"license": "Unlicense OR MIT",
+		"name": "ignore",
+		"url": "https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore"
+	},
+	{
+		"license": "MIT",
+		"name": "katex",
+		"url": "https://github.com/KaTeX/KaTeX"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "keyring",
+		"url": "https://github.com/open-source-cooperative/keyring-rs/wiki/Keyring"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "keyring-core",
+		"url": "https://github.com/open-source-cooperative/keyring-core"
+	},
+	{
+		"license": "ISC",
+		"name": "lucide",
+		"url": "https://github.com/lucide-icons/lucide"
+	},
+	{
+		"license": "ISC",
+		"name": "lucide-react",
+		"url": "https://github.com/lucide-icons/lucide"
+	},
+	{
+		"license": "MIT",
+		"name": "overlayscrollbars",
+		"url": "https://github.com/KingSora/OverlayScrollbars"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "pretty_assertions",
+		"url": "https://github.com/rust-pretty-assertions/rust-pretty-assertions"
+	},
+	{
+		"license": "MIT",
+		"name": "radix-ui",
+		"url": "https://github.com/radix-ui/primitives"
+	},
+	{
+		"license": "MIT",
+		"name": "react",
+		"url": "https://github.com/facebook/react"
+	},
+	{
+		"license": "MIT",
+		"name": "react-day-picker",
+		"url": "https://github.com/gpbl/react-day-picker"
+	},
+	{
+		"license": "MIT",
+		"name": "react-dom",
+		"url": "https://github.com/facebook/react"
+	},
+	{
+		"license": "MIT",
+		"name": "react-markdown",
+		"url": "https://github.com/remarkjs/react-markdown"
+	},
+	{
+		"license": "MIT",
+		"name": "react-router",
+		"url": "https://github.com/remix-run/react-router"
+	},
+	{
+		"license": "MIT",
+		"name": "react-router-dom",
+		"url": "https://github.com/remix-run/react-router"
+	},
+	{
+		"license": "MIT",
+		"name": "rehype-katex",
+		"url": "https://github.com/remarkjs/remark-math/tree/main/packages/rehype-katex"
+	},
+	{
+		"license": "MIT",
+		"name": "rehype-raw",
+		"url": "https://github.com/rehypejs/rehype-raw"
+	},
+	{
+		"license": "MIT",
+		"name": "remark-gfm",
+		"url": "https://github.com/remarkjs/remark-gfm"
+	},
+	{
+		"license": "MIT",
+		"name": "remark-math",
+		"url": "https://github.com/remarkjs/remark-math/tree/main/packages/remark-math"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "reqwest",
+		"url": "https://github.com/seanmonstar/reqwest"
+	},
+	{
+		"license": "MIT",
+		"name": "rfd",
+		"url": "https://github.com/PolyMeilex/rfd"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "serde",
+		"url": "https://serde.rs"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "serde_json",
+		"url": "https://github.com/serde-rs/json"
+	},
+	{
+		"license": "MIT",
+		"name": "shadcn",
+		"url": "https://github.com/shadcn-ui/ui"
+	},
+	{
+		"license": "MIT",
+		"name": "shiki",
+		"url": "https://github.com/shikijs/shiki"
+	},
+	{
+		"license": "MIT",
+		"name": "tailwind-merge",
+		"url": "https://github.com/dcastil/tailwind-merge"
+	},
+	{
+		"license": "MIT",
+		"name": "tailwindcss",
+		"url": "https://github.com/tailwindlabs/tailwindcss"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "tauri",
+		"url": "https://tauri.app"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "tauri-build",
+		"url": "https://tauri.app"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "tauri-plugin-opener",
+		"url": "https://github.com/tauri-apps/plugins-workspace"
+	},
+	{
+		"license": "MIT",
+		"name": "tauri-plugin-prevent-default",
+		"url": "https://github.com/ferreira-tb/tauri-plugin-prevent-default"
+	},
+	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "tauri-plugin-single-instance",
+		"url": "https://github.com/tauri-apps/plugins-workspace"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "tempfile",
+		"url": "https://stebalien.com/projects/tempfile-rs"
+	},
+	{
+		"license": "MIT",
+		"name": "tokio",
+		"url": "https://tokio.rs"
+	},
+	{
+		"license": "MIT",
+		"name": "tw-animate-css",
+		"url": "https://github.com/Wombosvideo/tw-animate-css"
+	},
+	{
+		"license": "MIT",
+		"name": "winreg",
+		"url": "https://github.com/gentoo90/winreg-rs"
+	}
+]

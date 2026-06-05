@@ -116,7 +116,7 @@ export function AppearanceSettings() {
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard description="跟随系统、浅色或深色" title="主题模式">
+			<SettingsSectionCard title="主题模式">
 				<div className="grid gap-3 md:grid-cols-3">
 					<Option
 						active={theme === 'system'}
@@ -139,7 +139,7 @@ export function AppearanceSettings() {
 				</div>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard description="配置应用的主题强调色" title="主题颜色">
+			<SettingsSectionCard title="主题颜色">
 				<div className="space-y-2.5">
 					<div className="grid grid-cols-3 gap-2.5 md:grid-cols-4">
 						<button
@@ -255,10 +255,7 @@ export function AppearanceSettings() {
 				</div>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard
-				description="自定义 Markdown 预览的 CSS 样式"
-				title="自定义 CSS"
-			>
+			<SettingsSectionCard title="自定义 CSS">
 				<div
 					className="[&_textarea]:min-h-60 [&_textarea]:font-mono
 						[&_textarea]:text-sm"

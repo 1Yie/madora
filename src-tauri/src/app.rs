@@ -53,11 +53,7 @@ pub fn run() {
 		#[cfg(all(target_os = "windows", not(debug_assertions)))]
 		configure_windows_webview(_app);
 
-		let app_data_dir = _app
-			.path()
-			.app_data_dir()
-			.map_err(|e| e.to_string())?;
-		_app.manage(LicenseService::new(app_data_dir));
+		_app.manage(LicenseService::new());
 
 		Ok(())
 	});
@@ -109,6 +105,7 @@ pub fn run() {
 			license::get_license_status,
 			license::activate_license,
 			license::verify_license,
+			license::force_verify_license,
 			license::deactivate_license,
 		])
 		.run(tauri::generate_context!())

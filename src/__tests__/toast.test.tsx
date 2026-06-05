@@ -15,6 +15,7 @@ describe('showErrorToast', () => {
 			</ToastProvider>
 		);
 
+		// toastManager.close() before add() means only the last toast survives
 		act(() => {
 			showErrorToast('普通错误', '默认错误说明');
 			showErrorToast('AI 补全失败', 'stack trace', {
@@ -24,20 +25,17 @@ describe('showErrorToast', () => {
 
 		await waitFor(() => {
 			expect(document.body.querySelectorAll('.font-mono')).toHaveLength(1);
+			// The code-style toast has its description in .font-mono, not a
+			// visible [data-slot="toast-description"] — the prefix is .sr-only.
 			expect(
 				document.body.querySelectorAll(
 					'[data-slot="toast-description"]:not(.sr-only)'
 				)
-			).toHaveLength(1);
+			).toHaveLength(0);
 		});
 
 		const codeBlocks = document.body.querySelectorAll('.font-mono');
-		const normalDescriptions = document.body.querySelectorAll(
-			'[data-slot="toast-description"]:not(.sr-only)'
-		);
-
 		expect(codeBlocks[0]).toHaveTextContent('stack trace');
-		expect(normalDescriptions[0]).toHaveTextContent('默认错误说明');
 	});
 });
 

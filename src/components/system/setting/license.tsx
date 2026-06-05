@@ -3,6 +3,7 @@ import {
 	ExternalLink,
 	KeyRound,
 	Loader2,
+	OctagonX,
 	ShieldAlert,
 	ShieldCheck,
 	Zap,
@@ -24,8 +25,7 @@ import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
 const PURCHASE_URL = 'https://madora.ichiyo.in/purchase';
-
-type LicenseState = 'active' | 'expired' | 'trial';
+type LicenseState = 'active' | 'expired' | 'trial' | 'revoked';
 
 interface StatusConfig {
 	icon: React.ComponentType<{ className?: string }>;
@@ -61,6 +61,13 @@ const STATUS_CONFIGS: Record<LicenseState, StatusConfig> = {
 			'bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800',
 		badgeClass:
 			'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300',
+	},
+	revoked: {
+		icon: OctagonX,
+		label: '已吊销',
+		iconClass: 'text-destructive',
+		iconBg: 'bg-destructive/5 border border-destructive/20',
+		badgeClass: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
 	},
 };
 
@@ -100,13 +107,13 @@ export function LicenseSettings({
 	const licenseState: LicenseState =
 		status.state === 'active'
 			? 'active'
-			: status.state === 'expired'
-				? 'expired'
-				: 'trial';
-
+			: status.state === 'revoked'
+				? 'revoked'
+				: status.state === 'expired'
+					? 'expired'
+					: 'trial';
 	const isActive = licenseState === 'active';
 	const trialDays = status.trialDaysRemaining ?? 0;
-
 	const statusConfig: StatusConfig = {
 		...STATUS_CONFIGS[licenseState],
 		...(licenseState === 'trial' && {
@@ -154,15 +161,17 @@ export function LicenseSettings({
 							</div>
 						</div>
 						{!isActive && (
-							<Button
-								size="sm"
-								variant="outline"
-								className="h-7 shrink-0 gap-1.5 text-xs"
-								onClick={onRequestActivation}
-							>
-								<Crown className="size-3" />
-								激活
-							</Button>
+							<div className="flex items-center gap-1.5">
+								<Button
+									size="sm"
+									variant="outline"
+									className="h-7 shrink-0 gap-1.5 text-xs"
+									onClick={onRequestActivation}
+								>
+									<Crown className="size-3" />
+									激活
+								</Button>
+							</div>
 						)}
 					</div>
 
@@ -180,15 +189,32 @@ export function LicenseSettings({
 									{maskedKey}
 								</span>
 							</div>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-7 text-xs text-destructive hover:bg-destructive/10
-									hover:text-destructive"
-								onClick={() => setShowDeactivateConfirm(true)}
-							>
-								停用此设备
-							</Button>
+							<div className="flex items-center gap-3">
+								<Button
+									variant="link"
+									render={
+										<a
+											href="https://madora.ichiyo.in/lookup"
+											target="_blank"
+											rel="noopener noreferrer"
+										>
+											管理许可证
+											<ExternalLink className="size-3" />
+										</a>
+									}
+								>
+									<ExternalLink className="size-2.5" />
+								</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 text-xs text-destructive
+										hover:bg-destructive/10 hover:text-destructive"
+									onClick={() => setShowDeactivateConfirm(true)}
+								>
+									停用此设备
+								</Button>
+							</div>
 						</div>
 					)}
 
@@ -210,7 +236,7 @@ export function LicenseSettings({
 						</div>
 					)}
 
-					{!isActive && (
+					{!isActive && licenseState !== 'revoked' && (
 						<div
 							className="flex items-center gap-1.5 border-t border-border/60
 								bg-muted/20 px-5 py-2.5"

@@ -7,8 +7,9 @@ import {
 import { useEffect, useState } from 'react';
 import logo from '@/assets/icon.png';
 import packageJson from '../../../../package.json';
-import { Stat } from '@/components/system/setting/shared';
+import { SettingsSectionCard, Stat } from '@/components/system/setting/shared';
 import { ExternalLinkAnchor } from '@/components/ui/external-link';
+import licenses from '@/assets/licenses.json';
 
 type AppInfo = {
 	identifier: string;
@@ -61,10 +62,10 @@ export function AboutSettings() {
 	const appInfo = useAppInfo();
 
 	const stats: Array<{ label: string; value: React.ReactNode }> = [
-		{ label: 'Version', value: appInfo.version },
-		{ label: 'By', value: 'ichiyo' },
+		{ label: '版本', value: appInfo.version },
+		{ label: '作者', value: 'ichiyo' },
 		{
-			label: 'Website',
+			label: '网站',
 			value: (
 				<ExternalLinkAnchor href={WEBSITE_URL}>
 					{WEBSITE_URL}
@@ -72,7 +73,7 @@ export function AboutSettings() {
 			),
 		},
 		{
-			label: 'Source Code',
+			label: '源代码',
 			value: (
 				<ExternalLinkAnchor href={SOURCE_CODE_URL}>
 					{SOURCE_CODE_URL}
@@ -80,7 +81,6 @@ export function AboutSettings() {
 			),
 		},
 	];
-
 	return (
 		<div className="space-y-4">
 			<section
@@ -115,6 +115,26 @@ export function AboutSettings() {
 					</div>
 				</div>
 			</section>
+			<SettingsSectionCard title="开源许可">
+				<div className="-mx-5 -mb-5 overflow-hidden">
+					<div className="divide-y divide-border">
+						{licenses.map((entry) => (
+							<div
+								key={entry.name}
+								className="flex items-center justify-between gap-4 px-5 py-3
+									text-sm"
+							>
+								<ExternalLinkAnchor href={entry.url}>
+									{entry.name}
+								</ExternalLinkAnchor>
+								<span className="shrink-0 tabular-nums text-muted-foreground">
+									{entry.license}
+								</span>
+							</div>
+						))}
+					</div>
+				</div>
+			</SettingsSectionCard>
 		</div>
 	);
 }

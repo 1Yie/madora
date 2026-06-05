@@ -1,16 +1,19 @@
 import {
+	ArrowUpDown,
+	Bookmark,
+	BookmarkX,
 	ChevronRight,
 	Clipboard,
 	Copy,
 	FileImage,
 	FilePenLine,
 	FileText,
+	FileUp,
 	Folder,
 	FolderPlus,
 	FolderOpen,
+	ListCollapse,
 	LoaderCircle,
-	Plus,
-	RefreshCw,
 	RotateCcw,
 	Scissors,
 	Trash2,
@@ -32,12 +35,6 @@ import {
 	MenuItem,
 	MenuSeparator,
 } from '@/components/ui/context-menu';
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from '@/components/ui/menu';
 import {
 	Empty,
 	EmptyDescription,
@@ -211,6 +208,20 @@ function sortExplorerChildren(children: ExplorerNode[]): ExplorerNode[] {
 	});
 }
 
+function collectAllDirectoryPaths(node: ExplorerNode): string[] {
+	const paths: string[] = [];
+
+	if (node.kind === 'directory') {
+		paths.push(node.path);
+
+		for (const child of node.children) {
+			paths.push(...collectAllDirectoryPaths(child));
+		}
+	}
+
+	return paths;
+}
+
 function buildGitStatusMap(
 	status: GitStatus | null
 ): Map<string, GitFileEntry> {
@@ -355,7 +366,7 @@ function mergeDeletedGitNodes(
 
 			return {
 				...node,
-				children: sortExplorerChildren(nextChildren),
+				children: nextChildren,
 				hasChildren: nextChildren.length > 0,
 			};
 		}
@@ -379,7 +390,7 @@ function mergeDeletedGitNodes(
 
 		return {
 			...node,
-			children: sortExplorerChildren(nextChildren),
+			children: nextChildren,
 			hasChildren: nextChildren.length > 0,
 		};
 	};
@@ -667,39 +678,6 @@ function CreateMarkdownDialog({
 	);
 }
 
-function CreateEntryMenu({
-	busy,
-	disabled,
-	onCreateDirectory,
-	onCreateMarkdown,
-}: {
-	busy: boolean;
-	disabled: boolean;
-	onCreateDirectory: () => void;
-	onCreateMarkdown: () => void;
-}) {
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger
-				render={<Button aria-label="新建" size="icon-sm" variant="ghost" />}
-				disabled={disabled}
-			>
-				<Plus className="size-4" />
-			</DropdownMenuTrigger>
-			<DropdownMenuContent align="center" sideOffset={6}>
-				<DropdownMenuItem disabled={busy} onClick={onCreateMarkdown}>
-					<FileText />
-					新建文档
-				</DropdownMenuItem>
-				<DropdownMenuItem disabled={busy} onClick={onCreateDirectory}>
-					<FolderPlus />
-					新建文件夹
-				</DropdownMenuItem>
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
 function CreateDirectoryDialog({
 	busy,
 	node,
@@ -910,6 +888,7 @@ type FlatItem =
 function flattenTree(
 	node: ExplorerNode,
 	expandedPaths: Set<string>,
+	sortEnabled: boolean,
 	depth = 0
 ): FlatItem[] {
 	const items: FlatItem[] = [{ type: 'node', node, depth }];
@@ -919,8 +898,14 @@ function flattenTree(
 			if (node.children.length === 0) {
 				items.push({ type: 'empty', depth: depth + 1 });
 			} else {
-				for (const child of node.children) {
-					items.push(...flattenTree(child, expandedPaths, depth + 1));
+				const children = sortEnabled
+					? sortExplorerChildren(node.children)
+					: node.children;
+
+				for (const child of children) {
+					items.push(
+						...flattenTree(child, expandedPaths, sortEnabled, depth + 1)
+					);
 				}
 			}
 		} else {
@@ -1160,7 +1145,6 @@ export function FileExplorerSidebar({
 	onRestoreDeletedNode,
 	onOpenFolder,
 	onPasteNode,
-	onRefresh,
 	onGitRefresh,
 	onGitRefreshWorkspace,
 	onGitStatusChange,
@@ -1175,6 +1159,16 @@ export function FileExplorerSidebar({
 		rootPath: null,
 	});
 	const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+	const [sortEnabled, setSortEnabled] = useState(true);
+	const [bookmarkPaths, setBookmarkPaths] = useState<string[]>(() => {
+		try {
+			const saved = window.localStorage.getItem('madora-bookmarks');
+			return saved ? (JSON.parse(saved) as string[]) : [];
+		} catch {
+			return [];
+		}
+	});
+	const [bookmarksExpanded, setBookmarksExpanded] = useState(true);
 	const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 	const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
 	const mergedRoot = useMemo(
@@ -1267,8 +1261,8 @@ export function FileExplorerSidebar({
 
 	const flatItems = useMemo(() => {
 		if (!mergedRoot) return [];
-		return flattenTree(mergedRoot, resolvedExpandedPaths);
-	}, [mergedRoot, resolvedExpandedPaths]);
+		return flattenTree(mergedRoot, resolvedExpandedPaths, sortEnabled);
+	}, [mergedRoot, resolvedExpandedPaths, sortEnabled]);
 
 	const virtualizer = useVirtualizer({
 		count: flatItems.length,
@@ -1419,25 +1413,92 @@ export function FileExplorerSidebar({
 		}
 	};
 
+	const toggleSort = () => {
+		setSortEnabled((prev) => !prev);
+	};
+
+	const handleExpandCollapseToggle = () => {
+		if (!mergedRoot) return;
+
+		const allDirPaths = collectAllDirectoryPaths(mergedRoot);
+		const isAllExpanded = allDirPaths.every((p) =>
+			resolvedExpandedPaths.has(p)
+		);
+
+		if (isAllExpanded) {
+			setExpansionState((currentState) => ({
+				collapsedPaths: new Set(
+					allDirPaths.filter((p) => p !== mergedRoot.path)
+				),
+				expandedPaths: new Set([mergedRoot.path]),
+				rootPath: currentState.rootPath,
+			}));
+		} else {
+			setExpansionState(() => ({
+				collapsedPaths: new Set(),
+				expandedPaths: new Set(allDirPaths),
+				rootPath: expansionRootPath,
+			}));
+		}
+	};
+
+	const showCurrentFileInTree = () => {
+		if (!selectedPath || flatItems.length === 0) return;
+
+		const idx = flatItems.findIndex(
+			(item) => item.type === 'node' && item.node.path === selectedPath
+		);
+
+		if (idx >= 0) {
+			virtualizer.scrollToIndex(idx, { align: 'center' });
+		}
+	};
+
+	const toggleBookmark = (path: string) => {
+		setBookmarkPaths((prev) => {
+			const next = prev.includes(path)
+				? prev.filter((p) => p !== path)
+				: [...prev, path];
+
+			try {
+				window.localStorage.setItem('madora-bookmarks', JSON.stringify(next));
+			} catch {
+				// localStorage may be full or unavailable
+			}
+
+			return next;
+		});
+	};
+
+	const isBookmarked = (path: string) => bookmarkPaths.includes(path);
+
+	const handleBookmarkClick = (path: string) => {
+		if (!mergedRoot) return;
+
+		const node = findNodeByPath(mergedRoot, path);
+
+		if (node) {
+			onSelectNode(node);
+		}
+	};
+
 	return (
 		<>
 			<aside
 				className="flex min-w-0 flex-1 flex-col bg-sidebar
 					text-sidebar-foreground"
 			>
-				<div
-					className={cn(
-						`flex items-center justify-between gap-3 border-b
-						border-sidebar-border px-4`,
-						explorerTopSectionHeightClassName
-					)}
-				>
-					<div className="min-w-0">
-						<p className="truncate text-xs text-muted-foreground">
-							{root ? root.path : '选择一个文件夹开始浏览'}
-						</p>
-					</div>
-					<div className="flex items-center gap-2">
+				<div className="border-b border-sidebar-border">
+					{/* Row 1: path + open folder button */}
+					<div
+						className={`flex items-center justify-between gap-3 px-4
+							${explorerTopSectionHeightClassName}`}
+					>
+						<div className="min-w-0">
+							<p className="truncate text-xs text-muted-foreground">
+								{root ? root.path : '选择一个文件夹开始浏览'}
+							</p>
+						</div>
 						<Button
 							loading={busy}
 							onClick={onOpenFolder}
@@ -1446,40 +1507,165 @@ export function FileExplorerSidebar({
 						>
 							<Folder className="size-4" />
 						</Button>
-						<CreateEntryMenu
-							busy={createBusy}
+					</div>
+					<div
+						className="flex items-center justify-center gap-1 border-t
+							border-sidebar-border px-2 py-1.5"
+					>
+						<Button
+							aria-label="新建文件夹"
 							disabled={!root || busy || createBusy || operationBusy !== null}
-							onCreateDirectory={() =>
+							onClick={() =>
 								setPendingAction({
 									node: createTargetNode,
 									targetPath: selectedPath,
 									type: 'createDirectory',
 								})
 							}
-							onCreateMarkdown={() =>
+							size="icon-sm"
+							variant="ghost"
+						>
+							<FolderPlus className="size-4" />
+						</Button>
+						<Button
+							aria-label="新建文档"
+							disabled={!root || busy || createBusy || operationBusy !== null}
+							onClick={() =>
 								setPendingAction({
 									targetPath: selectedPath,
 									type: 'createMarkdown',
 								})
 							}
-						/>
-						<Button
-							aria-label="刷新当前文件夹"
-							disabled={!root || busy || createBusy || operationBusy !== null}
-							onClick={onRefresh}
 							size="icon-sm"
 							variant="ghost"
 						>
-							<RefreshCw className="size-4" />
+							<FileText className="size-4" />
+						</Button>
+
+						<div className="mx-1 h-4 w-px bg-border" />
+
+						<Button
+							aria-label="排序切换"
+							onClick={toggleSort}
+							size="icon-sm"
+							variant={sortEnabled ? 'secondary' : 'ghost'}
+						>
+							<ArrowUpDown className="size-4" />
+						</Button>
+						<Button
+							aria-label="全部展开或折叠"
+							onClick={handleExpandCollapseToggle}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<ListCollapse className="size-4" />
+						</Button>
+						<Button
+							aria-label="在树中显示当前文件"
+							disabled={!selectedPath}
+							onClick={showCurrentFileInTree}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<FileUp className="size-4" />
+						</Button>
+						<Button
+							aria-label={
+								selectedPath && isBookmarked(selectedPath)
+									? '取消书签'
+									: '添加书签'
+							}
+							disabled={!selectedPath}
+							onClick={() => {
+								if (selectedPath) {
+									toggleBookmark(selectedPath);
+								}
+							}}
+							size="icon-sm"
+							variant={
+								selectedPath && isBookmarked(selectedPath)
+									? 'secondary'
+									: 'ghost'
+							}
+						>
+							<Bookmark
+								className={`size-4 ${
+									selectedPath && isBookmarked(selectedPath)
+										? 'fill-current'
+										: ''
+									}`}
+							/>
 						</Button>
 					</div>
+
+					{bookmarkPaths.length > 0 && (
+						<div className="border-t border-sidebar-border px-2 py-1">
+							<button
+								className="flex w-full items-center gap-1.5 rounded px-1 py-1
+									text-xs text-muted-foreground hover:bg-sidebar-accent"
+								onClick={() => setBookmarksExpanded((prev) => !prev)}
+								type="button"
+							>
+								<Bookmark className="size-3.5 shrink-0" />
+								<span className="font-medium">书签</span>
+								<ChevronRight
+									className={`size-3 transition-transform ${
+										bookmarksExpanded ? 'rotate-90' : ''
+									}`}
+								/>
+								<span className="ml-auto text-xs">{bookmarkPaths.length}</span>
+							</button>
+							{bookmarksExpanded && (
+								<div className="mt-0.5 space-y-0.5">
+									{bookmarkPaths.map((path) => {
+										const name = getPathName(path);
+										const isActive = selectedPath === path;
+
+										return (
+											<div
+												key={path}
+												className={`group flex cursor-pointer items-center gap-2
+												rounded px-2 py-1 text-xs hover:bg-sidebar-accent
+												${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : ''}`}
+												onClick={() => handleBookmarkClick(path)}
+												role="button"
+												tabIndex={0}
+												onKeyDown={(e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														handleBookmarkClick(path);
+													}
+												}}
+											>
+												<span className="truncate">{name}</span>
+
+												<button
+													aria-label={`删除书签 ${name}`}
+													className="ml-auto shrink-0 rounded p-0.5 opacity-0
+														transition-opacity hover:bg-sidebar-accent/50
+														group-hover:opacity-100"
+													onClick={(e) => {
+														e.stopPropagation();
+														toggleBookmark(path);
+													}}
+													type="button"
+												>
+													<BookmarkX className="size-3.5" />
+												</button>
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</div>
+					)}
 				</div>
 
 				<ContextMenuRoot>
 					<ContextMenuTrigger className="min-h-0 flex flex-1">
 						<div
 							ref={viewportRef}
-							className="overflow-auto size-full min-h-0 px-2"
+							className="size-full min-h-0 px-2"
+							style={{ overflow: 'auto' }}
 							data-native-dialog-scroll-lock
 						>
 							{mergedRoot ? (

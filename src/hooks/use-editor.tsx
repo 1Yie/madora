@@ -25,7 +25,12 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
-import { useEffect, useEffectEvent, useRef, type RefObject } from 'react';
+import {
+	useEffect,
+	useEffectEvent,
+	useRef,
+	type MutableRefObject,
+} from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
 import { useTheme } from '@/components/system/theme-provider';
@@ -34,11 +39,12 @@ import { showErrorToast } from '@/components/ui/toast';
 
 type UseEditorOptions = {
 	onChange?: (value: string) => void;
+	onCursorChange?: (line: number, col: number) => void;
 	onSave?: () => void;
 	title?: string;
 
 	value: string;
-	viewRef?: RefObject<EditorView | null>;
+	viewRef?: MutableRefObject<EditorView | null>;
 };
 
 type CompletionStatusTone = 'muted' | 'loading' | 'success' | 'error';
@@ -58,7 +64,6 @@ type CompletionPreviewState = {
 	streaming: boolean;
 	pos: number;
 	text: string;
-	hidden?: boolean;
 };
 
 type CompletionSnapshot = {
@@ -134,36 +139,46 @@ function isSnapshotCurrent(
 }
 
 /**
- * Scroll the parent overflow container to ensure the cursor at the given
+ * Scroll the parent ScrollArea viewport to ensure the cursor at the given
  * document position is visible. CodeMirror's internal scrollIntoView cannot
  * work because .cm-scroller has overflow: hidden, so we must scroll the
- * overflow container that wraps the editor.
+ * ScrollArea viewport that wraps the editor.
  */
 function scrollParentToCursor(view: EditorView, pos: number): void {
 	requestAnimationFrame(() => {
 		const coords = view.coordsAtPos(pos);
 		if (!coords) return;
 
-		let viewport = view.dom.closest('.overflow-auto') as HTMLElement | null;
+		const viewport = view.dom.closest<HTMLElement>(
+			'[data-slot="editor-scroll"]'
+		);
 		if (!viewport) return;
 
-		const osRoot = viewport.closest('[data-overlayscrollbars]');
-		if (osRoot) {
-			const osViewport = osRoot.querySelector(
+		// OverlayScrollbars nest a [data-overlayscrollbars-viewport] that
+		// actually drives scrollTop — the host always reports 0.
+		const scroller =
+			viewport.querySelector<HTMLElement>(
 				'[data-overlayscrollbars-viewport]'
-			) as HTMLElement | null;
-			if (osViewport) {
-				viewport = osViewport;
-			}
-		}
+			) ?? viewport;
 
 		const viewportRect = viewport.getBoundingClientRect();
 		const margin = 24;
 
-		if (coords.bottom + margin > viewportRect.bottom) {
-			viewport.scrollTop += coords.bottom + margin - viewportRect.bottom;
+		// Include ghost-text preview height so long completions stay visible.
+		// Use the LAST element — multi-line previews render multiple spans.
+		let effectiveBottom = coords.bottom;
+		const previewEls =
+			view.dom.querySelectorAll<HTMLElement>('.cm-fim-preview');
+		const lastPreview = previewEls[previewEls.length - 1];
+		if (lastPreview) {
+			const pr = lastPreview.getBoundingClientRect();
+			effectiveBottom = Math.max(coords.bottom, pr.bottom);
+		}
+
+		if (effectiveBottom + margin > viewportRect.bottom) {
+			scroller.scrollTop += effectiveBottom + margin - viewportRect.bottom;
 		} else if (coords.top - margin < viewportRect.top) {
-			viewport.scrollTop -= viewportRect.top - coords.top + margin;
+			scroller.scrollTop -= viewportRect.top - coords.top + margin;
 		}
 	});
 }
@@ -266,9 +281,7 @@ const completionTooltipField = StateField.define<CompletionTooltipState | null>(
 				if (!tooltipState) return null;
 				return {
 					above: false,
-					arrow: false,
 					pos: tooltipState.pos,
-					strictSide: false,
 					create() {
 						return createCompletionTooltipView();
 					},
@@ -278,107 +291,68 @@ const completionTooltipField = StateField.define<CompletionTooltipState | null>(
 );
 
 class CompletionPreviewWidget extends WidgetType {
-	constructor(
-		private readonly text: string,
-		private readonly hidden: boolean
-	) {
+	constructor(private readonly text: string) {
 		super();
 	}
 	eq(other: CompletionPreviewWidget) {
-		return other.text === this.text && other.hidden === this.hidden;
+		return other.text === this.text;
 	}
 	toDOM() {
 		const dom = document.createElement('span');
 		dom.className = 'cm-fim-preview';
 		dom.setAttribute('aria-hidden', 'true');
 		dom.textContent = this.text;
-		if (!this.hidden) {
-			requestAnimationFrame(() => {
-				dom.style.opacity = '1';
-			});
-		}
 		return dom;
-	}
-	updateDOM(dom: HTMLElement): boolean {
-		dom.textContent = this.text;
-		if (this.hidden) {
-			requestAnimationFrame(() => {
-				dom.style.opacity = '0';
-			});
-		} else {
-			dom.style.opacity = '0';
-			requestAnimationFrame(() => {
-				dom.style.opacity = '1';
-			});
-		}
-		return true;
 	}
 	ignoreEvent() {
 		return true;
 	}
 }
 
-const INITIAL_PREVIEW_STATE: CompletionPreviewState = {
-	pos: 0,
-	text: '',
-	streaming: false,
-	hidden: true,
-};
+const completionPreviewField = StateField.define<CompletionPreviewState | null>(
+	{
+		create() {
+			return null;
+		},
+		update(value, transaction) {
+			for (const effect of transaction.effects) {
+				if (effect.is(setCompletionPreviewEffect)) return effect.value;
+			}
+			if (!value) return null;
 
-const completionPreviewField = StateField.define<CompletionPreviewState>({
-	create() {
-		return INITIAL_PREVIEW_STATE;
-	},
-	update(value, transaction) {
-		for (const effect of transaction.effects) {
-			if (effect.is(setCompletionPreviewEffect)) {
-				const newVal = effect.value;
-				if (newVal === null) {
-					return { ...value, hidden: true, text: '' };
+			if (transaction.docChanged) {
+				return getContinuedCompletionPreview(value, transaction);
+			}
+
+			if (transaction.selection) {
+				const prev = transaction.startState.selection.main;
+				const next = transaction.state.selection.main;
+				const selectionActuallyChanged =
+					prev.from !== next.from || prev.to !== next.to;
+				if (
+					selectionActuallyChanged &&
+					(transaction.state.selection.ranges.length !== 1 ||
+						!transaction.state.selection.main.empty ||
+						transaction.state.selection.main.head !== value.pos)
+				) {
+					return null;
 				}
-				return newVal;
 			}
-		}
-		if (value.hidden) return value;
-
-		if (transaction.docChanged) {
-			const continued = getContinuedCompletionPreview(value, transaction);
-			if (continued === null) {
-				return { ...value, hidden: true, text: '' };
-			}
-			return continued;
-		}
-
-		if (transaction.selection) {
-			const prev = transaction.startState.selection.main;
-			const next = transaction.state.selection.main;
-			const selectionActuallyChanged =
-				prev.from !== next.from || prev.to !== next.to;
-			if (
-				selectionActuallyChanged &&
-				(transaction.state.selection.ranges.length !== 1 ||
-					!transaction.state.selection.main.empty ||
-					transaction.state.selection.main.head !== value.pos)
-			) {
-				return { ...value, hidden: true, text: '' };
-			}
-		}
-		return value;
-	},
-	provide: (field) =>
-		EditorView.decorations.compute([field], (state) => {
-			const preview = state.field(field);
-			return Decoration.set([
-				Decoration.widget({
-					side: 1,
-					widget: new CompletionPreviewWidget(
-						preview.text,
-						preview.hidden ?? false
-					),
-				}).range(preview.pos),
-			]);
-		}),
-});
+			return value;
+		},
+		provide: (field) =>
+			EditorView.decorations.compute([field], (state) => {
+				const preview = state.field(field);
+				if (!preview || preview.text.length === 0) return Decoration.set([]);
+				return Decoration.set([
+					Decoration.widget({
+						side: 1,
+						widget: new CompletionPreviewWidget(preview.text),
+					}).range(preview.pos),
+				]);
+			}),
+	}
+);
 
 const themeCompartment = new Compartment();
 
@@ -438,8 +412,6 @@ function createEditorTheme(dark: boolean) {
 				userSelect: 'none',
 				verticalAlign: 'top',
 				whiteSpace: 'pre-wrap',
-				opacity: 0,
-				transition: 'opacity 0.15s ease',
 			},
 			'.cm-tooltip': {
 				background: 'transparent !important',
@@ -450,11 +422,6 @@ function createEditorTheme(dark: boolean) {
 				boxShadow: 'none',
 				padding: '0',
 				maxWidth: 'none',
-				animation: 'cm-fim-tooltip-fade-in 0.1s ease',
-			},
-			'@keyframes cm-fim-tooltip-fade-in': {
-				from: { opacity: 0 },
-				to: { opacity: 1 },
 			},
 			'&.cm-focused': { outline: 'none' },
 		},
@@ -590,12 +557,11 @@ function renderCompletionTooltip(
 	status: CompletionStatus,
 	hasPendingRequest: boolean
 ) {
-	const shouldShow = shouldShowCompletionTooltip(
+	const nextTooltip = shouldShowCompletionTooltip(
 		view,
 		status,
 		hasPendingRequest
-	);
-	const nextTooltip = shouldShow
+	)
 		? { message: '', pos: view.state.selection.main.head, tone: status.tone }
 		: null;
 
@@ -607,12 +573,6 @@ function renderCompletionTooltip(
 	) {
 		return;
 	}
-
-	// fade-out: apply CSS transition directly to the tooltip DOM before clearing
-	if (currentTooltip && !nextTooltip && mountedTooltipDom) {
-		mountedTooltipDom.style.opacity = '0';
-	}
-
 	view.dispatch({
 		effects: [
 			setCompletionTooltipEffect.of(nextTooltip),
@@ -636,42 +596,40 @@ function renderCompletionPreview(
 // eslint-disable-next-line react-refresh/only-export-components
 function CompletionTooltipContent() {
 	return (
-		<div
-			className="inline-flex items-center justify-center rounded-full
-				bg-background/60 backdrop-blur-md p-0.5"
-		>
-			<MathCurveLoader className="size-5 text-primary" />
+		<div className="inline-flex items-center justify-center bg-transparent">
+			<div
+				className="flex items-center justify-center rounded-full
+					backdrop-blur-sm bg-background/60 size-7"
+			>
+				<MathCurveLoader className="size-5 text-primary" />
+			</div>
 		</div>
 	);
 }
-let mountedTooltipDom: HTMLElement | null = null;
 
 function createCompletionTooltipView(): TooltipView {
 	const dom = document.createElement('div');
-	mountedTooltipDom = dom;
 	let root: Root | null = createRoot(dom);
 	dom.className = 'cm-fim-tooltip';
-	dom.style.transition = 'opacity 0.15s ease';
 	root.render(<CompletionTooltipContent />);
 
 	return {
 		dom,
-		offset: { x: 0, y: 8 },
+		offset: { x: 0, y: 2 },
 		positioned(space) {
 			const shiftX = getCompletionTooltipShiftX(dom, space);
 			dom.style.transform = shiftX ? `translateX(${shiftX}px)` : '';
 		},
 		destroy() {
-			mountedTooltipDom = null;
 			const rootToUnmount = root;
 			root = null;
 			Promise.resolve().then(() => rootToUnmount?.unmount());
 		},
 	};
 }
-
 export function useEditor({
 	onChange,
+	onCursorChange,
 	onSave,
 	title,
 
@@ -687,6 +645,7 @@ export function useEditor({
 	const scheduledSnapshotRef = useRef<CompletionSnapshot | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const completionCacheRef = useRef<CompletionCacheEntry | null>(null);
+	const streamingRafPendingRef = useRef(false);
 	const aiSettingsRef = useRef({
 		apiUrl: '',
 		customProtocol: 'openai' as 'anthropic' | 'openai',
@@ -694,14 +653,22 @@ export function useEditor({
 		hasApiKey: false,
 		model: '',
 		provider: 'deepseek',
+		useSsl: true,
 	});
 	const completionStatusRef = useRef<CompletionStatus>({
 		message: '保存 API Key 后可用',
 		tone: 'muted',
 	});
 
-	const { apiUrl, customProtocol, enabled, hasApiKey, model, provider } =
-		useAiSettings();
+	const {
+		apiUrl,
+		customProtocol,
+		enabled,
+		hasApiKey,
+		model,
+		provider,
+		useSsl,
+	} = useAiSettings();
 
 	const { resolvedTheme } = useTheme();
 
@@ -711,6 +678,10 @@ export function useEditor({
 
 	const handleSave = useEffectEvent(() => {
 		onSave?.();
+	});
+
+	const handleCursorChange = useEffectEvent((line: number, col: number) => {
+		onCursorChange?.(line, col);
 	});
 
 	const syncTooltip = useEffectEvent(() => {
@@ -752,7 +723,7 @@ export function useEditor({
 
 	const clearCompletionPreview = useEffectEvent(() => {
 		const view = viewRef.current;
-		if (!view || view.state.field(completionPreviewField).hidden) return;
+		if (!view || !view.state.field(completionPreviewField)) return;
 		logCompletionDebug('preview-clear');
 		syncPreview(null);
 
@@ -765,10 +736,11 @@ export function useEditor({
 
 	const abortAllCompletion = useEffectEvent(() => {
 		const view = viewRef.current;
-		if (view && !view.state.field(completionPreviewField).hidden) {
+		if (view && view.state.field(completionPreviewField)) {
 			syncPreview(null);
 		}
 		clearScheduledCompletion('cancel');
+		streamingRafPendingRef.current = false;
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
 		setCompletionStatus(
@@ -830,8 +802,7 @@ export function useEditor({
 
 			logCompletionDebug('cache-hit', { cursor: snapshot.cursor });
 			const currentPreview = view.state.field(completionPreviewField);
-			if (!currentPreview.hidden && currentPreview.pos === snapshot.cursor)
-				return true;
+			if (currentPreview && currentPreview.pos === snapshot.cursor) return true;
 
 			view.dispatch({
 				effects: [
@@ -920,7 +891,6 @@ export function useEditor({
 			syncTooltip();
 			setCompletionStatus({ message: '正在生成 AI 建议...', tone: 'loading' });
 			let completion = '';
-			let didRenderChunk = false;
 
 			try {
 				const channel = new Channel<string>((chunk) => {
@@ -929,25 +899,32 @@ export function useEditor({
 
 					completion += chunk;
 
-					const currentView = viewRef.current;
-					if (!currentView) return;
-					if (!isSnapshotCurrent(currentView, snapshot)) return;
+					if (streamingRafPendingRef.current) return;
 
-					currentView.dispatch({
-						effects: [
-							setCompletionPreviewEffect.of({
-								pos: cursor,
-								streaming: true,
-								text: completion,
-							}),
-							internalCompletionEffect.of(true),
-						],
-					});
+					streamingRafPendingRef.current = true;
+					requestAnimationFrame(() => {
+						streamingRafPendingRef.current = false;
 
-					if (!didRenderChunk) {
+						if (requestId !== requestSequenceRef.current) return;
+
+						const currentView = viewRef.current;
+						if (!currentView) return;
+						if (!isSnapshotCurrent(currentView, snapshot)) return;
+
+						currentView.dispatch({
+							effects: [
+								setCompletionPreviewEffect.of({
+									pos: cursor,
+									streaming: true,
+									text: completion,
+								}),
+								internalCompletionEffect.of(true),
+							],
+						});
+
+						// Scroll to keep ghost text visible as it grows
 						scrollParentToCursor(currentView, cursor);
-						didRenderChunk = true;
-					}
+					});
 				});
 
 				await invoke<void>('generate_completion_stream', {
@@ -957,6 +934,7 @@ export function useEditor({
 							settings.provider === 'custom' ? settings.customProtocol : null,
 						model: settings.model.trim().length > 0 ? settings.model : null,
 						provider: settings.provider,
+						useSsl: settings.useSsl,
 					},
 					request: {
 						prefix: prompt,
@@ -1000,7 +978,7 @@ export function useEditor({
 
 				const currentPreview = currentView.state.field(completionPreviewField);
 				if (
-					currentPreview.hidden ||
+					!currentPreview ||
 					currentPreview.pos !== cursor ||
 					currentPreview.streaming ||
 					currentPreview.text !== completion
@@ -1015,7 +993,7 @@ export function useEditor({
 							internalCompletionEffect.of(true),
 						],
 					});
-					if (!didRenderChunk) scrollParentToCursor(currentView, cursor);
+					scrollParentToCursor(currentView, cursor);
 				}
 
 				setCompletionStatus(
@@ -1101,7 +1079,7 @@ export function useEditor({
 		const preview = view.state.field(completionPreviewField);
 		const cursor = view.state.selection.main.head;
 
-		if (preview.hidden || preview.pos !== cursor || preview.text.length === 0)
+		if (!preview || preview.pos !== cursor || preview.text.length === 0)
 			return false;
 
 		clearScheduledCompletion();
@@ -1121,7 +1099,7 @@ export function useEditor({
 	});
 
 	const cancelCompletionPreview = useEffectEvent((view: EditorView) => {
-		if (!view.state.field(completionPreviewField).hidden) {
+		if (view.state.field(completionPreviewField)) {
 			clearCompletionPreview();
 			return true;
 		}
@@ -1137,10 +1115,12 @@ export function useEditor({
 			hasApiKey,
 			model,
 			provider,
+			useSsl,
 		};
 		completionCacheRef.current = null;
 
 		if (!viewRef.current) return;
+		streamingRafPendingRef.current = false;
 		clearScheduledCompletion();
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
@@ -1150,7 +1130,7 @@ export function useEditor({
 			hasApiKey
 		);
 		syncTooltip();
-	}, [apiUrl, customProtocol, enabled, hasApiKey, model, provider]);
+	}, [apiUrl, customProtocol, enabled, hasApiKey, model, provider, useSsl]);
 
 	// resolvedTheme 变化时热更新编辑器主题
 	useEffect(() => {
@@ -1273,6 +1253,9 @@ export function useEditor({
 							!update.docChanged
 						) {
 							abortAllCompletion();
+							const pos = update.view.state.selection.main.head;
+							const line = update.view.state.doc.lineAt(pos);
+							handleCursorChange(line.number, pos - line.from + 1);
 							return;
 						}
 
@@ -1298,18 +1281,22 @@ export function useEditor({
 							clearScheduledCompletion('cancel');
 						}
 
+						// Scroll parent viewport to cursor on any non-internal change
+						// (typing, paste, enter, delete, arrow keys, etc.)
 						if (!internalUpdate && !externalSyncUpdate) {
-							const isUserInput = update.transactions.some((tr) =>
-								tr.isUserEvent('input')
-							);
-							if (isUserInput && !compositionInputUpdate) {
-								if (!hasDeletionInput) {
+							if (!compositionInputUpdate) {
+								if (update.docChanged || update.selectionSet) {
+									scrollParentToCursor(
+										update.view,
+										update.view.state.selection.main.head
+									);
+									const pos = update.view.state.selection.main.head;
+									const line = update.view.state.doc.lineAt(pos);
+									handleCursorChange(line.number, pos - line.from + 1);
+								}
+								if (update.docChanged && !hasDeletionInput) {
 									scheduleCompletionRequest(update.view);
 								}
-								scrollParentToCursor(
-									update.view,
-									update.view.state.selection.main.head
-								);
 							}
 						}
 
@@ -1333,6 +1320,11 @@ export function useEditor({
 		viewRef.current = view;
 		if (externalViewRef) externalViewRef.current = view;
 		view.focus();
+
+		// Initialize cursor position
+		const initPos = view.state.selection.main.head;
+		const initLine = view.state.doc.lineAt(initPos);
+		handleCursorChange(initLine.number, initPos - initLine.from + 1);
 
 		return () => {
 			requestSequenceRef.current += 1;

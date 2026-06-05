@@ -113,15 +113,7 @@ export function GitTabHistory({
 										>
 											<Ellipsis />
 										</MenuTrigger>
-										<MenuPopup
-											align="end"
-											portalProps={{
-												container:
-													(document.querySelector(
-														'dialog[open]'
-													) as HTMLElement | null) ?? document.body,
-											}}
-										>
+										<MenuPopup align="end">
 											<MenuItem
 												disabled={actionBusy || index !== 0}
 												onClick={onUndoRequest}

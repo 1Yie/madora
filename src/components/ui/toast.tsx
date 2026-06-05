@@ -499,6 +499,7 @@ export function showErrorToast(
 		descriptionStyle?: ErrorToastDescriptionStyle;
 	}
 ): string {
+	toastManager.close();
 	return toastManager.add({
 		data: options?.descriptionStyle
 			? { descriptionStyle: options.descriptionStyle }
@@ -511,6 +512,7 @@ export function showErrorToast(
 }
 
 export function showSuccessToast(title: React.ReactNode): string {
+	toastManager.close();
 	return toastManager.add({
 		priority: 'low',
 		title,

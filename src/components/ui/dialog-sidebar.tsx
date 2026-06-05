@@ -1,5 +1,4 @@
 'use client';
-
 import { cn } from '@/lib/utils';
 import type React from 'react';
 
@@ -26,54 +25,58 @@ export function DialogSidebar({
 	return (
 		<aside
 			className={cn(
-				'border-b bg-muted md:w-64 md:shrink-0 md:border-b-0 md:border-r',
+				'border-b bg-muted md:w-52 md:shrink-0 md:border-b-0 md:border-r',
 				className
 			)}
 		>
 			<div
-				className="overflow-auto size-full min-h-0 max-h-60 md:h-full
-					md:max-h-none overflow-x-hidden"
+				className="size-full min-h-0 max-h-60 overflow-auto overflow-x-hidden
+					md:h-full md:max-h-none"
 			>
-				<nav className="flex flex-col gap-1 p-3">
-					{items.map((section) => {
-						const Icon = section.icon;
-						const isActive = activeId === section.id;
-
+				<nav className="flex flex-col gap-0.5 px-2 py-2.5">
+					{items.map((item) => {
+						const Icon = item.icon;
+						const isActive = activeId === item.id;
 						return (
 							<button
-								key={section.id}
+								key={item.id}
 								aria-current={isActive ? 'page' : undefined}
 								type="button"
+								onClick={() => onSelect(item.id)}
 								className={cn(
-									`flex items-start gap-3 rounded-xl px-3 py-3 text-left
-									transition-colors`,
+									`group relative flex items-center gap-2.5 overflow-hidden
+									rounded-lg px-3 py-2 text-left transition-colors duration-100`,
 									isActive
 										? 'bg-primary/10 text-foreground'
 										: `text-muted-foreground hover:bg-accent
 											hover:text-foreground`
 								)}
-								onClick={() => onSelect(section.id)}
 							>
-								<span
+								{isActive && (
+									<span
+										className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary"
+									/>
+								)}
+
+								<Icon
 									className={cn(
-										'mt-0.5 rounded-lg border p-2',
+										'size-4 shrink-0',
 										isActive
-											? 'border-primary/30 bg-primary/10 text-primary'
-											: 'border-border bg-background text-muted-foreground'
+											? 'text-primary'
+											: 'text-muted-foreground group-hover:text-foreground'
 									)}
-								>
-									<Icon className="size-4" />
-								</span>
+								/>
+
 								<span className="min-w-0">
 									<span className="block text-sm font-medium">
-										{section.label}
+										{item.label}
 									</span>
-									<span
+									{/* <span
 										className="mt-1 block text-xs leading-5
 											text-muted-foreground"
 									>
-										{section.description}
-									</span>
+										{item.description}
+									</span> */}
 								</span>
 							</button>
 						);

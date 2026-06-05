@@ -3,8 +3,9 @@ use std::{collections::HashMap, sync::{LazyLock, Mutex}};
 use tauri::{ipc::Channel, State};
 
 use crate::{
-    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
-    services::ai,
+	models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
+	services::ai,
+	services::license::LicenseService,
 };
 
 use super::secure_storage;
@@ -38,32 +39,35 @@ fn require_api_key(provider: AiProvider) -> Result<String, String> {
 pub(crate) fn invalidate_api_key_cache() {
     API_KEY_CACHE.lock().unwrap().clear();
 }
-
 #[tauri::command]
 pub async fn generate_completion(
-    service: State<'_, ai::AiCompletionService>,
-    mut config: AiCompletionConfig,
-    request: CompletionRequest,
+	service: State<'_, ai::AiCompletionService>,
+	license_service: State<'_, LicenseService>,
+	mut config: AiCompletionConfig,
+	request: CompletionRequest,
 ) -> Result<CompletionResult, String> {
-    let provider = config.provider.unwrap_or_default();
-    config.api_key = require_api_key(provider)?;
+	license_service.ensure_valid().await?;
+	let provider = config.provider.unwrap_or_default();
+	config.api_key = require_api_key(provider)?;
 
-    ai::generate_completion(service.inner(), &config, &request).await
+	ai::generate_completion(service.inner(), &config, &request).await
 }
+
 
 #[tauri::command]
 pub async fn generate_completion_stream(
-    service: State<'_, ai::AiCompletionService>,
-    mut config: AiCompletionConfig,
-    request: CompletionRequest,
-    channel: Channel<String>,
+	service: State<'_, ai::AiCompletionService>,
+	license_service: State<'_, LicenseService>,
+	mut config: AiCompletionConfig,
+	request: CompletionRequest,
+	channel: Channel<String>,
 ) -> Result<(), String> {
-    let provider = config.provider.unwrap_or_default();
-    config.api_key = require_api_key(provider)?;
+	license_service.ensure_valid().await?;
+	let provider = config.provider.unwrap_or_default();
+	config.api_key = require_api_key(provider)?;
 
-    ai::generate_completion_stream(service.inner(), &config, &request, channel).await
+	ai::generate_completion_stream(service.inner(), &config, &request, channel).await
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

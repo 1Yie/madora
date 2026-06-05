@@ -828,7 +828,10 @@ export function GitPanel({
 						</Tooltip>
 						<PopoverPopup className="p-0 m-0">
 							<div className="flex max-h-80 flex-col gap-2">
-								<div className="overflow-auto size-full min-h-0 flex-1">
+								<div
+									className="size-full min-h-0 flex-1"
+									style={{ overflow: 'auto' }}
+								>
 									{branches.length === 0 ? (
 										<p
 											className="px-3 py-4 text-center text-xs

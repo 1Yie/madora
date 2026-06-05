@@ -28,7 +28,6 @@ import {
 	Save,
 	CloudUpload,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import type { ReactNode } from 'react';
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -150,17 +149,11 @@ function FormatToolbar({ onAction }: { onAction: (key: FormatKey) => void }) {
 			{FORMAT_ACTIONS.map(({ label, icon: Icon, key }) => (
 				<MenuItem
 					key={key}
-					render={
-						<Button
-							variant="ghost"
-							size="icon"
-							aria-label={label}
-							title={label}
-							type="button"
-							className="size-7 rounded-sm"
-							onClick={() => onAction(key)}
-						/>
-					}
+					aria-label={label}
+					title={label}
+					className="inline-flex size-7 items-center justify-center rounded-sm
+						p-0"
+					onClick={() => onAction(key)}
 				>
 					<Icon className="size-3.5" />
 				</MenuItem>
@@ -180,9 +173,21 @@ export function MarkdownEditor({
 
 	value,
 }: MarkdownEditorProps) {
-	const { editorRef, viewRef } = useEditor({ onChange, onSave, title, value });
+	const { editorRef, viewRef } = useEditor({
+		onChange,
+		onCursorChange: (line, col) => setCursorPos({ line, col }),
+		onSave,
+		title,
+		value,
+	});
 	const characterCount = Array.from(value).length;
+	const lineEnding = !value.includes('\r')
+		? 'LF'
+		: value.includes('\r\n')
+			? 'CRLF'
+			: 'CR';
 	const [gutterWidth, setGutterWidth] = useState(0);
+	const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
 
 	useEffect(() => {
 		if (!editorRef.current) return;
@@ -315,7 +320,10 @@ export function MarkdownEditor({
 							style={{ left: gutterWidth }}
 						/>
 					)}
-					<div className="overflow-auto size-full min-h-0 h-full">
+					<div
+						className="overflow-auto size-full min-h-0 h-full"
+						data-slot="editor-scroll"
+					>
 						<div className="h-full" ref={editorRef} />
 					</div>
 				</ContextMenuTrigger>
@@ -355,8 +363,12 @@ export function MarkdownEditor({
 					className="flex shrink-0 items-center gap-3 text-muted-foreground
 						tabular-nums"
 				>
+					<span>
+						行 {cursorPos.line}, 列 {cursorPos.col}
+					</span>
 					<span>{characterCount} 字符</span>
 					<span>{encoding ?? '-'}</span>
+					<span>{lineEnding}</span>
 				</div>
 			</div>
 		</div>

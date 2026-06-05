@@ -25,6 +25,13 @@ pub async fn verify_license(
 }
 
 #[tauri::command]
+pub async fn force_verify_license(
+	service: State<'_, LicenseService>,
+) -> Result<LicenseStatus, String> {
+	service.force_verify().await
+}
+
+#[tauri::command]
 pub async fn deactivate_license(
 	service: State<'_, LicenseService>,
 ) -> Result<(), String> {
