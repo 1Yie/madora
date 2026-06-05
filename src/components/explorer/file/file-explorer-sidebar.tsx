@@ -46,6 +46,11 @@ import {
 import { Input } from '@/components/ui/input';
 
 import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
 	Dialog,
 	DialogDescription,
 	DialogFooter,
@@ -1548,9 +1553,18 @@ export function FileExplorerSidebar({
 							${explorerTopSectionHeightClassName}`}
 					>
 						<div className="min-w-0">
-							<p className="truncate text-xs text-muted-foreground">
-								{root ? root.path : '选择一个文件夹开始浏览'}
-							</p>
+							<Tooltip>
+								<TooltipTrigger
+									className="block truncate text-xs text-muted-foreground
+										text-left leading-normal"
+									render={<span />}
+								>
+									{root ? root.path : '选择一个文件夹开始浏览'}
+								</TooltipTrigger>
+								{root && (
+									<TooltipContent side="bottom">{root.path}</TooltipContent>
+								)}
+							</Tooltip>
 						</div>
 						<Button
 							loading={busy}
@@ -1562,93 +1576,133 @@ export function FileExplorerSidebar({
 						</Button>
 					</div>
 					<div
-						className="flex items-center gap-1 border-t border-sidebar-border
-							px-2 py-1.5"
+						className="flex items-center justify-center gap-1 border-t
+							border-sidebar-border px-2 py-1.5"
 					>
-						<Button
-							aria-label="新建文件夹"
-							disabled={!root || busy || createBusy || operationBusy !== null}
-							onClick={() =>
-								setPendingAction({
-									node: createTargetNode,
-									targetPath: selectedPath,
-									type: 'createDirectory',
-								})
-							}
-							size="icon-sm"
-							variant="ghost"
-						>
-							<FolderPlus className="size-4" />
-						</Button>
-						<Button
-							aria-label="新建文档"
-							disabled={!root || busy || createBusy || operationBusy !== null}
-							onClick={() =>
-								setPendingAction({
-									targetPath: selectedPath,
-									type: 'createMarkdown',
-								})
-							}
-							size="icon-sm"
-							variant="ghost"
-						>
-							<FilePlus className="size-4" />
-						</Button>
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label="新建文件夹"
+									disabled={
+										!root || busy || createBusy || operationBusy !== null
+									}
+									onClick={() =>
+										setPendingAction({
+											node: createTargetNode,
+											targetPath: selectedPath,
+											type: 'createDirectory',
+										})
+									}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<FolderPlus className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">新建文件夹</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label="新建文档"
+									disabled={
+										!root || busy || createBusy || operationBusy !== null
+									}
+									onClick={() =>
+										setPendingAction({
+											targetPath: selectedPath,
+											type: 'createMarkdown',
+										})
+									}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<FilePlus className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">新建文档</TooltipContent>
+						</Tooltip>
 
 						<div className="mx-1 h-4 w-px bg-border" />
 
-						<Button
-							aria-label="排序切换"
-							onClick={toggleSort}
-							size="icon-sm"
-							variant={sortEnabled ? 'secondary' : 'ghost'}
-						>
-							<ArrowUpDown className="size-4" />
-						</Button>
-						<Button
-							aria-label="全部展开或折叠"
-							onClick={handleExpandCollapseToggle}
-							size="icon-sm"
-							variant="ghost"
-						>
-							<ListCollapse className="size-4" />
-						</Button>
-						<Button
-							aria-label="在树中显示当前文件"
-							disabled={!selectedPath}
-							onClick={showCurrentFileInTree}
-							size="icon-sm"
-							variant="ghost"
-						>
-							<FileUp className="size-4" />
-						</Button>
-						<Button
-							aria-label={
-								selectedPath && isBookmarked(selectedPath)
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label="排序切换"
+									onClick={toggleSort}
+									size="icon-sm"
+									variant={sortEnabled ? 'secondary' : 'ghost'}
+								>
+									<ArrowUpDown className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{sortEnabled ? '排序中' : '未排序'}
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label="全部展开或折叠"
+									onClick={handleExpandCollapseToggle}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<ListCollapse className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">全部展开或折叠</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label="在树中显示当前文件"
+									disabled={!selectedPath}
+									onClick={showCurrentFileInTree}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<FileUp className="size-4" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">在树中显示当前文件</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger>
+								<Button
+									aria-label={
+										selectedPath && isBookmarked(selectedPath)
+											? '取消书签'
+											: '添加书签'
+									}
+									disabled={!selectedPath}
+									onClick={() => {
+										if (selectedPath) {
+											toggleBookmark(selectedPath);
+										}
+									}}
+									size="icon-sm"
+									variant={
+										selectedPath && isBookmarked(selectedPath)
+											? 'secondary'
+											: 'ghost'
+									}
+								>
+									<Bookmark
+										className={`size-4 ${
+											selectedPath && isBookmarked(selectedPath)
+												? 'fill-current'
+												: ''
+											}`}
+									/>
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{selectedPath && isBookmarked(selectedPath)
 									? '取消书签'
-									: '添加书签'
-							}
-							disabled={!selectedPath}
-							onClick={() => {
-								if (selectedPath) {
-									toggleBookmark(selectedPath);
-								}
-							}}
-							size="icon-sm"
-							variant={
-								selectedPath && isBookmarked(selectedPath)
-									? 'secondary'
-									: 'ghost'
-							}
-						>
-							<Bookmark
-								className={`size-4 ${
-									selectedPath && isBookmarked(selectedPath)
-										? 'fill-current'
-										: ''
-									}`}
-							/>
-						</Button>
+									: '添加书签'}
+							</TooltipContent>
+						</Tooltip>
 					</div>
 
 					{bookmarkPaths.length > 0 && (
