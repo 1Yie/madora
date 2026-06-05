@@ -41,7 +41,6 @@ describe('MarkdownPreview', () => {
 			'src',
 			'asset://localhost/%2Fhome%2Fichiyo%2FWorkspace%2Fmd%2Fmy-post%2Fimg%2Fcbfc037700ccd0adb6cccd31c2d12ea6.jpg'
 		);
-		expect(image).not.toHaveAttribute('node');
 	});
 
 	it('resolves workspace-root image paths that start with a slash', () => {

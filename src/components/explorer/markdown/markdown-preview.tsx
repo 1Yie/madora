@@ -141,17 +141,14 @@ const components = (
 			<table className="my-0!">{children}</table>
 		</div>
 	),
-	img: ({ src, alt, ...props }) => {
-		const { node: _, ...imgProps } = props as { node?: Element };
-		return (
-			<img
-				src={resolveImageSrc(src, filePath, rootPath)}
-				alt={alt}
-				loading="lazy"
-				{...imgProps}
-			/>
-		);
-	},
+	img: ({ src, alt, ...props }) => (
+		<img
+			src={resolveImageSrc(src, filePath, rootPath)}
+			alt={alt}
+			loading="lazy"
+			{...props}
+		/>
+	),
 	details: ({ children, ...props }) => <details {...props}>{children}</details>,
 	summary: ({ children, ...props }) => <summary {...props}>{children}</summary>,
 });
