@@ -71,7 +71,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Madora v__VERSION__"
-          releaseBody: ${{ format('See {0}/blob/main/CHANGELOG.md for the full changelog.', github.server_url + '/' + github.repository) }}
+          releaseBody: ${{ format('See {0}/blob/main/CHANGELOG.md for the full changelog.', format('{0}/{1}', github.server_url, github.repository)) }}
           releaseDraft: true
           prerelease: false
 
