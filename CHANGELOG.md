@@ -1,3 +1,17 @@
+## [0.3.1](https://github.com/1Yie/madora/compare/v0.3.0...v0.3.1) (2026-06-05)
+
+### Bug Fixes
+
+- **explorer:** animate tree arrow only on user click via inline style ([670c5d1](https://github.com/1Yie/madora/commit/670c5d1fdd6e25f40cd22ae35c658f9631aba86d))
+- **explorer:** expand ancestors before scrolling to current file ([b565307](https://github.com/1Yie/madora/commit/b565307eae42c0a8ec68e1e74b738927662b02dd))
+
+### Features
+
+- **explorer:** add tab-based file browsing with typed invoke wrappers ([b8d59b7](https://github.com/1Yie/madora/commit/b8d59b75d134fa28d88f075b08f04304c91c6981))
+- **explorer:** add tooltips to sidebar toolbar and file path ([b2d5bd0](https://github.com/1Yie/madora/commit/b2d5bd0a2ad4e0b8d6eaa586880ce9ad45836012))
+- **explorer:** restructure sidebar header with bookmarks and action toolbar ([1ea3192](https://github.com/1Yie/madora/commit/1ea3192ae45d6a407f62b67931825545e3750478))
+- extract invoke wrappers, fix sort toggle, add image resolution ([3464d13](https://github.com/1Yie/madora/commit/3464d137513fd955d4f01ee8878ed6844d16dc2f))
+
 # [0.3.0](https://github.com/1Yie/madora/compare/v0.2.4...v0.3.0) (2026-06-05)
 
 ### Bug Fixes
