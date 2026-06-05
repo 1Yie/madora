@@ -1,4 +1,4 @@
-import { Channel, invoke } from '@tauri-apps/api/core';
+import { streamCompletion } from '@/invoke/ai';
 import { ArrowLeft, ArrowRight, CheckIcon, Crown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -123,16 +123,9 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		testAbortRef.current = abortController;
 
 		try {
-			const channel = new Channel<string>();
 			const chunks: string[] = [];
 
-			channel.onmessage = (chunk: string) => {
-				if (abortController.signal.aborted) return;
-				chunks.push(chunk);
-				setTestResult(chunks.join(''));
-			};
-
-			await invoke<void>('generate_completion_stream', {
+			await streamCompletion({
 				config: {
 					apiUrl: apiUrl.trim().length > 0 ? apiUrl : null,
 					customProtocol: isCustom ? customProtocol : null,
@@ -141,7 +134,11 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 					useSsl,
 				},
 				request: { prefix: TEST_PROMPT, suffix: null, title: 'setup-test.md' },
-				channel,
+				onChunk: (chunk: string) => {
+					if (abortController.signal.aborted) return;
+					chunks.push(chunk);
+					setTestResult(chunks.join(''));
+				},
 			});
 
 			if (abortController.signal.aborted) return;

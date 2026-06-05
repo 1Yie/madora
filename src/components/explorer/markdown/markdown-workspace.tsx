@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
@@ -18,6 +18,7 @@ type MarkdownWorkspaceProps = {
 	encoding?: string | null;
 	filePath: string;
 	mode: 'edit' | 'preview';
+	onToggleMode?: () => void;
 };
 
 const SAVE_DEBOUNCE_MS = 400;
@@ -60,6 +61,7 @@ export function MarkdownWorkspace({
 	encoding,
 	filePath,
 	mode,
+	onToggleMode,
 }: MarkdownWorkspaceProps) {
 	const { saveMode } = useAiSettings();
 	const [value, setValue] = useState(() => getInitialValue(filePath, content));
@@ -115,10 +117,7 @@ export function MarkdownWorkspace({
 	const persistValue = useCallback(
 		async (nextValue: string, requestId: number) => {
 			try {
-				await invoke('write_workspace_file', {
-					content: nextValue,
-					path: filePath,
-				});
+				await writeWorkspaceFile({ content: nextValue, path: filePath });
 
 				if (saveRequestIdRef.current !== requestId) {
 					return;
@@ -253,6 +252,7 @@ export function MarkdownWorkspace({
 
 	return (
 		<MarkdownEditor
+			onToggleMode={onToggleMode}
 			encoding={encoding}
 			mode={mode}
 			onChange={setValue}

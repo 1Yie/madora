@@ -1,7 +1,5 @@
 import { useLayoutEffect, useState } from 'react';
-import { RouterProvider } from 'react-router-dom';
-import router from './router';
-import { invoke } from '@tauri-apps/api/core';
+import { showWindow } from '@/invoke/system';
 import {
 	SetupWizard,
 	shouldShowSetupWizard,
@@ -11,6 +9,7 @@ import Titlebar from './components/system/top-bar';
 import { useWindowResize } from '@/hooks/use-window-resize';
 import { useOverlayScrollbars } from '@/hooks/use-overlay-scrollbars';
 
+import { MainLayout } from './layout';
 function App() {
 	const [showSetupWizard, setShowSetupWizard] = useState(() =>
 		shouldShowSetupWizard()
@@ -29,7 +28,7 @@ function App() {
 
 		const initApp = async () => {
 			try {
-				await invoke('show_window');
+				await showWindow();
 			} catch (error) {
 				console.error('Window show failed:', error);
 			}
@@ -52,7 +51,7 @@ function App() {
 				<SetupWizard onComplete={() => setShowSetupWizard(false)} />
 			)}
 			<div className="min-h-0 flex-1">
-				<RouterProvider router={router} />
+				<MainLayout />
 			</div>
 		</div>
 	);

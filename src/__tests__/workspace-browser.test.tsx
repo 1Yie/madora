@@ -1,5 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkspaceBrowser } from '@/components/explorer/workspace/workspace-browser';
@@ -26,6 +32,16 @@ const rootNode: ExplorerNode = {
 			children: [],
 		},
 		{
+			name: 'notes.md',
+			path: '/workspace/notes.md',
+			relativePath: 'notes.md',
+			kind: 'file',
+			fileKind: 'markdown',
+			hasChildren: false,
+			loaded: true,
+			children: [],
+		},
+		{
 			name: 'docs',
 			path: '/workspace/docs',
 			relativePath: 'docs',
@@ -42,8 +58,9 @@ const pastedRootNode: ExplorerNode = {
 	...rootNode,
 	children: [
 		rootNode.children[0],
+		rootNode.children[1],
 		{
-			...rootNode.children[1],
+			...rootNode.children[2],
 			children: [
 				{
 					name: 'readme.md',
@@ -83,6 +100,26 @@ vi.mock('@/components/system/ai-settings-provider', () => ({
 
 vi.mock('@/components/explorer/file/file-preview', () => ({
 	FilePreview: () => null,
+}));
+
+vi.mock('@/components/explorer/workspace/tab-bar', () => ({
+	TabBar: (props: {
+		tabs: Array<{ id: string; node: { path: string } }>;
+		activeTabId: string | null;
+		tabBarMode: 'scroll' | 'wrap';
+	}) => {
+		const activePath =
+			props.tabs.find((tab) => tab.id === props.activeTabId)?.node.path ??
+			'none';
+
+		return (
+			<div>
+				<div>{`tabs:${props.tabs.map((tab) => tab.node.path).join('|')}`}</div>
+				<div>{`active:${activePath}`}</div>
+				<div>{`mode:${props.tabBarMode}`}</div>
+			</div>
+		);
+	},
 }));
 
 vi.mock('@/components/ui/toast', () => ({
@@ -151,6 +188,7 @@ describe('WorkspaceBrowser', () => {
 	});
 
 	afterEach(() => {
+		cleanup();
 		vi.clearAllMocks();
 		window.localStorage.clear();
 	});
@@ -176,5 +214,58 @@ describe('WorkspaceBrowser', () => {
 				sourcePath: '/workspace/readme.md',
 			})
 		);
+	});
+
+	it('restores the last opened file into the tab bar on mount', async () => {
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(
+				screen.getAllByText('tabs:/workspace/readme.md').length
+			).toBeGreaterThan(0);
+			expect(
+				screen.getAllByText('active:/workspace/readme.md').length
+			).toBeGreaterThan(0);
+			expect(window.localStorage.getItem('madora-open-tab-paths')).toBe(
+				JSON.stringify(['/workspace/readme.md'])
+			);
+		});
+	});
+
+	it('restores multiple persisted tabs without clearing storage on boot', async () => {
+		window.localStorage.setItem(
+			'madora-open-tab-paths',
+			JSON.stringify(['/workspace/readme.md', '/workspace/notes.md'])
+		);
+
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(
+				screen.getAllByText('tabs:/workspace/readme.md|/workspace/notes.md')
+					.length
+			).toBeGreaterThan(0);
+			expect(
+				screen.getAllByText('active:/workspace/readme.md').length
+			).toBeGreaterThan(0);
+			expect(window.localStorage.getItem('madora-open-tab-paths')).toBe(
+				JSON.stringify(['/workspace/readme.md', '/workspace/notes.md'])
+			);
+		});
+	});
+
+	it('updates tab bar mode immediately when the setting changes', async () => {
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('mode:scroll').length).toBeGreaterThan(0);
+		});
+
+		window.localStorage.setItem('madora-tab-bar-mode', 'wrap');
+		window.dispatchEvent(new Event('storage'));
+
+		await waitFor(() => {
+			expect(screen.getAllByText('mode:wrap').length).toBeGreaterThan(0);
+		});
 	});
 });

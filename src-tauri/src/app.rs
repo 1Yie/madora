@@ -62,6 +62,7 @@ pub fn run() {
 		.manage(AiCompletionService::new())
 		.invoke_handler(tauri::generate_handler![
 			utility::greet,
+			utility::path_exists,
 			crate::commands::theme::get_system_theme,
 			explorer::pick_workspace_folder,
 			explorer::scan_workspace_folder,

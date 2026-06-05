@@ -1,4 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
+import { writeWorkspaceFile } from '@/invoke/explorer';
+import { gitStageFile } from '@/invoke/git';
 import { Check, ChevronsLeftRight } from 'lucide-react';
 import { useState } from 'react';
 
@@ -102,8 +103,8 @@ export function ConflictEditor({
 		const final = resolved.map((r) => r ?? '').join('');
 		setResolving(true);
 		try {
-			await invoke('write_workspace_file', { content: final, path: filePath });
-			await invoke('git_stage_file', { path: filePath, rootPath });
+			await writeWorkspaceFile({ content: final, path: filePath });
+			await gitStageFile({ path: filePath, rootPath });
 			// 清掉 MarkdownWorkspace 可能缓存的旧草稿
 			window.localStorage.removeItem(`madora-markdown-draft:${filePath}`);
 			window.dispatchEvent(

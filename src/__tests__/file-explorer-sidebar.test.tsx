@@ -1,12 +1,47 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
+
+vi.mock('@tanstack/react-virtual', () => ({
+	useVirtualizer: ({
+		count,
+		estimateSize,
+		getItemKey,
+	}: {
+		count: number;
+		estimateSize: () => number;
+		getItemKey?: (index: number) => string | number;
+	}) => ({
+		getTotalSize: () => count * estimateSize(),
+		getVirtualItems: () =>
+			Array.from({ length: count }, (_, index) => ({
+				index,
+				key: getItemKey?.(index) ?? index,
+				start: index * estimateSize(),
+				size: estimateSize(),
+			})),
+		measureElement: vi.fn(),
+		scrollToIndex: vi.fn(),
+	}),
+}));
 
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import type { ExplorerNode } from '@/components/explorer/types';
 import type { GitStatus } from '@/components/explorer/git/git-types';
+import { pathExists } from '@/invoke/system';
+
+vi.mock('@/invoke/system', () => ({
+	pathExists: vi.fn(),
+}));
 
 afterEach(() => {
 	cleanup();
+	window.localStorage.clear();
 	vi.clearAllMocks();
 });
 
@@ -63,37 +98,41 @@ const emptyStatus: GitStatus = {
 
 type SidebarProps = Partial<React.ComponentProps<typeof FileExplorerSidebar>>;
 
+function createSidebarProps(
+	props: SidebarProps = {}
+): React.ComponentProps<typeof FileExplorerSidebar> {
+	return {
+		root: rootNode,
+		selectedPath: null,
+		busy: false,
+		createBusy: false,
+		gitBusy: false,
+		gitStatus: emptyStatus,
+		operationBusy: null,
+		clipboard: null,
+		loadingPaths: emptyLoadingPaths,
+		onCopyNode: vi.fn(),
+		onCreateMarkdown: vi.fn(),
+		onCreateDirectory: vi.fn(),
+		onCutNode: vi.fn(),
+		onDeleteNode: vi.fn(),
+		onRestoreDeletedNode: vi.fn(),
+		onOpenFolder: vi.fn(),
+		onPasteNode: vi.fn(),
+		onRefresh: vi.fn(),
+		onGitRefresh: vi.fn(),
+		onGitRefreshWorkspace: vi.fn(),
+		onGitStatusChange: vi.fn(),
+		onRenameNode: vi.fn(),
+		onExpandDirectory: vi.fn(),
+		onSelectNode: vi.fn(),
+		onClearClipboard: vi.fn(),
+		...props,
+	};
+}
+
 function renderSidebar(props: SidebarProps = {}) {
-	return render(
-		<FileExplorerSidebar
-			root={rootNode}
-			selectedPath={null}
-			busy={false}
-			createBusy={false}
-			gitBusy={false}
-			gitStatus={emptyStatus}
-			operationBusy={null}
-			clipboard={null}
-			loadingPaths={emptyLoadingPaths}
-			onCopyNode={vi.fn()}
-			onCreateMarkdown={vi.fn()}
-			onCreateDirectory={vi.fn()}
-			onCutNode={vi.fn()}
-			onDeleteNode={vi.fn()}
-			onRestoreDeletedNode={vi.fn()}
-			onOpenFolder={vi.fn()}
-			onPasteNode={vi.fn()}
-			onRefresh={vi.fn()}
-			onGitRefresh={vi.fn()}
-			onGitRefreshWorkspace={vi.fn()}
-			onGitStatusChange={vi.fn()}
-			onRenameNode={vi.fn()}
-			onExpandDirectory={vi.fn()}
-			onSelectNode={vi.fn()}
-			onClearClipboard={vi.fn()}
-			{...props}
-		/>
-	);
+	return render(<FileExplorerSidebar {...createSidebarProps(props)} />);
 }
 
 describe('FileExplorerSidebar', () => {
@@ -148,6 +187,134 @@ describe('FileExplorerSidebar', () => {
 		);
 		expect(screen.queryAllByText('readme.md')).toHaveLength(0);
 		expect(screen.queryAllByText('notes.txt')).toHaveLength(0);
+	});
+
+	it('resets a reused directory row chevron when items above it change', () => {
+		const initialRoot: ExplorerNode = {
+			...rootNode,
+			children: [
+				{
+					name: 'alpha',
+					path: '/workspace/alpha',
+					relativePath: 'alpha',
+					kind: 'directory',
+					fileKind: null,
+					hasChildren: true,
+					loaded: true,
+					children: [
+						{
+							name: 'child.md',
+							path: '/workspace/alpha/child.md',
+							relativePath: 'alpha/child.md',
+							kind: 'file',
+							fileKind: 'markdown',
+							hasChildren: false,
+							loaded: true,
+							children: [],
+						},
+					],
+				},
+				{
+					name: 'beta',
+					path: '/workspace/beta',
+					relativePath: 'beta',
+					kind: 'directory',
+					fileKind: null,
+					hasChildren: false,
+					loaded: true,
+					children: [],
+				},
+			],
+		};
+
+		const nextRoot: ExplorerNode = {
+			...rootNode,
+			children: [
+				{
+					name: 'gamma',
+					path: '/workspace/gamma',
+					relativePath: 'gamma',
+					kind: 'directory',
+					fileKind: null,
+					hasChildren: false,
+					loaded: true,
+					children: [],
+				},
+				{
+					name: 'beta',
+					path: '/workspace/beta',
+					relativePath: 'beta',
+					kind: 'directory',
+					fileKind: null,
+					hasChildren: false,
+					loaded: true,
+					children: [],
+				},
+			],
+		};
+
+		const view = renderSidebar({ root: initialRoot });
+
+		fireEvent.click(screen.getByLabelText('展开 alpha'));
+
+		const expandedAlphaToggle = screen.getByLabelText('收起 alpha');
+		expect(expandedAlphaToggle.querySelector('svg')).toHaveStyle({
+			transform: 'rotate(90deg)',
+		});
+
+		view.rerender(
+			<FileExplorerSidebar {...createSidebarProps({ root: nextRoot })} />
+		);
+
+		const gammaToggle = screen.getByLabelText('展开 gamma');
+		expect(gammaToggle.querySelector('svg')).toHaveStyle({
+			transform: 'rotate(0deg)',
+		});
+	});
+
+	it('shows bookmarks only on branches where the file exists', async () => {
+		const bookmarkedPath = '/workspace/missing.md';
+		window.localStorage.setItem(
+			'madora-bookmarks',
+			JSON.stringify([bookmarkedPath])
+		);
+
+		let bookmarkExists = true;
+		vi.mocked(pathExists).mockImplementation(async () => bookmarkExists);
+
+		const view = renderSidebar({
+			gitStatus: { ...emptyStatus, branch: 'branch-a' },
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText('missing.md')).toBeInTheDocument();
+		});
+
+		bookmarkExists = false;
+		view.rerender(
+			<FileExplorerSidebar
+				{...createSidebarProps({
+					gitStatus: { ...emptyStatus, branch: 'branch-b' },
+				})}
+			/>
+		);
+
+		await waitFor(() => {
+			expect(screen.queryByText('missing.md')).not.toBeInTheDocument();
+		});
+
+		bookmarkExists = true;
+		view.rerender(
+			<FileExplorerSidebar
+				{...createSidebarProps({
+					gitStatus: { ...emptyStatus, branch: 'branch-a' },
+				})}
+			/>
+		);
+
+		await waitFor(() => {
+			expect(screen.getByText('missing.md')).toBeInTheDocument();
+		});
 	});
 
 	it('hides paste action when clipboard is empty', async () => {

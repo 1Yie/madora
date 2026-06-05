@@ -28,7 +28,7 @@ import {
 	useLayoutEffect,
 	useState,
 } from 'react';
-
+import { pathExists } from '@/invoke/system';
 import { Button } from '@/components/ui/button';
 import {
 	ContextMenuPopup,
@@ -136,6 +136,11 @@ type ExplorerExpansionState = {
 	rootPath: string | null;
 	expandedPaths: Set<string>;
 	collapsedPaths: Set<string>;
+};
+
+type BookmarkVisibilityState = {
+	scopeKey: string;
+	entries: Map<string, boolean>;
 };
 
 type GitFileEntry = NonNullable<GitStatus['files']>[number];
@@ -892,6 +897,14 @@ type FlatItem =
 	| { type: 'loading'; depth: number }
 	| { type: 'empty'; depth: number };
 
+function getFlatItemKey(item: FlatItem, index: number): string {
+	if (item.type === 'node') {
+		return item.node.path;
+	}
+
+	return `${item.type}-${item.depth}-${index}`;
+}
+
 function flattenTree(
 	node: ExplorerNode,
 	expandedPaths: Set<string>,
@@ -969,14 +982,15 @@ function FileTreeNode({
 	const isSelected = isActuallySelected || contextMenuOpen;
 	const isExpanded = isDirectory && expandedPaths.has(node.path);
 
-	// Set initial rotation on mount (no transition)
+	// Keep the chevron in sync even when a virtualized row gets reused for
+	// a different directory node.
 	useLayoutEffect(() => {
 		if (chevronRef.current) {
 			chevronRef.current.style.transform = isExpanded
 				? 'rotate(90deg)'
 				: 'rotate(0deg)';
 		}
-	}, []);
+	}, [isExpanded, node.path]);
 
 	// Animate rotation only on user click
 	useEffect(() => {
@@ -1203,6 +1217,7 @@ export function FileExplorerSidebar({
 			return [];
 		}
 	});
+
 	const [bookmarksExpanded, setBookmarksExpanded] = useState(true);
 	const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(
 		null
@@ -1213,6 +1228,56 @@ export function FileExplorerSidebar({
 		() => (root ? mergeDeletedGitNodes(root, gitStatusMap) : null),
 		[gitStatusMap, root]
 	);
+	const bookmarkVisibilityScopeKey = `${root?.path ?? ''}:${gitStatus?.branch ?? ''}`;
+
+	// Resolve bookmark visibility against the current branch/worktree only.
+	const [bookmarkVisibility, setBookmarkVisibility] =
+		useState<BookmarkVisibilityState>(() => ({
+			scopeKey: '',
+			entries: new Map(),
+		}));
+	useEffect(() => {
+		if (!root?.path || bookmarkPaths.length === 0) {
+			setBookmarkVisibility({
+				scopeKey: bookmarkVisibilityScopeKey,
+				entries: new Map(),
+			});
+			return;
+		}
+
+		let cancelled = false;
+		(async () => {
+			const entries = await Promise.all(
+				bookmarkPaths.map(
+					async (path) => [path, await pathExists(root.path, path)] as const
+				)
+			);
+
+			if (!cancelled) {
+				setBookmarkVisibility({
+					scopeKey: bookmarkVisibilityScopeKey,
+					entries: new Map(entries),
+				});
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [bookmarkPaths, bookmarkVisibilityScopeKey, mergedRoot, root?.path]);
+
+	// Bookmarks whose file exists in the current branch (in tree or on disk)
+	const visibleBookmarks = useMemo(
+		() =>
+			bookmarkPaths.filter((p) => {
+				if (mergedRoot && findNodeByPath(mergedRoot, p)) return true;
+				return (
+					bookmarkVisibility.scopeKey === bookmarkVisibilityScopeKey &&
+					bookmarkVisibility.entries.get(p) === true
+				);
+			}),
+		[bookmarkPaths, bookmarkVisibility, bookmarkVisibilityScopeKey, mergedRoot]
+	);
+
 	const expansionRootPath = mergedRoot?.path ?? root?.path ?? null;
 
 	const resolvedExpandedPaths = useMemo(() => {
@@ -1304,6 +1369,10 @@ export function FileExplorerSidebar({
 
 	const virtualizer = useVirtualizer({
 		count: flatItems.length,
+		getItemKey: (index) => {
+			const item = flatItems[index];
+			return item ? getFlatItemKey(item, index) : index;
+		},
 		getScrollElement: () => {
 			const el = viewportRef.current;
 			if (!el) return null;
@@ -1576,7 +1645,6 @@ export function FileExplorerSidebar({
 					text-sidebar-foreground"
 			>
 				<div className="border-b border-sidebar-border">
-					{/* Row 1: path + open folder button */}
 					<div
 						className={`flex items-center justify-between gap-3 px-4
 							${explorerTopSectionHeightClassName}`}
@@ -1609,7 +1677,7 @@ export function FileExplorerSidebar({
 							border-sidebar-border px-2 py-1.5"
 					>
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label="新建文件夹"
 									disabled={
@@ -1631,7 +1699,7 @@ export function FileExplorerSidebar({
 							<TooltipContent side="bottom">新建文件夹</TooltipContent>
 						</Tooltip>
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label="新建文档"
 									disabled={
@@ -1655,7 +1723,7 @@ export function FileExplorerSidebar({
 						<div className="mx-1 h-4 w-px bg-border" />
 
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label="排序切换"
 									onClick={toggleSort}
@@ -1670,7 +1738,7 @@ export function FileExplorerSidebar({
 							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label="全部展开或折叠"
 									onClick={handleExpandCollapseToggle}
@@ -1683,7 +1751,7 @@ export function FileExplorerSidebar({
 							<TooltipContent side="bottom">全部展开或折叠</TooltipContent>
 						</Tooltip>
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label="在树中显示当前文件"
 									disabled={!selectedPath}
@@ -1697,7 +1765,7 @@ export function FileExplorerSidebar({
 							<TooltipContent side="bottom">在树中显示当前文件</TooltipContent>
 						</Tooltip>
 						<Tooltip>
-							<TooltipTrigger>
+							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label={
 										selectedPath && isBookmarked(selectedPath)
@@ -1734,7 +1802,7 @@ export function FileExplorerSidebar({
 						</Tooltip>
 					</div>
 
-					{bookmarkPaths.length > 0 && (
+					{visibleBookmarks.length > 0 && (
 						<div className="border-t border-sidebar-border px-2 py-1">
 							<button
 								className="flex w-full items-center gap-1.5 rounded px-1 py-1
@@ -1749,12 +1817,14 @@ export function FileExplorerSidebar({
 										bookmarksExpanded ? 'rotate-90' : ''
 									}`}
 								/>
-								<span className="ml-auto text-xs">{bookmarkPaths.length}</span>
+								<span className="ml-auto text-xs">
+									{visibleBookmarks.length}
+								</span>
 							</button>
 
 							{bookmarksExpanded && (
 								<div className="mt-0.5 space-y-0.5">
-									{bookmarkPaths.map((path) => {
+									{visibleBookmarks.map((path) => {
 										const name = getPathName(path);
 										const isActive = selectedPath === path;
 
@@ -1801,8 +1871,8 @@ export function FileExplorerSidebar({
 					<ContextMenuTrigger className="min-h-0 flex flex-1">
 						<div
 							ref={viewportRef}
-							className="size-full min-h-0 px-2"
-							style={{ overflow: 'auto' }}
+							className="overflow-auto size-full min-h-0 px-2"
+							data-os-scroll
 							data-native-dialog-scroll-lock
 						>
 							{mergedRoot ? (

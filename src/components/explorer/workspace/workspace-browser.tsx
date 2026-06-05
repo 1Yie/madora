@@ -1,9 +1,29 @@
-import { invoke } from '@tauri-apps/api/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+	createMarkdownFile,
+	createWorkspaceDirectory,
+	copyWorkspaceNode,
+	deleteWorkspaceNode,
+	moveWorkspaceNode,
+	pickWorkspaceFolder,
+	readWorkspaceDirectory,
+	readWorkspaceFile,
+	renameWorkspaceNode,
+	scanWorkspaceFolder,
+} from '@/invoke/explorer';
+import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
+import {
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import { FilePreview } from '@/components/explorer/file/file-preview';
+import { TabBar } from '@/components/explorer/workspace/tab-bar';
+import type { TabEntry } from '@/components/explorer/workspace/tab-bar';
 import { showErrorToast } from '@/components/ui/toast';
 
 import {
@@ -23,7 +43,9 @@ import type { GitStatus } from '../git/git-types';
 
 const WORKSPACE_ROOT_STORAGE_KEY = 'madora-workspace-root-path';
 const LAST_OPEN_FILE_STORAGE_KEY = 'madora-last-open-file-path';
+const OPEN_TABS_STORAGE_KEY = 'madora-open-tab-paths';
 const SIDEBAR_WIDTH_STORAGE_KEY = 'madora-workspace-sidebar-width';
+const TAB_BAR_MODE_STORAGE_KEY = 'madora-tab-bar-mode';
 const MARKDOWN_DRAFT_KEY_PREFIX = 'madora-markdown-draft:';
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
@@ -33,11 +55,8 @@ type ClipboardMode = 'copy' | 'cut';
 type WorkspaceOperation = 'create' | 'rename' | 'delete' | 'move' | null;
 
 function removeMarkdownDraftsFor(path: string): void {
-	window.localStorage.removeItem(`${MARKDOWN_DRAFT_KEY_PREFIX}${path}`);
-
 	for (let index = 0; index < window.localStorage.length; index += 1) {
 		const key = window.localStorage.key(index);
-
 		if (key?.startsWith(`${MARKDOWN_DRAFT_KEY_PREFIX}${path}/`)) {
 			window.localStorage.removeItem(key);
 		}
@@ -46,7 +65,6 @@ function removeMarkdownDraftsFor(path: string): void {
 
 function clearAllMarkdownDrafts(): void {
 	const keysToRemove: string[] = [];
-
 	for (let index = 0; index < window.localStorage.length; index += 1) {
 		const key = window.localStorage.key(index);
 
@@ -62,6 +80,74 @@ function clearAllMarkdownDrafts(): void {
 
 function clampSidebarWidth(width: number): number {
 	return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+}
+
+function subscribeToTabBarMode(callback: () => void): () => void {
+	if (typeof window === 'undefined') {
+		return () => {};
+	}
+
+	const handleChange = () => callback();
+	window.addEventListener('storage', handleChange);
+
+	return () => {
+		window.removeEventListener('storage', handleChange);
+	};
+}
+
+function getStoredTabBarMode(): 'scroll' | 'wrap' {
+	if (typeof window === 'undefined') {
+		return 'scroll';
+	}
+
+	return window.localStorage.getItem(TAB_BAR_MODE_STORAGE_KEY) === 'wrap'
+		? 'wrap'
+		: 'scroll';
+}
+
+function getServerTabBarModeSnapshot(): 'scroll' | 'wrap' {
+	return 'scroll';
+}
+
+function getStoredOpenTabPaths(rootPath: string | null = null): string[] {
+	try {
+		const saved = window.localStorage.getItem(OPEN_TABS_STORAGE_KEY);
+
+		if (!saved) {
+			return [];
+		}
+
+		const parsed = JSON.parse(saved);
+
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+
+		const seen = new Set<string>();
+		const paths: string[] = [];
+
+		for (const value of parsed) {
+			if (typeof value !== 'string') {
+				continue;
+			}
+
+			const normalizedPath = normalizeExplorerPath(value);
+
+			if (
+				seen.has(normalizedPath) ||
+				(rootPath !== null && !isSameOrDescendantPath(normalizedPath, rootPath))
+			) {
+				continue;
+			}
+
+			seen.add(normalizedPath);
+			paths.push(value);
+		}
+
+		return paths;
+	} catch {
+		return [];
+	}
 }
 
 function getInitialSidebarWidth(): number {
@@ -184,6 +270,11 @@ function throwWithCause(message: string, cause: unknown): never {
 }
 
 export function WorkspaceBrowser() {
+	const tabBarMode = useSyncExternalStore(
+		subscribeToTabBarMode,
+		getStoredTabBarMode,
+		getServerTabBarModeSnapshot
+	);
 	const { showHiddenFiles } = useAiSettings();
 	const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
 	const [root, setRoot] = useState<ExplorerNode | null>(null);
@@ -202,23 +293,27 @@ export function WorkspaceBrowser() {
 		mode: ClipboardMode;
 	} | null>(null);
 	const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
+	const [tabs, setTabs] = useState<TabEntry[]>([]);
+	const [activeTabId, setActiveTabId] = useState<string | null>(null);
+	const tabIdCounter = useRef(0);
 	const [previewLoading, setPreviewLoading] = useState(false);
 	const previewRequestId = useRef(0);
 	const dragStartWidthRef = useRef(DEFAULT_SIDEBAR_WIDTH);
 	const selectedFileRef = useRef<ExplorerNode | null>(null);
+	const tabsPersistenceReadyRef = useRef(false);
 
-	const clearPreviewState = () => {
+	const clearPreviewState = useCallback(() => {
 		previewRequestId.current += 1;
 		setPreview(null);
 		setPreviewError(null);
 		setPreviewLoading(false);
 		setSelectedFile(null);
-	};
+	}, []);
 
-	const clearSelectionAndPreview = () => {
+	const clearSelectionAndPreview = useCallback(() => {
 		setSelectedNodePath(null);
 		clearPreviewState();
-	};
+	}, [clearPreviewState]);
 
 	useEffect(() => {
 		window.localStorage.setItem(
@@ -237,6 +332,22 @@ export function WorkspaceBrowser() {
 			);
 		}
 	}, [selectedFile]);
+
+	useEffect(() => {
+		if (!tabsPersistenceReadyRef.current) {
+			return;
+		}
+
+		if (tabs.length === 0) {
+			window.localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
+			return;
+		}
+
+		window.localStorage.setItem(
+			OPEN_TABS_STORAGE_KEY,
+			JSON.stringify(tabs.map((tab) => tab.node.path))
+		);
+	}, [tabs]);
 
 	useEffect(() => {
 		if (!sidebarError) {
@@ -296,81 +407,56 @@ export function WorkspaceBrowser() {
 		window.addEventListener('pointercancel', handlePointerUp);
 	};
 
-	const syncSelectionWithRoot = async (
-		nextRoot: ExplorerNode,
-		preferredSelectedPath: string | null
-	) => {
-		const { node: nextSelectedNode, root: resolvedRoot } =
-			await resolveNodeFromPath(nextRoot, preferredSelectedPath);
-
-		if (resolvedRoot !== nextRoot) {
-			setRoot(resolvedRoot);
-		}
-
-		if (!nextSelectedNode) {
-			clearSelectionAndPreview();
-			return;
-		}
-
-		if (nextSelectedNode.kind === 'file') {
-			await loadPreview(nextSelectedNode);
-			return;
-		}
-
-		setSelectedNodePath(nextSelectedNode.path);
-		clearPreviewState();
-	};
-
-	const resolveNodeFromPath = async (
-		nextRoot: ExplorerNode,
-		targetPath: string | null
-	): Promise<{ node: ExplorerNode | null; root: ExplorerNode }> => {
-		if (!targetPath || !isSameOrDescendantPath(targetPath, nextRoot.path)) {
-			return {
-				node: null,
-				root: nextRoot,
-			};
-		}
-
-		let resolvedRoot = nextRoot;
-
-		for (const directoryPath of getAncestorDirectoryPaths(
-			nextRoot.path,
-			targetPath
-		)) {
-			const directoryNode = findNodeByPath(resolvedRoot, directoryPath);
-
-			if (
-				!directoryNode ||
-				directoryNode.kind !== 'directory' ||
-				directoryNode.loaded
-			) {
-				continue;
+	const resolveNodeFromPath = useCallback(
+		async (
+			nextRoot: ExplorerNode,
+			targetPath: string | null
+		): Promise<{ node: ExplorerNode | null; root: ExplorerNode }> => {
+			if (!targetPath || !isSameOrDescendantPath(targetPath, nextRoot.path)) {
+				return {
+					node: null,
+					root: nextRoot,
+				};
 			}
 
-			const children = await invoke<ExplorerNode[]>(
-				'read_workspace_directory',
-				{
+			let resolvedRoot = nextRoot;
+
+			for (const directoryPath of getAncestorDirectoryPaths(
+				nextRoot.path,
+				targetPath
+			)) {
+				const directoryNode = findNodeByPath(resolvedRoot, directoryPath);
+
+				if (
+					!directoryNode ||
+					directoryNode.kind !== 'directory' ||
+					directoryNode.loaded
+				) {
+					continue;
+				}
+
+				const children = await readWorkspaceDirectory({
 					directoryPath,
 					rootPath: nextRoot.path,
 					showHiddenFiles,
-				}
-			);
+				});
 
-			resolvedRoot = replaceDirectoryChildren(
-				resolvedRoot,
-				directoryPath,
-				children
-			);
-		}
+				resolvedRoot = replaceDirectoryChildren(
+					resolvedRoot,
+					directoryPath,
+					children
+				);
+			}
 
-		return {
-			node: findNodeByPath(resolvedRoot, targetPath),
-			root: resolvedRoot,
-		};
-	};
+			return {
+				node: findNodeByPath(resolvedRoot, targetPath),
+				root: resolvedRoot,
+			};
+		},
+		[showHiddenFiles]
+	);
 
-	const loadPreview = async (file: ExplorerNode) => {
+	const loadPreview = useCallback(async (file: ExplorerNode) => {
 		const requestId = previewRequestId.current + 1;
 		previewRequestId.current = requestId;
 		setSelectedNodePath(file.path);
@@ -380,7 +466,7 @@ export function WorkspaceBrowser() {
 		setPreviewLoading(true);
 
 		try {
-			const nextPreview = await invoke<FilePreviewData>('read_workspace_file', {
+			const nextPreview = await readWorkspaceFile({
 				path: file.path,
 			});
 
@@ -400,7 +486,105 @@ export function WorkspaceBrowser() {
 				setPreviewLoading(false);
 			}
 		}
-	};
+	}, []);
+
+	const syncSelectionWithRoot = useCallback(
+		async (nextRoot: ExplorerNode, preferredSelectedPath: string | null) => {
+			const { node: nextSelectedNode, root: resolvedRoot } =
+				await resolveNodeFromPath(nextRoot, preferredSelectedPath);
+
+			if (resolvedRoot !== nextRoot) {
+				setRoot(resolvedRoot);
+			}
+
+			if (!nextSelectedNode) {
+				clearSelectionAndPreview();
+				return;
+			}
+
+			if (nextSelectedNode.kind === 'file') {
+				await loadPreview(nextSelectedNode);
+				return;
+			}
+
+			setSelectedNodePath(nextSelectedNode.path);
+			clearPreviewState();
+		},
+		[
+			clearPreviewState,
+			clearSelectionAndPreview,
+			loadPreview,
+			resolveNodeFromPath,
+		]
+	);
+
+	const createTabEntry = useCallback((node: ExplorerNode): TabEntry => {
+		const tabId = `tab-${++tabIdCounter.current}`;
+
+		return {
+			id: tabId,
+			node,
+			preview: null,
+			previewLoading: false,
+			previewError: null,
+			previewRequestId: 0,
+		};
+	}, []);
+
+	const restoreTabs = useCallback(
+		async (nextRoot: ExplorerNode, fallbackFile: ExplorerNode | null) => {
+			let resolvedRoot = nextRoot;
+			const restoredTabs: TabEntry[] = [];
+			const storedTabPaths = getStoredOpenTabPaths(nextRoot.path);
+			const tabPaths =
+				storedTabPaths.length > 0
+					? storedTabPaths
+					: fallbackFile
+						? [fallbackFile.path]
+						: [];
+
+			for (const path of tabPaths) {
+				const { node, root: nextResolvedRoot } = await resolveNodeFromPath(
+					resolvedRoot,
+					path
+				);
+				resolvedRoot = nextResolvedRoot;
+
+				if (node?.kind !== 'file') {
+					continue;
+				}
+
+				const normalizedPath = normalizeExplorerPath(node.path);
+
+				if (
+					restoredTabs.some(
+						(tab) => normalizeExplorerPath(tab.node.path) === normalizedPath
+					)
+				) {
+					continue;
+				}
+
+				restoredTabs.push(createTabEntry(node));
+			}
+
+			const preferredPath = fallbackFile
+				? normalizeExplorerPath(fallbackFile.path)
+				: null;
+			const activeTab = preferredPath
+				? restoredTabs.find(
+						(tab) => normalizeExplorerPath(tab.node.path) === preferredPath
+					)
+				: (restoredTabs[0] ?? null);
+
+			return {
+				activeNode: activeTab?.node ?? null,
+				activeTabId: activeTab?.id ?? null,
+				root: resolvedRoot,
+				tabs: restoredTabs,
+			};
+		},
+		[createTabEntry, resolveNodeFromPath]
+	);
 
 	const selectNode = async (node: ExplorerNode) => {
 		if (selectedNodePath === node.path) {
@@ -411,6 +595,20 @@ export function WorkspaceBrowser() {
 			setSelectedNodePath(node.path);
 			clearPreviewState();
 			return;
+		}
+
+		// Add or activate tab for this file
+		const normalizedPath = normalizeExplorerPath(node.path);
+		const existingTab = tabs.find(
+			(t) => normalizeExplorerPath(t.node.path) === normalizedPath
+		);
+
+		if (existingTab) {
+			setActiveTabId(existingTab.id);
+		} else {
+			const newTab = createTabEntry(node);
+			setTabs((prev) => [...prev, newTab]);
+			setActiveTabId(newTab.id);
 		}
 
 		if (node.isMissing) {
@@ -425,6 +623,49 @@ export function WorkspaceBrowser() {
 		await loadPreview(node);
 	};
 
+	const handleSelectTab = (tabId: string) => {
+		const tab = tabs.find((t) => t.id === tabId);
+		if (tab && tab.id !== activeTabId) {
+			void selectNode(tab.node);
+		}
+	};
+
+	const handleCloseTab = (tabId: string) => {
+		const wasActive = activeTabId === tabId;
+		const newTabs = tabs.filter((t) => t.id !== tabId);
+		setTabs(newTabs);
+
+		if (wasActive) {
+			if (newTabs.length > 0) {
+				const idx = tabs.findIndex((t) => t.id === tabId);
+				const next = newTabs[Math.min(idx, newTabs.length - 1)];
+				setActiveTabId(next.id);
+				void selectNode(next.node);
+			} else {
+				setActiveTabId(null);
+				clearSelectionAndPreview();
+			}
+		}
+	};
+
+	const handleCloseTabs = (tabIds: string[]) => {
+		const wasActive = activeTabId ? tabIds.includes(activeTabId) : false;
+		const newTabs = tabs.filter((t) => !tabIds.includes(t.id));
+		setTabs(newTabs);
+
+		if (wasActive) {
+			if (newTabs.length > 0) {
+				const idx = tabs.findIndex((t) => t.id === activeTabId);
+				const next = newTabs[Math.min(idx, newTabs.length - 1)];
+				setActiveTabId(next.id);
+				void selectNode(next.node);
+			} else {
+				setActiveTabId(null);
+				clearSelectionAndPreview();
+			}
+		}
+	};
+
 	const restoreDeletedNode = async (targetPath: string) => {
 		if (!root) {
 			return;
@@ -434,11 +675,11 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			const nextStatus = await invoke<GitStatus>('git_restore_file', {
+			const nextStatus = await gitRestoreFile({
 				path: targetPath,
 				rootPath: root.path,
 			});
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 				showHiddenFiles,
 			});
@@ -500,14 +741,11 @@ export function WorkspaceBrowser() {
 				continue;
 			}
 
-			const children = await invoke<ExplorerNode[]>(
-				'read_workspace_directory',
-				{
-					directoryPath,
-					rootPath,
-					showHiddenFiles,
-				}
-			);
+			const children = await readWorkspaceDirectory({
+				directoryPath,
+				rootPath,
+				showHiddenFiles,
+			});
 
 			nextRoot = replaceDirectoryChildren(nextRoot, directoryPath, children);
 		}
@@ -520,12 +758,9 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			const nextRoot = await invoke<ExplorerNode | null>(
-				'pick_workspace_folder',
-				{
-					showHiddenFiles,
-				}
-			);
+			const nextRoot = await pickWorkspaceFolder({
+				showHiddenFiles,
+			});
 
 			if (!nextRoot) {
 				return;
@@ -551,9 +786,20 @@ export function WorkspaceBrowser() {
 				nextSelectedFile?.kind === 'file'
 					? nextSelectedFile
 					: findFirstFile(resolvedRoot);
+			const {
+				activeNode,
+				activeTabId: restoredActiveTabId,
+				root: rootWithTabs,
+				tabs: restoredTabs,
+			} = await restoreTabs(resolvedRoot, fileToOpen);
 
-			if (fileToOpen) {
-				void loadPreview(fileToOpen);
+			tabsPersistenceReadyRef.current = true;
+			setRoot(rootWithTabs);
+			setTabs(restoredTabs);
+			setActiveTabId(restoredActiveTabId);
+
+			if (activeNode) {
+				void loadPreview(activeNode);
 			} else {
 				queueMicrotask(() => clearSelectionAndPreview());
 			}
@@ -573,7 +819,7 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 				showHiddenFiles,
 			});
@@ -613,7 +859,7 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke<ExplorerNode>('create_markdown_file', {
+			await createMarkdownFile({
 				fileName,
 				rootPath,
 				selectedPath: targetPath,
@@ -622,7 +868,7 @@ export function WorkspaceBrowser() {
 			removeMarkdownDraftsFor(createdPath);
 
 			// Re-scan the whole workspace to ensure the new file appears immediately.
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath,
 			});
 
@@ -659,14 +905,14 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke<ExplorerNode>('create_workspace_directory', {
+			await createWorkspaceDirectory({
 				directoryName,
 				rootPath,
 				selectedPath: destinationDirectory,
 			});
 
 			// Re-scan the whole workspace to ensure the new directory appears immediately.
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath,
 			});
 
@@ -708,7 +954,7 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke('rename_workspace_node', {
+			await renameWorkspaceNode({
 				newName,
 				rootPath: root.path,
 				targetPath,
@@ -717,7 +963,7 @@ export function WorkspaceBrowser() {
 			removeMarkdownDraftsFor(targetPath);
 			removeMarkdownDraftsFor(renamedPath);
 
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 			});
 
@@ -777,7 +1023,7 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke('delete_workspace_node', {
+			await deleteWorkspaceNode({
 				rootPath: root.path,
 				targetPath,
 			});
@@ -860,18 +1106,21 @@ export function WorkspaceBrowser() {
 		setSidebarError(null);
 
 		try {
-			await invoke(
-				clipboard.mode === 'copy'
-					? 'copy_workspace_node'
-					: 'move_workspace_node',
-				{
+			if (clipboard.mode === 'copy') {
+				await copyWorkspaceNode({
 					destinationDirectory,
 					rootPath: root.path,
 					sourcePath: clipboard.item.path,
-				}
-			);
+				});
+			} else {
+				await moveWorkspaceNode({
+					destinationDirectory,
+					rootPath: root.path,
+					sourcePath: clipboard.item.path,
+				});
+			}
 
-			const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 			});
 
@@ -916,14 +1165,11 @@ export function WorkspaceBrowser() {
 		);
 
 		try {
-			const children = await invoke<ExplorerNode[]>(
-				'read_workspace_directory',
-				{
-					rootPath: workspaceRootPath,
-					directoryPath: directory.path,
-					showHiddenFiles,
-				}
-			);
+			const children = await readWorkspaceDirectory({
+				rootPath: workspaceRootPath,
+				directoryPath: directory.path,
+				showHiddenFiles,
+			});
 
 			setRoot((currentRoot) => {
 				if (!currentRoot || currentRoot.path !== workspaceRootPath) {
@@ -962,7 +1208,7 @@ export function WorkspaceBrowser() {
 			setSidebarError(null);
 
 			try {
-				const nextRoot = await invoke<ExplorerNode>('scan_workspace_folder', {
+				const nextRoot = await scanWorkspaceFolder({
 					rootPath: savedRootPath,
 					showHiddenFiles,
 				});
@@ -980,19 +1226,28 @@ export function WorkspaceBrowser() {
 					return;
 				}
 
-				setRoot(resolvedRoot);
-				window.localStorage.setItem(
-					WORKSPACE_ROOT_STORAGE_KEY,
-					resolvedRoot.path
-				);
-
 				const fileToOpen =
 					nextSelectedFile?.kind === 'file'
 						? nextSelectedFile
 						: findFirstFile(resolvedRoot);
+				const {
+					activeNode,
+					activeTabId: restoredActiveTabId,
+					root: rootWithTabs,
+					tabs: restoredTabs,
+				} = await restoreTabs(resolvedRoot, fileToOpen);
 
-				if (fileToOpen) {
-					void loadPreview(fileToOpen);
+				tabsPersistenceReadyRef.current = true;
+				setRoot(rootWithTabs);
+				setTabs(restoredTabs);
+				setActiveTabId(restoredActiveTabId);
+				window.localStorage.setItem(
+					WORKSPACE_ROOT_STORAGE_KEY,
+					rootWithTabs.path
+				);
+
+				if (activeNode) {
+					void loadPreview(activeNode);
 				} else {
 					clearSelectionAndPreview();
 				}
@@ -1002,9 +1257,13 @@ export function WorkspaceBrowser() {
 				}
 
 				window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+				window.localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
 				window.localStorage.removeItem(WORKSPACE_ROOT_STORAGE_KEY);
+				tabsPersistenceReadyRef.current = true;
 				setRoot(null);
 				setClipboard(null);
+				setTabs([]);
+				setActiveTabId(null);
 				clearSelectionAndPreview();
 				setSidebarError(getErrorMessage(error));
 			} finally {
@@ -1019,7 +1278,12 @@ export function WorkspaceBrowser() {
 		return () => {
 			active = false;
 		};
-	}, [showHiddenFiles]);
+	}, [
+		clearSelectionAndPreview,
+		resolveNodeFromPath,
+		restoreTabs,
+		showHiddenFiles,
+	]);
 
 	const refreshGitStatus = useCallback(
 		async (targetRootPath?: string | null) => {
@@ -1033,7 +1297,7 @@ export function WorkspaceBrowser() {
 			setGitBusy(true);
 
 			try {
-				const nextStatus = await invoke<GitStatus>('git_status', {
+				const nextStatus = await fetchGitStatus({
 					rootPath: nextRootPath,
 				});
 				setGitStatus(nextStatus);
@@ -1099,7 +1363,7 @@ export function WorkspaceBrowser() {
 				handleWorkspaceFileSaved as EventListener
 			);
 		};
-	}, [root?.path]);
+	}, [refreshGitStatus, root?.path]);
 
 	useEffect(() => {
 		if (!selectedFile?.isMissing) {
@@ -1127,7 +1391,13 @@ export function WorkspaceBrowser() {
 		queueMicrotask(() => {
 			void syncSelectionWithRoot(root, selectedFile.path);
 		});
-	}, [gitStatus, root, selectedFile]);
+	}, [
+		clearSelectionAndPreview,
+		gitStatus,
+		root,
+		selectedFile,
+		syncSelectionWithRoot,
+	]);
 
 	return (
 		<div className="flex h-full min-h-0 bg-background text-foreground">
@@ -1184,16 +1454,31 @@ export function WorkspaceBrowser() {
 					/>
 				</div>
 			</div>
-			<main className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-				<FilePreview
-					conflictedFilePaths={gitStatus?.conflictedFiles ?? []}
-					loading={previewLoading}
-					onOpenFolder={openFolder}
-					preview={preview}
-					rootPath={root?.path ?? null}
-					selectedFile={selectedFile}
-					workspaceOpen={Boolean(root)}
-				/>
+			<main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+				{tabs.length > 0 && (
+					<TabBar
+						tabs={tabs}
+						activeTabId={activeTabId}
+						onSelectTab={handleSelectTab}
+						onCloseTab={handleCloseTab}
+						onCloseTabs={handleCloseTabs}
+						tabBarMode={tabBarMode}
+					/>
+				)}
+				<div
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					data-no-os
+				>
+					<FilePreview
+						conflictedFilePaths={gitStatus?.conflictedFiles ?? []}
+						loading={previewLoading}
+						onOpenFolder={openFolder}
+						preview={preview}
+						rootPath={root?.path ?? null}
+						selectedFile={selectedFile}
+						workspaceOpen={Boolean(root)}
+					/>
+				</div>
 			</main>
 		</div>
 	);

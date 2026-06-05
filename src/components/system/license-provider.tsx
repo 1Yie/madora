@@ -7,21 +7,15 @@ import {
 	useState,
 	type ReactNode,
 } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { showErrorToast } from '@/components/ui/toast';
-
-export type LicenseState = 'trial' | 'active' | 'expired' | 'revoked';
-
-export interface LicenseStatus {
-	state: LicenseState;
-	trialDaysRemaining: number | null;
-	trialDaysTotal: number;
-	activated: boolean;
-	licenseKey: string | null;
-	email: string | null;
-	activationIndex: number | null;
-	revokedAt: string | null;
-}
+import {
+	activateLicense,
+	deactivateLicense,
+	getLicenseStatus,
+	verifyLicense,
+	type LicenseState,
+	type LicenseStatus,
+} from '@/invoke/license';
 
 interface LicenseContextValue {
 	status: LicenseStatus | null;
@@ -40,7 +34,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
 	const refresh = useCallback(async () => {
 		try {
-			const result = await invoke<LicenseStatus>('verify_license');
+			const result = await verifyLicense();
 			const prev = prevStateRef.current;
 			prevStateRef.current = result.state;
 
@@ -54,7 +48,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 			console.error('Failed to verify license:', error);
 			// Fall back to local status if server is unreachable
 			try {
-				const fallback = await invoke<LicenseStatus>('get_license_status');
+				const fallback = await getLicenseStatus();
 				setStatus(fallback);
 			} catch {
 				// Silently fail — app will show loading state
@@ -73,7 +67,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 	const activate = useCallback(async (key: string) => {
 		setIsLoading(true);
 		try {
-			const result = await invoke<LicenseStatus>('activate_license', {
+			const result = await activateLicense({
 				key,
 			});
 			prevStateRef.current = result.state;
@@ -89,7 +83,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 	const deactivate = useCallback(async () => {
 		setIsLoading(true);
 		try {
-			await invoke('deactivate_license');
+			await deactivateLicense();
 			await refresh();
 		} catch (error) {
 			showErrorToast('停用失败', String(error));

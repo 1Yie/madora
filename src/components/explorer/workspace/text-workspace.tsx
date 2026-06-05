@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
@@ -73,10 +73,7 @@ export function TextWorkspace({
 	const persistValue = useCallback(
 		async (nextValue: string, requestId: number) => {
 			try {
-				await invoke('write_workspace_file', {
-					content: nextValue,
-					path: filePath,
-				});
+				await writeWorkspaceFile({ content: nextValue, path: filePath });
 
 				if (saveRequestIdRef.current !== requestId) {
 					return;

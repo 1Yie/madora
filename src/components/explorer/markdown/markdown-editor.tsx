@@ -16,6 +16,8 @@ import {
 	Clipboard,
 	Scissors,
 	Copy,
+	Eye,
+	EyeOff,
 	Bold,
 	Italic,
 	Strikethrough,
@@ -37,6 +39,7 @@ type MarkdownEditorProps = {
 	mode: 'edit' | 'preview';
 	onChange: (value: string) => void;
 	onSave: () => void;
+	onToggleMode?: () => void;
 	saveMode: SaveMode;
 	saveStatus: SaveStatus;
 	title?: string;
@@ -161,12 +164,12 @@ function FormatToolbar({ onAction }: { onAction: (key: FormatKey) => void }) {
 		</div>
 	);
 }
-
 export function MarkdownEditor({
 	encoding,
 	mode,
 	onChange,
 	onSave,
+	onToggleMode,
 	saveMode,
 	saveStatus,
 	title,
@@ -322,6 +325,7 @@ export function MarkdownEditor({
 					)}
 					<div
 						className="overflow-auto size-full min-h-0 h-full"
+						data-os-scroll
 						data-slot="editor-scroll"
 					>
 						<div className="h-full" ref={editorRef} />
@@ -369,6 +373,21 @@ export function MarkdownEditor({
 					<span>{characterCount} 字符</span>
 					<span>{encoding ?? '-'}</span>
 					<span>{lineEnding}</span>
+					{onToggleMode && (
+						<button
+							onClick={onToggleMode}
+							className="flex size-5 items-center justify-center rounded
+								hover:bg-muted-foreground/20"
+							title={mode === 'edit' ? '切换为预览' : '切换为编辑'}
+							type="button"
+						>
+							{mode === 'edit' ? (
+								<Eye className="size-3.5" />
+							) : (
+								<EyeOff className="size-3.5" />
+							)}
+						</button>
+					)}
 				</div>
 			</div>
 		</div>

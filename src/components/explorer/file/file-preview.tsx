@@ -1,18 +1,8 @@
-import {
-	Eye,
-	EyeOff,
-	FileImage,
-	FileX,
-	FolderOpen,
-	Info,
-	Pencil,
-} from 'lucide-react';
+import { EyeOff, FileImage, FileX, FolderOpen, Info } from 'lucide-react';
 import { useState } from 'react';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CardDescription, CardTitle } from '@/components/ui/card';
 import {
 	Empty,
 	EmptyContent,
@@ -22,12 +12,9 @@ import {
 	EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { cn } from '@/lib/utils';
 
 import { CodeBlock } from '../code-block';
 import { ConflictEditor } from '../git/conflict-editor';
-import { explorerTopSectionHeightClassName } from '../layout';
 import { MarkdownWorkspace } from '../markdown/markdown-workspace';
 import { normalizeExplorerPath } from '../../../lib/path-utils';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
@@ -103,6 +90,7 @@ function renderPreviewBody(
 	preview: FilePreviewData,
 	isConflicted: boolean,
 	markdownMode: EditorMode,
+	onToggleMode: () => void,
 	rootPath: string | null
 ) {
 	if (preview.fileKind === 'image' && preview.imageDataUrl) {
@@ -170,6 +158,7 @@ function renderPreviewBody(
 				content={content}
 				encoding={preview.encoding}
 				filePath={selectedFile.path}
+				onToggleMode={onToggleMode}
 				mode={markdownMode}
 			/>
 		) : (
@@ -200,31 +189,11 @@ function renderPreviewBody(
 	);
 }
 
-function PreviewHeader({
-	preview,
-	selectedFile,
-}: {
-	preview: FilePreviewData | null;
-	selectedFile: ExplorerNode;
-}) {
-	return (
-		<div className="flex min-w-0 items-center gap-3 overflow-hidden">
-			<CardTitle className="truncate text-xl" title={selectedFile.name}>
-				{selectedFile.name}
-			</CardTitle>
-			{/* <Badge variant="outline">
-				{selectedFile.isMissing ? 'deleted' : selectedFile.fileKind}
-			</Badge>
-			{preview && <Badge variant="secondary">{formatSize(preview.size)}</Badge>} */}
-			{preview?.truncated && <Badge variant="warning">已截断预览</Badge>}
-		</div>
-	);
-}
-
 function PreviewState({
 	isConflicted,
 	loading,
 	markdownMode,
+	onToggleMode,
 	preview,
 	rootPath,
 	selectedFile,
@@ -232,6 +201,7 @@ function PreviewState({
 	isConflicted: boolean;
 	loading: boolean;
 	markdownMode: EditorMode;
+	onToggleMode: () => void;
 	preview: FilePreviewData | null;
 	rootPath: string | null;
 	selectedFile: ExplorerNode;
@@ -266,13 +236,30 @@ function PreviewState({
 	}
 
 	if (preview) {
-		return renderPreviewBody(
+		const body = renderPreviewBody(
 			selectedFile,
 			preview,
 			isConflicted,
 			markdownMode,
+			onToggleMode,
 			rootPath
 		);
+		if (preview.truncated) {
+			return (
+				<div className="flex h-full flex-col">
+					<Alert
+						className="rounded-none border-x-0 border-t-0"
+						variant="warning"
+					>
+						<Info className="size-4" />
+						<AlertTitle>预览已截断</AlertTitle>
+						<AlertDescription>文件内容较大，仅显示前部分。</AlertDescription>
+					</Alert>
+					<div className="min-h-0 flex-1">{body}</div>
+				</div>
+			);
+		}
+		return body;
 	}
 
 	return (
@@ -297,13 +284,15 @@ function PreviewState({
 export function FilePreview({
 	conflictedFilePaths,
 	loading,
-	onOpenFolder,
 	preview,
 	rootPath,
 	selectedFile,
 	workspaceOpen,
+	onOpenFolder,
 }: FilePreviewProps) {
 	const [markdownMode, setMarkdownMode] = useState<EditorMode>('edit');
+	const toggleMode = () =>
+		setMarkdownMode((m) => (m === 'edit' ? 'preview' : 'edit'));
 
 	const content = preview?.content ?? '';
 	const hasConflictMarkers = content.includes('<<<<<<<');
@@ -348,46 +337,6 @@ export function FilePreview({
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<div
-				className={cn(
-					'border-b border-border px-4',
-					explorerTopSectionHeightClassName
-				)}
-			>
-				<div className="flex h-full items-center justify-between gap-3">
-					<div className="min-w-0 flex-1">
-						<PreviewHeader preview={preview} selectedFile={selectedFile} />
-						<CardDescription
-							className="truncate font-mono text-xs"
-							title={selectedFile.relativePath || selectedFile.path}
-						>
-							{selectedFile.relativePath || selectedFile.path}
-						</CardDescription>
-					</div>
-
-					{selectedFile.fileKind === 'markdown' && !isConflicted && (
-						<ToggleGroup
-							className="shrink-0 gap-0"
-							onValueChange={(values) => {
-								if (values.length > 0) {
-									setMarkdownMode(values[0] as EditorMode);
-								}
-							}}
-							size="sm"
-							value={[markdownMode]}
-							variant="outline"
-						>
-							<ToggleGroupItem className="gap-1.5 px-3" value="edit">
-								<Pencil className="size-3.5 shrink-0" />
-							</ToggleGroupItem>
-							<ToggleGroupItem className="gap-1.5 px-3" value="preview">
-								<Eye className="size-4 shrink-0" />
-							</ToggleGroupItem>
-						</ToggleGroup>
-					)}
-				</div>
-			</div>
-
 			<div className="min-h-0 flex-1 flex flex-col">
 				<PreviewState
 					isConflicted={isConflicted}
@@ -395,6 +344,7 @@ export function FilePreview({
 					markdownMode={markdownMode}
 					preview={preview}
 					rootPath={rootPath}
+					onToggleMode={toggleMode}
 					selectedFile={selectedFile}
 				/>
 			</div>

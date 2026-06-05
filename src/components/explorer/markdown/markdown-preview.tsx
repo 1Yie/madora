@@ -3,7 +3,7 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl } from '@/invoke/opener';
 
 import { cn } from '@/lib/utils';
 import { HighlightedCodeBlock } from './code-block-highlight';
@@ -64,7 +64,10 @@ const components: ComponentProps<typeof Markdown>['components'] = {
 
 export function MarkdownPreview({ className, content }: MarkdownPreviewProps) {
 	return (
-		<div className={cn('overflow-auto size-full min-h-0 h-full', className)}>
+		<div
+			className={cn('overflow-auto size-full min-h-0 h-full', className)}
+			data-os-scroll
+		>
 			<div className="prose-custom p-6">
 				<Markdown
 					components={components}

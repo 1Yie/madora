@@ -1,4 +1,23 @@
-import { invoke } from '@tauri-apps/api/core';
+import {
+	gitCommit,
+	gitCommitAll,
+	gitCreateBranch,
+	gitFetch,
+	gitInit,
+	gitListBranches,
+	gitLoadCredentials,
+	gitLog as fetchGitLog,
+	gitPickSshPrivateKeyFile,
+	gitPull,
+	gitPush,
+	gitRevertCommit,
+	gitSetRemote,
+	gitStageFile,
+	gitStoreCredentials,
+	gitSwitchBranch,
+	gitUndoLastCommit,
+	gitUnstageFile,
+} from '@/invoke/git';
 import {
 	ArrowDownToLine,
 	ArrowUpFromLine,
@@ -47,7 +66,6 @@ import type {
 	GitCredentials,
 	GitLogEntry,
 	GitStatus,
-	GitSyncResult,
 } from './git-types';
 
 type GitPanelProps = {
@@ -268,14 +286,14 @@ export function GitPanel({
 		}
 		saveTimerRef.current = setTimeout(() => {
 			saveTimerRef.current = null;
-			void invoke('git_store_credentials', { credentials: creds });
+			void gitStoreCredentials({ credentials: creds });
 		}, CREDENTIALS_DEBOUNCE_MS);
 	}, []);
 
 	useEffect(() => {
 		void (async () => {
 			try {
-				const creds = await invoke<GitCredentials>('git_load_credentials');
+				const creds = await gitLoadCredentials();
 				setAuthUsername(creds.authUsername ?? '');
 				setAuthPassword(creds.authPassword ?? '');
 				setSshUsername(creds.sshUsername || 'git');
@@ -378,10 +396,7 @@ export function GitPanel({
 		}
 
 		try {
-			const entries = await invoke<GitLogEntry[]>('git_log', {
-				limit: null,
-				rootPath,
-			});
+			const entries = await fetchGitLog({ limit: null, rootPath });
 			setGitLog(entries);
 		} catch {
 			setGitLog([]);
@@ -398,9 +413,7 @@ export function GitPanel({
 		}
 
 		try {
-			const list = await invoke<GitBranchInfo[]>('git_list_branches', {
-				rootPath,
-			});
+			const list = await gitListBranches({ rootPath });
 			setBranches(list);
 		} catch (error) {
 			showErrorToast(
@@ -416,7 +429,7 @@ export function GitPanel({
 		if (!rootPath) return;
 
 		const nextStatus = await runAction(
-			() => invoke<GitStatus>('git_switch_branch', { rootPath, branchName }),
+			() => gitSwitchBranch({ rootPath, branchName }),
 			undefined,
 			setBranchActionBusy
 		);
@@ -439,10 +452,7 @@ export function GitPanel({
 		setBranchActionBusy(true);
 
 		try {
-			await invoke<GitStatus>('git_create_branch', {
-				rootPath,
-				branchName: newBranchName.trim(),
-			});
+			await gitCreateBranch({ rootPath, branchName: newBranchName.trim() });
 			setNewBranchName('');
 			setBranchPopoverOpen(false);
 			await refreshStatus();
@@ -471,7 +481,7 @@ export function GitPanel({
 		}
 
 		const nextStatus = await runAction(
-			() => invoke<GitStatus>('git_init', { rootPath }),
+			() => gitInit({ rootPath }),
 			'已初始化 Git 仓库'
 		);
 
@@ -496,7 +506,7 @@ export function GitPanel({
 
 		const nextStatus = await runAction(
 			() =>
-				invoke<GitStatus>('git_set_remote', {
+				gitSetRemote({
 					remoteName: trimmedName,
 					remoteUrl: trimmedUrl,
 					rootPath,
@@ -524,7 +534,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitSyncResult>('git_commit', {
+				gitCommit({
 					authorEmail: null,
 					authorName: null,
 					message: trimmedMessage,
@@ -555,7 +565,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitSyncResult>('git_commit_all', {
+				gitCommitAll({
 					authorEmail: null,
 					authorName: null,
 					message: trimmedMessage,
@@ -578,7 +588,7 @@ export function GitPanel({
 		}
 
 		const nextStatus = await runAction(() =>
-			invoke<GitStatus>('git_stage_file', { path: filePath, rootPath })
+			gitStageFile({ path: filePath, rootPath })
 		);
 
 		if (nextStatus) {
@@ -592,7 +602,7 @@ export function GitPanel({
 		}
 
 		const nextStatus = await runAction(() =>
-			invoke<GitStatus>('git_unstage_file', { path: filePath, rootPath })
+			gitUnstageFile({ path: filePath, rootPath })
 		);
 
 		if (nextStatus) {
@@ -607,7 +617,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitSyncResult>('git_push', {
+				gitPush({
 					auth: buildAuth(),
 					branchName: status?.branch?.name ?? null,
 					remoteName: remoteName.trim() || primaryRemote?.name || 'origin',
@@ -630,7 +640,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitSyncResult>('git_pull', {
+				gitPull({
 					auth: buildAuth(),
 					authorEmail: null,
 					authorName: null,
@@ -659,7 +669,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitStatus>('git_fetch', {
+				gitFetch({
 					auth: buildAuth(),
 					remoteName: remoteName.trim() || primaryRemote?.name || 'origin',
 					rootPath,
@@ -677,9 +687,7 @@ export function GitPanel({
 		setActionBusy(true);
 
 		try {
-			const selectedPath = await invoke<string | null>(
-				'git_pick_ssh_private_key_file'
-			);
+			const selectedPath = await gitPickSshPrivateKeyFile();
 
 			if (selectedPath) {
 				setSshPrivateKeyPath(selectedPath);
@@ -701,7 +709,7 @@ export function GitPanel({
 		}
 
 		const result = await runAction(
-			() => invoke<GitSyncResult>('git_undo_last_commit', { rootPath }),
+			() => gitUndoLastCommit({ rootPath }),
 			'已撤销最近提交'
 		);
 
@@ -718,7 +726,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() =>
-				invoke<GitSyncResult>('git_revert_commit', {
+				gitRevertCommit({
 					authorEmail: null,
 					authorName: null,
 					commitId,

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { startResizeDragging } from '@/invoke/window';
 
 type ResizeDirection =
 	| 'North'
@@ -50,8 +50,6 @@ function getResizeDirection(
 
 export function useWindowResize() {
 	useEffect(() => {
-		const win = getCurrentWindow();
-
 		const handleMouseMove = (e: MouseEvent) => {
 			const dir = getResizeDirection(e, window.innerWidth, window.innerHeight);
 			document.body.style.cursor = dir ? CURSOR_MAP[dir] : '';
@@ -63,7 +61,7 @@ export function useWindowResize() {
 			if (!dir) return;
 			e.preventDefault();
 			e.stopPropagation();
-			await win.startResizeDragging(dir as never);
+			await startResizeDragging(dir);
 		};
 
 		window.addEventListener('mousedown', handleMouseDown, true);

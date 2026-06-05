@@ -6,7 +6,7 @@ import {
 	useState,
 	type ReactNode,
 } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
 
 import { showErrorToast } from '@/components/ui/toast';
 
@@ -315,15 +315,15 @@ function migrateLegacyDeepSeekSettings() {
 }
 
 async function loadSecureApiKey(provider: AiProvider) {
-	return invoke<boolean>('has_ai_api_key', { provider });
+	return hasAiApiKey({ provider });
 }
 
 async function storeSecureApiKey(provider: AiProvider, apiKey: string) {
-	await invoke('store_ai_api_key', { apiKey, provider });
+	await storeAiApiKey({ apiKey, provider });
 }
 
 async function deleteSecureApiKey(provider: AiProvider) {
-	await invoke('delete_ai_api_key', { provider });
+	await deleteAiApiKey({ provider });
 }
 
 async function syncProviderApiKey(provider: AiProvider, apiKey: string) {

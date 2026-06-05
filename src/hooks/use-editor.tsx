@@ -21,7 +21,8 @@ import {
 	type TooltipView,
 	type ViewUpdate,
 } from '@codemirror/view';
-import { Channel, invoke } from '@tauri-apps/api/core';
+import { Channel } from '@tauri-apps/api/core';
+import { generateCompletionStream } from '@/invoke/ai';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
@@ -927,7 +928,7 @@ export function useEditor({
 					});
 				});
 
-				await invoke<void>('generate_completion_stream', {
+				await generateCompletionStream({
 					config: {
 						apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
 						customProtocol:

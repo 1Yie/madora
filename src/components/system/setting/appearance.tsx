@@ -1,12 +1,13 @@
 import { Check, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { useTheme } from '@/components/system/theme-provider';
 import { useProseTheme } from '@/components/system/prose-theme-provider';
 import {
-	SettingsSectionCard,
 	Option,
+	SettingsSectionCard,
 } from '@/components/system/setting/shared';
-import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 function hexToRgb(hex: string) {
 	const h = hex.replace(/^#/, '');
@@ -93,6 +94,39 @@ function ActiveBadge() {
 	);
 }
 
+const TAB_BAR_MODE_KEY = 'madora-tab-bar-mode';
+
+function TabBarModeSetting() {
+	const [mode, setMode] = useState<'scroll' | 'wrap'>(
+		() =>
+			(window.localStorage.getItem(TAB_BAR_MODE_KEY) as 'scroll' | 'wrap') ??
+			'scroll'
+	);
+
+	const handleChange = (newMode: 'scroll' | 'wrap') => {
+		setMode(newMode);
+		window.localStorage.setItem(TAB_BAR_MODE_KEY, newMode);
+		window.dispatchEvent(new Event('storage'));
+	};
+
+	return (
+		<div className="grid gap-3 md:grid-cols-2">
+			<Option
+				active={mode === 'scroll'}
+				label="单行滚动"
+				description="所有标签页保持在一行，超出后通过横向滚动查看"
+				onClick={() => handleChange('scroll')}
+			/>
+			<Option
+				active={mode === 'wrap'}
+				label="自动换行"
+				description="标签页超出容器宽度后自动换行排列"
+				onClick={() => handleChange('wrap')}
+			/>
+		</div>
+	);
+}
+
 export function AppearanceSettings() {
 	const { theme, setTheme, accent, accentMode, setAccent, setAccentMode } =
 		useTheme();
@@ -116,6 +150,10 @@ export function AppearanceSettings() {
 
 	return (
 		<div className="space-y-4">
+			<SettingsSectionCard title="标签页">
+				<TabBarModeSetting />
+			</SettingsSectionCard>
+
 			<SettingsSectionCard title="主题模式">
 				<div className="grid gap-3 md:grid-cols-3">
 					<Option

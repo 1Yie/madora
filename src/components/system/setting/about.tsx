@@ -1,22 +1,11 @@
-import {
-	getIdentifier,
-	getName,
-	getTauriVersion,
-	getVersion,
-} from '@tauri-apps/api/app';
+import { getAppInfo } from '@/invoke/app';
+import type { AppInfo } from '@/invoke/app';
 import { useEffect, useState } from 'react';
 import logo from '@/assets/icon.png';
 import packageJson from '../../../../package.json';
 import { SettingsSectionCard, Stat } from '@/components/system/setting/shared';
 import { ExternalLinkAnchor } from '@/components/ui/external-link';
 import licenses from '@/assets/licenses.json';
-
-type AppInfo = {
-	identifier: string;
-	name: string;
-	tauriVersion: string;
-	version: string;
-};
 
 const FALLBACK_APP_INFO: AppInfo = {
 	identifier: 'in.ichiyo.madora',
@@ -30,13 +19,7 @@ const SOURCE_CODE_URL = 'https://github.com/1Yie/madora';
 
 async function readAppInfo(): Promise<AppInfo> {
 	try {
-		const [name, version, tauriVersion, identifier] = await Promise.all([
-			getName(),
-			getVersion(),
-			getTauriVersion(),
-			getIdentifier(),
-		]);
-		return { identifier, name, tauriVersion, version };
+		return await getAppInfo();
 	} catch {
 		return FALLBACK_APP_INFO;
 	}

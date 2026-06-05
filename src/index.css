@@ -273,6 +273,8 @@
 	--os-handle-perpendicular-size-hover: 100%;
 	--os-handle-perpendicular-size-active: 100%;
 
+	z-index: 20;
+	will-change: transform;
 	pointer-events: none;
 }
 
@@ -288,6 +290,7 @@
 .os-theme-madora.os-scrollbar .os-scrollbar-handle {
 	background: color-mix(in srgb, var(--color-foreground) 14%, transparent);
 	border-radius: 4px;
+	will-change: transform;
 	pointer-events: auto;
 }
 

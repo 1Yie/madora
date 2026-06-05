@@ -1,4 +1,4 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl } from '@/invoke/opener';
 import { ExternalLink } from 'lucide-react';
 import type React from 'react';
 

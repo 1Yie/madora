@@ -1,4 +1,9 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import {
+	destroyWindow,
+	minimizeWindow,
+	onCloseRequested,
+	toggleMaximizeWindow,
+} from '@/invoke/window';
 import { X, Square, Minus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -19,8 +24,6 @@ import {
 	saveAll,
 } from '@/lib/unsaved-registry';
 
-const appWindow = getCurrentWindow();
-
 function getSaveFailureMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	if (typeof error === 'string') return error;
@@ -35,7 +38,7 @@ export default function Titlebar() {
 	const closeWindow = useCallback(async () => {
 		bypassCloseGuardRef.current = true;
 		try {
-			await appWindow.destroy();
+			await destroyWindow();
 		} finally {
 			window.setTimeout(() => {
 				bypassCloseGuardRef.current = false;
@@ -94,7 +97,7 @@ export default function Titlebar() {
 		let active = true;
 
 		const bindCloseListener = async () => {
-			const unlisten = await appWindow.onCloseRequested(async (event) => {
+			const unlisten = await onCloseRequested(async (event) => {
 				if (bypassCloseGuardRef.current) return;
 				event.preventDefault();
 				await requestCloseRef.current();
@@ -128,7 +131,7 @@ export default function Titlebar() {
 					<SettingsDialog />
 					<button
 						type="button"
-						onClick={() => void appWindow.minimize()}
+						onClick={() => void minimizeWindow()}
 						className="flex h-full items-center px-3 text-muted-foreground
 							transition-colors hover:bg-accent hover:text-accent-foreground"
 					>
@@ -136,7 +139,7 @@ export default function Titlebar() {
 					</button>
 					<button
 						type="button"
-						onClick={() => void appWindow.toggleMaximize()}
+						onClick={() => void toggleMaximizeWindow()}
 						className="flex h-full items-center px-3 text-muted-foreground
 							transition-colors hover:bg-accent hover:text-accent-foreground"
 					>

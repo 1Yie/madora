@@ -410,7 +410,7 @@ fn ensure_existing_path(path: &Path) -> Result<(), String> {
     Err(format!("路径不存在: {}", path.display()))
 }
 
-fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
+pub(crate) fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
     if path == root_path || path.starts_with(root_path) {
         return Ok(());
     }

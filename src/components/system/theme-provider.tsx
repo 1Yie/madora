@@ -6,7 +6,7 @@ import {
 	type ReactNode,
 } from 'react';
 
-import { invoke } from '@tauri-apps/api/core';
+import { getSystemTheme } from '@/invoke/system';
 
 import { useMediaQuery } from '@/hooks/use-media-query';
 
@@ -220,9 +220,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 		void (async () => {
 			try {
-				const resp = await invoke<{ scheme: string; accent?: string | null }>(
-					'get_system_theme'
-				);
+				const resp = await getSystemTheme();
 
 				if (!mounted) return;
 				setSystemAccent(normalizeHexColor(resp.accent) ?? null);

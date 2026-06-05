@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { writeWorkspaceFile } from '@/invoke/explorer';
 
 type EditorEntry = {
 	id: string;
@@ -122,7 +122,7 @@ export async function saveAll(opts?: { timeoutMs?: number }) {
 	const draftResults = await Promise.all(
 		draftsToSave.map(async (draft) => {
 			try {
-				const savePromise = invoke('write_workspace_file', {
+				const savePromise = writeWorkspaceFile({
 					content: draft.content,
 					path: draft.filePath,
 				});
