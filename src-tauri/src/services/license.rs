@@ -16,7 +16,14 @@ const KEYRING_USER: &str = "license_info";
 
 fn auth_server_url() -> String {
     std::env::var("AUTH_SERVER_URL")
-        .unwrap_or_else(|_| DEFAULT_AUTH_SERVER_URL.to_string())
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            option_env!("AUTH_SERVER_URL")
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        })
+        .unwrap_or_else(|| DEFAULT_AUTH_SERVER_URL.to_string())
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

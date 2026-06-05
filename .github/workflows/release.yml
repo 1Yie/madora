@@ -67,9 +67,16 @@ jobs:
       - name: Create .env file
         run: echo "${{ secrets.ENV_FILE }}" > .env
 
+      - name: Extract AUTH_SERVER_URL from .env
+        id: extract_env
+        run: |
+          AUTH_URL=$(grep '^AUTH_SERVER_URL=' .env | cut -d'=' -f2-)
+          echo "auth_server_url=$AUTH_URL" >> $GITHUB_OUTPUT
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
+          AUTH_SERVER_URL: ${{ steps.extract_env.outputs.auth_server_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
