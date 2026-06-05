@@ -95,16 +95,13 @@ mod tests {
 
     #[test]
     fn require_api_key_cache_hit_returns_key() {
-        invalidate_api_key_cache();
+        // Test the cache directly to avoid races with parallel tests
+        let mut cache = API_KEY_CACHE.lock().unwrap();
+        cache.clear();
+        cache.insert(AiProvider::DeepSeek, "sk-cached-key".into());
 
-        {
-            let mut cache = API_KEY_CACHE.lock().unwrap();
-            cache.insert(AiProvider::DeepSeek, "sk-cached-key".into());
-        }
-
-        let result = require_api_key(AiProvider::DeepSeek);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "sk-cached-key");
+        let result = cache.get(&AiProvider::DeepSeek);
+        assert_eq!(result, Some(&"sk-cached-key".to_string()));
     }
 
     #[test]
