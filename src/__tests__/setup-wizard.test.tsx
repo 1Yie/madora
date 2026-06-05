@@ -20,6 +20,21 @@ vi.mock('@/components/ui/provider-icons', () => ({
 		openai: () => <span data-testid="provider-icon">O</span>,
 	},
 }));
+vi.mock('@/components/system/license-provider', () => {
+	const MockLicenseProvider = ({ children }: { children: React.ReactNode }) => (
+		<>{children}</>
+	);
+	return {
+		LicenseProvider: MockLicenseProvider,
+		useLicense: () => ({
+			status: { state: 'active' },
+			isLoading: false,
+			activate: vi.fn(),
+			deactivate: vi.fn(),
+			refresh: vi.fn(),
+		}),
+	};
+});
 
 import { AiSettingsProvider } from '@/components/system/ai-settings-provider';
 import {
@@ -69,14 +84,11 @@ describe('SetupWizard', () => {
 		window.localStorage.setItem('madora-setup-complete', 'true');
 		expect(shouldShowSetupWizard()).toBe(false);
 	});
-
 	it('renders the welcome step with the branded logo', async () => {
 		renderWizard();
 
-		expect(
-			await screen.findByText('打开 Markdown，AI 会在旁边补全。')
-		).toBeInTheDocument();
-		expect(screen.getAllByAltText('Madora logo').length).toBeGreaterThan(0);
+		expect(screen.getByText('欢迎使用 Madora')).toBeInTheDocument();
+		expect(screen.getByAltText('Madora')).toBeInTheDocument();
 	});
 
 	it('completes the onboarding flow and persists completion', async () => {
@@ -84,20 +96,32 @@ describe('SetupWizard', () => {
 		const onComplete = vi.fn();
 		renderWizard(onComplete);
 
+		// Step 1: Welcome → 开始配置
 		await user.click(await screen.findByRole('button', { name: '开始配置' }));
 
-		expect(screen.getByText('AI 补全配置')).toBeInTheDocument();
-		await user.type(screen.getByLabelText('API Key'), 'sk-test');
-		await user.click(screen.getByRole('button', { name: /开始测试/ }));
+		// Step 2: Configure provider
+		expect(screen.getByText('连接提供商')).toBeInTheDocument();
 
+		// Fill API Key using placeholder since Input has no label association
+		const apiKeyInput = screen.getByPlaceholderText('sk-...');
+		await user.type(apiKeyInput, 'sk-test');
+
+		// Continue to test
+		await user.click(screen.getByRole('button', { name: '继续' }));
+
+		// Step 3: Test completes against mock
 		await waitFor(() => {
-			expect(screen.getByText('补全测试成功')).toBeInTheDocument();
+			expect(screen.getByText('你好，欢迎使用 Madora。')).toBeInTheDocument();
 		});
 
-		await user.click(screen.getByRole('button', { name: /下一步/ }));
-		expect(screen.getByText('现在就可以开始写了')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: '完成验证' }));
 
-		await user.click(screen.getByRole('button', { name: /开始使用 Madora/ }));
+		// Step 4: License — skip trial
+		await user.click(screen.getByRole('button', { name: '先试用' }));
+
+		// Step 5: Success
+		expect(screen.getByText('一切就绪')).toBeInTheDocument();
+		await user.click(screen.getByRole('button', { name: /进入编辑器/ }));
 
 		expect(onComplete).toHaveBeenCalledTimes(1);
 		expect(window.localStorage.getItem('madora-setup-complete')).toBe('true');
