@@ -49,6 +49,9 @@
 			}
 		},
 		"publisher": "ichiyo",
+		"resources": {
+			"../.env": ".env"
+		},
 		"targets": "all"
 	},
 	"identifier": "in.ichiyo.madora",

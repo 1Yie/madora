@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 const TRIAL_DAYS: i64 = 14;
 const DEFAULT_AUTH_SERVER_URL: &str = "http://localhost:3000";
-const BUILD_AUTH_SERVER_URL: Option<&str> = option_env!("AUTH_SERVER_URL");
 const GRACE_PERIOD_HOURS: i64 = 1;
 const VERIFY_CACHE_TTL: Duration = Duration::from_secs(30);
 const KEYRING_SERVICE: &str = "madora.license";
@@ -17,9 +16,7 @@ const KEYRING_USER: &str = "license_info";
 
 fn auth_server_url() -> String {
     std::env::var("AUTH_SERVER_URL")
-        .ok()
-        .or_else(|| BUILD_AUTH_SERVER_URL.map(str::to_owned))
-        .unwrap_or_else(|| DEFAULT_AUTH_SERVER_URL.to_string())
+        .unwrap_or_else(|_| DEFAULT_AUTH_SERVER_URL.to_string())
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

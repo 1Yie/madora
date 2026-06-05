@@ -15,7 +15,6 @@ name = "madora_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-dotenv = "0.15"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
