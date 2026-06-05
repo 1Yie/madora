@@ -3,5 +3,10 @@
 
 fn main() {
     dotenv::dotenv().ok();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let _ = dotenv::from_path(dir.join(".env"));
+        }
+    }
     madora_lib::run()
 }
