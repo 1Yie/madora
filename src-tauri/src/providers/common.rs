@@ -57,7 +57,10 @@ pub fn resolve_api_key(config: &AiCompletionConfig) -> Result<&str, String> {
     Ok(api_key)
 }
 
-pub fn resolve_api_url(config: &AiCompletionConfig, default_api_url: &str) -> Result<String, String> {
+pub fn resolve_api_url(
+    config: &AiCompletionConfig,
+    default_api_url: &str,
+) -> Result<String, String> {
     let api_url = config
         .api_url
         .as_deref()
@@ -73,14 +76,21 @@ pub fn resolve_api_url(config: &AiCompletionConfig, default_api_url: &str) -> Re
 
     // Auto-prepend https:// (or http:// when use_ssl is false) if no scheme present
     if !api_url.starts_with("http://") && !api_url.starts_with("https://") {
-        let scheme = if config.use_ssl { "https://" } else { "http://" };
+        let scheme = if config.use_ssl {
+            "https://"
+        } else {
+            "http://"
+        };
         return Ok(format!("{scheme}{api_url}"));
     }
 
     Ok(api_url)
 }
 
-pub fn resolve_model<'a>(config: &'a AiCompletionConfig, default_model: &'a str) -> Result<&'a str, String> {
+pub fn resolve_model<'a>(
+    config: &'a AiCompletionConfig,
+    default_model: &'a str,
+) -> Result<&'a str, String> {
     let model = config
         .model
         .as_deref()
@@ -96,7 +106,11 @@ pub fn resolve_model<'a>(config: &'a AiCompletionConfig, default_model: &'a str)
 }
 
 pub fn join_url(base_url: &str, path: &str) -> String {
-    format!("{}/{}", trim_trailing_slash(base_url), path.trim_start_matches('/'))
+    format!(
+        "{}/{}",
+        trim_trailing_slash(base_url),
+        path.trim_start_matches('/')
+    )
 }
 
 pub fn take_last_chars(value: &str, max_chars: usize) -> &str {
@@ -160,7 +174,6 @@ pub fn build_prompt_context(request: &CompletionRequest) -> PromptContext {
         title,
     }
 }
-
 
 pub fn take_text_completion(payload: TextCompletionResponse) -> String {
     payload
@@ -262,8 +275,8 @@ pub async fn stream_sse_response(
     }
 
     if !pending_bytes.is_empty() {
-        let text =
-            std::str::from_utf8(&pending_bytes).map_err(|error| format!("解析流式响应失败: {error}"))?;
+        let text = std::str::from_utf8(&pending_bytes)
+            .map_err(|error| format!("解析流式响应失败: {error}"))?;
         buffer.push_str(text);
     }
 
@@ -440,14 +453,14 @@ mod tests {
 
     #[test]
     fn resolve_api_key_empty_trimmed() {
-		let config = AiCompletionConfig {
-			api_key: "   ".into(),
-			api_url: None,
-			custom_protocol: None,
-			model: None,
-			provider: None,
-			use_ssl: true,
-		};
+        let config = AiCompletionConfig {
+            api_key: "   ".into(),
+            api_url: None,
+            custom_protocol: None,
+            model: None,
+            provider: None,
+            use_ssl: true,
+        };
         assert!(resolve_api_key(&config).is_err());
     }
 
@@ -470,7 +483,10 @@ mod tests {
     #[test]
     fn resolve_model_default_fallback() {
         let config = AiCompletionConfig::default();
-        assert_eq!(resolve_model(&config, "default-model").unwrap(), "default-model");
+        assert_eq!(
+            resolve_model(&config, "default-model").unwrap(),
+            "default-model"
+        );
     }
 
     #[test]
@@ -525,12 +541,18 @@ mod tests {
 
     #[test]
     fn trim_trailing_slash_normal() {
-        assert_eq!(trim_trailing_slash("https://api.example.com/"), "https://api.example.com");
+        assert_eq!(
+            trim_trailing_slash("https://api.example.com/"),
+            "https://api.example.com"
+        );
     }
 
     #[test]
     fn trim_trailing_slash_no_slash() {
-        assert_eq!(trim_trailing_slash("https://api.example.com"), "https://api.example.com");
+        assert_eq!(
+            trim_trailing_slash("https://api.example.com"),
+            "https://api.example.com"
+        );
     }
 
     #[test]
@@ -540,7 +562,10 @@ mod tests {
 
     #[test]
     fn join_url_basic() {
-        assert_eq!(join_url("https://api.com", "/v1/chat"), "https://api.com/v1/chat");
+        assert_eq!(
+            join_url("https://api.com", "/v1/chat"),
+            "https://api.com/v1/chat"
+        );
     }
 
     #[test]
@@ -567,7 +592,9 @@ mod tests {
 
     #[test]
     fn take_text_completion_empty_choices() {
-        let resp = TextCompletionResponse { choices: Some(vec![]) };
+        let resp = TextCompletionResponse {
+            choices: Some(vec![]),
+        };
         assert_eq!(take_text_completion(resp), "");
     }
 
@@ -601,7 +628,9 @@ mod tests {
 
     #[test]
     fn take_chat_completion_empty_choices() {
-        let resp = ChatCompletionResponse { choices: Some(vec![]) };
+        let resp = ChatCompletionResponse {
+            choices: Some(vec![]),
+        };
         assert_eq!(take_chat_completion(resp), "");
     }
 
@@ -642,8 +671,14 @@ mod tests {
     fn take_next_sse_block_normalizes_crlf() {
         let mut buffer = "data: first\r\n\r\ndata: second\r\n\r\n".to_string();
 
-        assert_eq!(take_next_sse_block(&mut buffer), Some("data: first".to_string()));
-        assert_eq!(take_next_sse_block(&mut buffer), Some("data: second".to_string()));
+        assert_eq!(
+            take_next_sse_block(&mut buffer),
+            Some("data: first".to_string())
+        );
+        assert_eq!(
+            take_next_sse_block(&mut buffer),
+            Some("data: second".to_string())
+        );
         assert_eq!(take_next_sse_block(&mut buffer), None);
     }
 

@@ -69,14 +69,8 @@ impl CompletionProvider for AnthropicProvider {
         request: &CompletionRequest,
         on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
     ) -> Result<String, String> {
-        request_anthropic_compatible_fim_stream(
-            client,
-            prompt_manager,
-            config,
-            request,
-            on_chunk,
-        )
-        .await
+        request_anthropic_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
+            .await
     }
 }
 
@@ -91,12 +85,13 @@ pub(crate) async fn request_anthropic_compatible_fim(
     let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
     let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
     let prompt_context = build_prompt_context(request);
-    let system_prompt =
-        prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
-    let user_prompt =
-        prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
+    let system_prompt = prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
+    let user_prompt = prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
 
-    let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let has_suffix = request
+        .suffix
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty());
     let (max_tokens, temperature) = if has_suffix {
         (MAX_COMPLETION_TOKENS, 0.3)
     } else {
@@ -164,7 +159,10 @@ pub(crate) async fn request_anthropic_compatible_fim_stream(
     let system_prompt = prompt_manager.render_prompt(provider, "fim_system", &prompt_context);
     let user_prompt = prompt_manager.render_prompt(provider, "fim_user", &prompt_context);
 
-    let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let has_suffix = request
+        .suffix
+        .as_deref()
+        .is_some_and(|s| !s.trim().is_empty());
     let (max_tokens, temperature) = if has_suffix {
         (MAX_COMPLETION_TOKENS, 0.3)
     } else {
@@ -191,7 +189,12 @@ pub(crate) async fn request_anthropic_compatible_fim_stream(
         }))
         .send()
         .await
-        .map_err(|error| format!("调用 {} 流式 completion 失败: {error}", provider.display_name()))?;
+        .map_err(|error| {
+            format!(
+                "调用 {} 流式 completion 失败: {error}",
+                provider.display_name()
+            )
+        })?;
 
     if !response.status().is_success() {
         let status = response.status();

@@ -54,19 +54,18 @@ fn image_mime_type(path: &Path) -> &'static str {
     }
 }
 
-fn sorted_directory_entries(directory: &Path, show_hidden_files: bool) -> Result<Vec<fs::DirEntry>, String> {
+fn read_directory_entries(
+    directory: &Path,
+    show_hidden_files: bool,
+    sort: bool,
+) -> Result<Vec<fs::DirEntry>, String> {
     let mut entries = fs::read_dir(directory)
         .map_err(|error| error.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| error.to_string())?;
 
     if !show_hidden_files {
-        entries.retain(|entry| {
-            !entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with('.')
-        });
+        entries.retain(|entry| !entry.file_name().to_string_lossy().starts_with('.'));
     }
 
     entries.sort_by(|left, right| {
@@ -79,12 +78,15 @@ fn sorted_directory_entries(directory: &Path, show_hidden_files: bool) -> Result
             .map(|value| value.is_dir())
             .unwrap_or(false);
 
-        right_is_dir.cmp(&left_is_dir).then_with(|| {
-            left.file_name()
-                .to_string_lossy()
-                .to_ascii_lowercase()
-                .cmp(&right.file_name().to_string_lossy().to_ascii_lowercase())
-        })
+        let dir_order = right_is_dir.cmp(&left_is_dir);
+        if dir_order != std::cmp::Ordering::Equal || !sort {
+            return dir_order;
+        }
+
+        left.file_name()
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .cmp(&right.file_name().to_string_lossy().to_ascii_lowercase())
     });
 
     Ok(entries)
@@ -263,8 +265,9 @@ pub fn read_directory_children(
     root: &Path,
     directory: &Path,
     show_hidden_files: bool,
+    sort: bool,
 ) -> Result<Vec<ExplorerNode>, String> {
-    let entries = sorted_directory_entries(directory, show_hidden_files)?;
+    let entries = read_directory_entries(directory, show_hidden_files, sort)?;
     let mut children = Vec::new();
 
     for entry in entries {
@@ -301,12 +304,16 @@ pub fn read_directory_children(
     Ok(children)
 }
 
-pub fn build_workspace_root(root: &Path, show_hidden_files: bool) -> Result<ExplorerNode, String> {
+pub fn build_workspace_root(
+    root: &Path,
+    show_hidden_files: bool,
+    sort: bool,
+) -> Result<ExplorerNode, String> {
     if !root.is_dir() {
         return Err("Selected path is not a directory".to_string());
     }
 
-    let children = read_directory_children(root, root, show_hidden_files)?;
+    let children = read_directory_children(root, root, show_hidden_files, sort)?;
 
     Ok(ExplorerNode {
         name: path_name(root),
@@ -438,7 +445,10 @@ fn ensure_target_available(target_path: &Path) -> Result<(), String> {
     Err(format!("目标已存在: {}", target_path.display()))
 }
 
-fn copy_workspace_node_recursive(source_path: &Path, destination_path: &Path) -> Result<(), String> {
+fn copy_workspace_node_recursive(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<(), String> {
     let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
 
     if source_metadata.is_dir() {
@@ -870,7 +880,10 @@ mod tests {
         copy_workspace_node(&root, &source_file, &destination_directory).unwrap();
 
         assert!(source_file.exists());
-        assert_eq!(std::fs::read_to_string(&destination_file).unwrap(), "hello copy");
+        assert_eq!(
+            std::fs::read_to_string(&destination_file).unwrap(),
+            "hello copy"
+        );
     }
 
     #[test]

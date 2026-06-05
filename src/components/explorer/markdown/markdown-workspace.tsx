@@ -17,6 +17,7 @@ type MarkdownWorkspaceProps = {
 	content: string;
 	encoding?: string | null;
 	filePath: string;
+	rootPath: string | null;
 	mode: 'edit' | 'preview';
 	onToggleMode?: () => void;
 };
@@ -60,6 +61,7 @@ export function MarkdownWorkspace({
 	content,
 	encoding,
 	filePath,
+	rootPath,
 	mode,
 	onToggleMode,
 }: MarkdownWorkspaceProps) {
@@ -258,6 +260,8 @@ export function MarkdownWorkspace({
 			onChange={setValue}
 			onSave={handleSave}
 			saveMode={saveMode}
+			filePath={filePath}
+			rootPath={rootPath}
 			saveStatus={saveStatus}
 			title={getFileTitle(filePath)}
 			value={value}

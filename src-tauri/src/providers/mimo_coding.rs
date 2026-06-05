@@ -36,13 +36,7 @@ impl CompletionProvider for MiMoCodingProvider {
         request: &CompletionRequest,
         on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
     ) -> Result<String, String> {
-        request_openai_compatible_fim_stream(
-            client,
-            prompt_manager,
-            config,
-            request,
-            on_chunk,
-        )
-        .await
+        request_openai_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
+            .await
     }
 }

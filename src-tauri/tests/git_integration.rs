@@ -137,7 +137,6 @@ fn branch_merge_conflict() {
     let main_branch_name = head.shorthand().unwrap().to_string();
     let head_commit = head.peel_to_commit().unwrap();
 
-
     // Create branch "feature"
     repo.branch("feature", &head_commit, false).unwrap();
     repo.set_head("refs/heads/feature").unwrap();
@@ -149,7 +148,8 @@ fn branch_merge_conflict() {
     create_commit(&repo, "Feature change");
 
     // Switch back to main
-    repo.set_head(&format!("refs/heads/{}", main_branch_name)).unwrap();
+    repo.set_head(&format!("refs/heads/{}", main_branch_name))
+        .unwrap();
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
         .unwrap();
 

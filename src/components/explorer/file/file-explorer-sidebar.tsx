@@ -111,6 +111,8 @@ type FileExplorerSidebarProps = {
 	onOpenFolder: () => void;
 	onPasteNode: (destinationPath: string | null) => Promise<void>;
 	onRefresh: () => void;
+	sortEnabled: boolean;
+	onSortToggle: () => void;
 	onGitRefresh: () => Promise<void>;
 	onGitRefreshWorkspace: () => Promise<void>;
 	onGitStatusChange: (status: GitStatus) => void;
@@ -1192,7 +1194,10 @@ export function FileExplorerSidebar({
 	onCutNode,
 	onDeleteNode,
 	onRestoreDeletedNode,
+	sortEnabled,
+	onSortToggle,
 	onOpenFolder,
+	onRefresh,
 	onPasteNode,
 	onGitRefresh,
 	onGitRefreshWorkspace,
@@ -1208,7 +1213,6 @@ export function FileExplorerSidebar({
 		rootPath: null,
 	});
 	const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-	const [sortEnabled, setSortEnabled] = useState(true);
 	const [bookmarkPaths, setBookmarkPaths] = useState<string[]>(() => {
 		try {
 			const saved = window.localStorage.getItem('madora-bookmarks');
@@ -1534,7 +1538,7 @@ export function FileExplorerSidebar({
 	};
 
 	const toggleSort = () => {
-		setSortEnabled((prev) => !prev);
+		onSortToggle();
 	};
 
 	const handleExpandCollapseToggle = () => {
@@ -1720,7 +1724,7 @@ export function FileExplorerSidebar({
 							<TooltipContent side="bottom">新建文档</TooltipContent>
 						</Tooltip>
 
-						<div className="mx-1 h-4 w-px bg-border" />
+						<div className="mx-1 h-4 w-px shrink-0 bg-border" />
 
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
@@ -1728,7 +1732,7 @@ export function FileExplorerSidebar({
 									aria-label="排序切换"
 									onClick={toggleSort}
 									size="icon-sm"
-									variant={sortEnabled ? 'secondary' : 'ghost'}
+									variant={sortEnabled ? 'default' : 'ghost'}
 								>
 									<ArrowUpDown className="size-4" />
 								</Button>
@@ -1799,6 +1803,20 @@ export function FileExplorerSidebar({
 									? '取消书签'
 									: '添加书签'}
 							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger render={<span />}>
+								<Button
+									aria-label="刷新文件树"
+									disabled={!root || busy || operationBusy !== null}
+									onClick={onRefresh}
+									size="icon-sm"
+									variant="ghost"
+								>
+									<RotateCcw className="size-3.5" />
+								</Button>
+							</TooltipTrigger>
+							<TooltipContent side="bottom">刷新文件树</TooltipContent>
 						</Tooltip>
 					</div>
 

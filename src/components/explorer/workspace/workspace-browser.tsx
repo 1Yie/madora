@@ -276,6 +276,7 @@ export function WorkspaceBrowser() {
 		getServerTabBarModeSnapshot
 	);
 	const { showHiddenFiles } = useAiSettings();
+	const [sortEnabled, setSortEnabled] = useState(true);
 	const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
 	const [root, setRoot] = useState<ExplorerNode | null>(null);
 	const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
@@ -439,6 +440,7 @@ export function WorkspaceBrowser() {
 					directoryPath,
 					rootPath: nextRoot.path,
 					showHiddenFiles,
+					sort: sortEnabled,
 				});
 
 				resolvedRoot = replaceDirectoryChildren(
@@ -682,6 +684,7 @@ export function WorkspaceBrowser() {
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 				showHiddenFiles,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -745,6 +748,7 @@ export function WorkspaceBrowser() {
 				directoryPath,
 				rootPath,
 				showHiddenFiles,
+				sort: sortEnabled,
 			});
 
 			nextRoot = replaceDirectoryChildren(nextRoot, directoryPath, children);
@@ -760,6 +764,7 @@ export function WorkspaceBrowser() {
 		try {
 			const nextRoot = await pickWorkspaceFolder({
 				showHiddenFiles,
+				sort: sortEnabled,
 			});
 
 			if (!nextRoot) {
@@ -822,6 +827,7 @@ export function WorkspaceBrowser() {
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
 				showHiddenFiles,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -870,6 +876,7 @@ export function WorkspaceBrowser() {
 			// Re-scan the whole workspace to ensure the new file appears immediately.
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -914,6 +921,7 @@ export function WorkspaceBrowser() {
 			// Re-scan the whole workspace to ensure the new directory appears immediately.
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -965,6 +973,7 @@ export function WorkspaceBrowser() {
 
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -1122,6 +1131,7 @@ export function WorkspaceBrowser() {
 
 			const nextRoot = await scanWorkspaceFolder({
 				rootPath: root.path,
+				sort: sortEnabled,
 			});
 
 			setLoadingPaths(new Set());
@@ -1169,6 +1179,7 @@ export function WorkspaceBrowser() {
 				rootPath: workspaceRootPath,
 				directoryPath: directory.path,
 				showHiddenFiles,
+				sort: sortEnabled,
 			});
 
 			setRoot((currentRoot) => {
@@ -1211,6 +1222,7 @@ export function WorkspaceBrowser() {
 				const nextRoot = await scanWorkspaceFolder({
 					rootPath: savedRootPath,
 					showHiddenFiles,
+					sort: sortEnabled,
 				});
 
 				if (!active) {
@@ -1422,6 +1434,33 @@ export function WorkspaceBrowser() {
 					onOpenFolder={openFolder}
 					onPasteNode={pasteNode}
 					onRefresh={refreshFolder}
+					sortEnabled={sortEnabled}
+					onSortToggle={async () => {
+						const newSort = !sortEnabled;
+						setSortEnabled(newSort);
+						if (!root) return;
+						setSidebarBusy(true);
+						setSidebarError(null);
+						try {
+							const nextRoot = await scanWorkspaceFolder({
+								rootPath: root.path,
+								showHiddenFiles,
+								sort: newSort,
+							});
+							setLoadingPaths(new Set());
+							setRoot(nextRoot);
+							setSidebarError(null);
+							window.localStorage.setItem(
+								WORKSPACE_ROOT_STORAGE_KEY,
+								nextRoot.path
+							);
+							void syncSelectionWithRoot(nextRoot, selectedNodePath);
+						} catch (error) {
+							setSidebarError(getErrorMessage(error));
+						} finally {
+							setSidebarBusy(false);
+						}
+					}}
 					onGitRefresh={async () => {
 						await refreshGitStatus();
 						await refreshFolder();

@@ -43,6 +43,8 @@ type MarkdownEditorProps = {
 	saveMode: SaveMode;
 	saveStatus: SaveStatus;
 	title?: string;
+	filePath: string;
+	rootPath: string | null;
 
 	value: string;
 };
@@ -173,6 +175,8 @@ export function MarkdownEditor({
 	saveMode,
 	saveStatus,
 	title,
+	filePath,
+	rootPath,
 
 	value,
 }: MarkdownEditorProps) {
@@ -349,7 +353,12 @@ export function MarkdownEditor({
 				</ContextMenuPopup>
 			</ContextMenuRoot>
 			{mode === 'preview' ? (
-				<MarkdownPreview className="min-h-0 flex-1" content={value} />
+				<MarkdownPreview
+					className="min-h-0 flex-1"
+					content={value}
+					filePath={filePath}
+					rootPath={rootPath}
+				/>
 			) : null}
 			<div className={explorerEditorStatusBarClassName}>
 				<div

@@ -7,9 +7,8 @@ use crate::{
     prompt::PromptManager,
     providers::{
         common::{
-            join_url, resolve_api_key, resolve_model, take_text_completion,
-            stream_sse_response, TextCompletionResponse, MAX_COMPLETION_TOKENS,
-            STOP_SEQUENCES,
+            join_url, resolve_api_key, resolve_model, stream_sse_response, take_text_completion,
+            TextCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
         },
         CompletionProvider,
     },
@@ -36,11 +35,18 @@ impl CompletionProvider for DeepSeekProvider {
         let api_key = resolve_api_key(config)?;
         let api_url = resolve_beta_api_url(config)?;
         let model = resolve_model(config, DEFAULT_MODEL)?;
-        let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+        let has_suffix = request
+            .suffix
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty());
         let (max_tokens, stop, temperature) = if has_suffix {
             (MAX_COMPLETION_TOKENS, STOP_SEQUENCES, 0.3)
         } else {
-            (64usize, &["\n\n", "\n", "。", ".", "！", "?", "!"] as &[&str], 0.2)
+            (
+                64usize,
+                &["\n\n", "\n", "。", ".", "！", "?", "!"] as &[&str],
+                0.2,
+            )
         };
 
         let response = client
@@ -90,11 +96,18 @@ impl CompletionProvider for DeepSeekProvider {
         let api_key = resolve_api_key(config)?;
         let api_url = resolve_beta_api_url(config)?;
         let model = resolve_model(config, DEFAULT_MODEL)?;
-        let has_suffix = request.suffix.as_deref().is_some_and(|s| !s.trim().is_empty());
+        let has_suffix = request
+            .suffix
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty());
         let (max_tokens, stop, temperature) = if has_suffix {
             (MAX_COMPLETION_TOKENS, STOP_SEQUENCES, 0.3)
         } else {
-            (64usize, &["\n\n", "\n", "。", ".", "！", "?", "!"] as &[&str], 0.2)
+            (
+                64usize,
+                &["\n\n", "\n", "。", ".", "！", "?", "!"] as &[&str],
+                0.2,
+            )
         };
 
         let response = client

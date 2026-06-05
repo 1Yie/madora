@@ -1,9 +1,9 @@
 pub mod ai;
 pub mod explorer;
 pub mod git;
+pub mod license;
 pub mod project;
 pub mod secure_storage;
-pub mod utility;
-pub mod license;
-pub mod theme;
 pub mod system;
+pub mod theme;
+pub mod utility;

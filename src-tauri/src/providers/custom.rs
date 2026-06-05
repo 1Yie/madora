@@ -6,10 +6,8 @@ use crate::{
     prompt::PromptManager,
     providers::{
         anthropic::request_anthropic_compatible_fim,
-        anthropic::request_anthropic_compatible_fim_stream,
-        openai::request_openai_compatible_fim,
-        openai::request_openai_compatible_fim_stream,
-        CompletionProvider,
+        anthropic::request_anthropic_compatible_fim_stream, openai::request_openai_compatible_fim,
+        openai::request_openai_compatible_fim_stream, CompletionProvider,
     },
 };
 
@@ -30,8 +28,7 @@ impl CompletionProvider for CustomProvider {
     ) -> Result<String, String> {
         match config.custom_protocol.unwrap_or_default() {
             CustomProviderProtocol::Anthropic => {
-                request_anthropic_compatible_fim(client, prompt_manager, config, request)
-                    .await
+                request_anthropic_compatible_fim(client, prompt_manager, config, request).await
             }
             CustomProviderProtocol::OpenAi => {
                 request_openai_compatible_fim(client, prompt_manager, config, request).await

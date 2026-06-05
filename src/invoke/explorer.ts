@@ -4,9 +4,11 @@ import type { ExplorerNode, FilePreview } from '@/components/explorer/types';
 /** Opens a native folder picker and scans the selected workspace. */
 export async function pickWorkspaceFolder(opts: {
 	showHiddenFiles: boolean;
+	sort?: boolean;
 }): Promise<ExplorerNode | null> {
 	return invoke<ExplorerNode | null>('pick_workspace_folder', {
 		showHiddenFiles: opts.showHiddenFiles,
+		sort: opts.sort ?? true,
 	});
 }
 
@@ -14,10 +16,12 @@ export async function pickWorkspaceFolder(opts: {
 export async function scanWorkspaceFolder(opts: {
 	rootPath: string;
 	showHiddenFiles?: boolean;
+	sort?: boolean;
 }): Promise<ExplorerNode> {
 	return invoke<ExplorerNode>('scan_workspace_folder', {
 		rootPath: opts.rootPath,
 		showHiddenFiles: opts.showHiddenFiles ?? false,
+		sort: opts.sort ?? true,
 	});
 }
 
@@ -26,11 +30,13 @@ export async function readWorkspaceDirectory(opts: {
 	directoryPath: string;
 	rootPath: string;
 	showHiddenFiles: boolean;
+	sort?: boolean;
 }): Promise<ExplorerNode[]> {
 	return invoke<ExplorerNode[]>('read_workspace_directory', {
 		directoryPath: opts.directoryPath,
 		rootPath: opts.rootPath,
 		showHiddenFiles: opts.showHiddenFiles,
+		sort: opts.sort ?? true,
 	});
 }
 

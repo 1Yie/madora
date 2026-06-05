@@ -123,6 +123,7 @@ function renderPreviewBody(
 						content={content}
 						encoding={preview.encoding}
 						filePath={selectedFile.path}
+						rootPath={rootPath}
 						mode={markdownMode}
 					/>
 				</div>
@@ -159,6 +160,7 @@ function renderPreviewBody(
 				encoding={preview.encoding}
 				filePath={selectedFile.path}
 				onToggleMode={onToggleMode}
+				rootPath={rootPath}
 				mode={markdownMode}
 			/>
 		) : (

@@ -19,9 +19,7 @@ fn ensure_secure_store() -> Result<(), String> {
             keyring::use_native_store(use_secret_service).map_err(|error| {
                 #[cfg(target_os = "linux")]
                 {
-                    format!(
-                        "无法访问系统密钥存储，请确认 Secret Service / libsecret 可用: {error}"
-                    )
+                    format!("无法访问系统密钥存储，请确认 Secret Service / libsecret 可用: {error}")
                 }
                 #[cfg(not(target_os = "linux"))]
                 {
@@ -44,7 +42,10 @@ pub(crate) fn load_ai_api_key_sync(provider: AiProvider) -> Result<Option<String
     match entry.get_password() {
         Ok(api_key) => Ok(Some(api_key)),
         Err(Error::NoEntry) => Ok(None),
-        Err(error) => Err(format!("读取 {} API Key 失败: {error}", provider.display_name())),
+        Err(error) => Err(format!(
+            "读取 {} API Key 失败: {error}",
+            provider.display_name()
+        )),
     }
 }
 
@@ -65,7 +66,10 @@ fn delete_ai_api_key_sync(provider: AiProvider) -> Result<(), String> {
 
     match entry.delete_credential() {
         Ok(()) | Err(Error::NoEntry) => Ok(()),
-        Err(error) => Err(format!("删除 {} API Key 失败: {error}", provider.display_name())),
+        Err(error) => Err(format!(
+            "删除 {} API Key 失败: {error}",
+            provider.display_name()
+        )),
     }
 }
 

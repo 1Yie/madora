@@ -10,8 +10,7 @@ use tokio::sync::Notify;
 
 use crate::{
     models::ai::{
-        AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult,
-        CustomProviderProtocol,
+        AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult, CustomProviderProtocol,
     },
     prompt::PromptManager,
     providers::{default_api_url, default_model, get_provider},
@@ -71,7 +70,9 @@ impl AiCompletionService {
 }
 
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn cleanup_completion_cache(cache: &mut HashMap<CompletionCacheKey, CachedCompletion>) {
@@ -112,7 +113,10 @@ fn build_completion_cache_key(
         model: resolve_cache_model(provider, config),
         prefix: truncate_suffix_for_cache(&request.prefix),
         provider,
-        suffix: request.suffix.as_deref().map(|s| truncate_suffix_for_cache(s)),
+        suffix: request
+            .suffix
+            .as_deref()
+            .map(|s| truncate_suffix_for_cache(s)),
     }
 }
 

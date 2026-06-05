@@ -3,9 +3,9 @@ mod common;
 mod custom;
 mod deepseek;
 mod kimi;
-mod minimax;
 mod mimo;
 mod mimo_coding;
+mod minimax;
 mod openai;
 
 use async_trait::async_trait;

@@ -21,8 +21,7 @@ import {
 	type TooltipView,
 	type ViewUpdate,
 } from '@codemirror/view';
-import { Channel } from '@tauri-apps/api/core';
-import { generateCompletionStream } from '@/invoke/ai';
+import { streamCompletion } from '@/invoke/ai';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
@@ -894,41 +893,7 @@ export function useEditor({
 			let completion = '';
 
 			try {
-				const channel = new Channel<string>((chunk) => {
-					if (requestId !== requestSequenceRef.current) return;
-					if (chunk.length === 0) return;
-
-					completion += chunk;
-
-					if (streamingRafPendingRef.current) return;
-
-					streamingRafPendingRef.current = true;
-					requestAnimationFrame(() => {
-						streamingRafPendingRef.current = false;
-
-						if (requestId !== requestSequenceRef.current) return;
-
-						const currentView = viewRef.current;
-						if (!currentView) return;
-						if (!isSnapshotCurrent(currentView, snapshot)) return;
-
-						currentView.dispatch({
-							effects: [
-								setCompletionPreviewEffect.of({
-									pos: cursor,
-									streaming: true,
-									text: completion,
-								}),
-								internalCompletionEffect.of(true),
-							],
-						});
-
-						// Scroll to keep ghost text visible as it grows
-						scrollParentToCursor(currentView, cursor);
-					});
-				});
-
-				await generateCompletionStream({
+				await streamCompletion({
 					config: {
 						apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
 						customProtocol:
@@ -942,7 +907,39 @@ export function useEditor({
 						suffix: suffix.length > 0 ? suffix : null,
 						title: title ?? null,
 					},
-					channel,
+					onChunk: (chunk) => {
+						if (requestId !== requestSequenceRef.current) return;
+						if (chunk.length === 0) return;
+
+						completion += chunk;
+
+						if (streamingRafPendingRef.current) return;
+
+						streamingRafPendingRef.current = true;
+						requestAnimationFrame(() => {
+							streamingRafPendingRef.current = false;
+
+							if (requestId !== requestSequenceRef.current) return;
+
+							const currentView = viewRef.current;
+							if (!currentView) return;
+							if (!isSnapshotCurrent(currentView, snapshot)) return;
+
+							currentView.dispatch({
+								effects: [
+									setCompletionPreviewEffect.of({
+										pos: cursor,
+										streaming: true,
+										text: completion,
+									}),
+									internalCompletionEffect.of(true),
+								],
+							});
+
+							// Scroll to keep ghost text visible as it grows
+							scrollParentToCursor(currentView, cursor);
+						});
+					},
 				});
 
 				if (requestId !== requestSequenceRef.current) {

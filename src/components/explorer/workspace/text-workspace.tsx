@@ -13,6 +13,7 @@ type TextWorkspaceProps = {
 	content: string;
 	encoding?: string | null;
 	filePath: string;
+	rootPath: string | null;
 	mode?: 'edit' | 'preview';
 };
 
@@ -34,6 +35,7 @@ export function TextWorkspace({
 	content,
 	encoding,
 	filePath,
+	rootPath,
 	mode = 'edit',
 }: TextWorkspaceProps) {
 	const { saveMode } = useAiSettings();
@@ -212,6 +214,8 @@ export function TextWorkspace({
 			onSave={handleSave}
 			saveMode={saveMode}
 			saveStatus={saveStatus}
+			filePath={filePath}
+			rootPath={rootPath}
 			title={fileName}
 			value={value}
 			mode={mode}

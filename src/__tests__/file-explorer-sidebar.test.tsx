@@ -120,6 +120,8 @@ function createSidebarProps(
 		onOpenFolder: vi.fn(),
 		onPasteNode: vi.fn(),
 		onRefresh: vi.fn(),
+		sortEnabled: true,
+		onSortToggle: vi.fn(),
 		onGitRefresh: vi.fn(),
 		onGitRefreshWorkspace: vi.fn(),
 		onGitStatusChange: vi.fn(),

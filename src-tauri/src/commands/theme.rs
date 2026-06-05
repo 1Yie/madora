@@ -51,7 +51,12 @@ pub fn get_system_theme() -> SystemTheme {
     fn detect() -> SystemTheme {
         use std::process::Command;
         // macOS: AppleInterfaceStyle = "Dark" when dark mode enabled
-        let scheme = match Command::new("defaults").arg("read").arg("-g").arg("AppleInterfaceStyle").output() {
+        let scheme = match Command::new("defaults")
+            .arg("read")
+            .arg("-g")
+            .arg("AppleInterfaceStyle")
+            .output()
+        {
             Ok(output) => {
                 if output.status.success() {
                     let s = String::from_utf8_lossy(&output.stdout).to_lowercase();
@@ -64,13 +69,16 @@ pub fn get_system_theme() -> SystemTheme {
         };
 
         // macOS accent color is more involved; skip for now.
-        SystemTheme { scheme, accent: None }
+        SystemTheme {
+            scheme,
+            accent: None,
+        }
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
     fn detect() -> SystemTheme {
-        use std::process::Command;
         use std::path::Path;
+        use std::process::Command;
 
         let mut scheme = "light".to_string();
         let mut accent: Option<String> = None;
@@ -90,8 +98,12 @@ pub fn get_system_theme() -> SystemTheme {
             .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).to_lowercase());
 
-        if gnome_color_scheme.as_deref().is_some_and(|s| s.contains("dark") || s.contains("prefer-dark"))
-            || gnome_gtk_theme.as_deref().is_some_and(|s| s.contains("dark"))
+        if gnome_color_scheme
+            .as_deref()
+            .is_some_and(|s| s.contains("dark") || s.contains("prefer-dark"))
+            || gnome_gtk_theme
+                .as_deref()
+                .is_some_and(|s| s.contains("dark"))
         {
             scheme = "dark".to_string();
         }
@@ -103,20 +115,25 @@ pub fn get_system_theme() -> SystemTheme {
                 .output()
                 .ok()
                 .filter(|o| o.status.success())
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().trim_matches('\'').to_lowercase())
+                .map(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .trim()
+                        .trim_matches('\'')
+                        .to_lowercase()
+                })
             {
                 // gsettings 返回的是颜色名称字符串，转换为 hex
                 accent = match raw.as_str() {
-                    "blue"   => Some("#3584E4".to_string()),
-                    "teal"   => Some("#2190A4".to_string()),
-                    "green"  => Some("#3A944A".to_string()),
+                    "blue" => Some("#3584E4".to_string()),
+                    "teal" => Some("#2190A4".to_string()),
+                    "green" => Some("#3A944A".to_string()),
                     "yellow" => Some("#C88800".to_string()),
                     "orange" => Some("#E66100".to_string()),
-                    "red"    => Some("#E62D42".to_string()),
-                    "pink"   => Some("#D56199".to_string()),
+                    "red" => Some("#E62D42".to_string()),
+                    "pink" => Some("#D56199".to_string()),
                     "purple" => Some("#9141AC".to_string()),
-                    "slate"  => Some("#6F8396".to_string()),
-                    _        => None,
+                    "slate" => Some("#6F8396".to_string()),
+                    _ => None,
                 };
             }
         }
@@ -171,7 +188,9 @@ pub fn get_system_theme() -> SystemTheme {
             }
         }
 
-        kde6_accent.or(kde5_accent).map(|(r, g, b)| format!("#{:02X}{:02X}{:02X}", r, g, b))
+        kde6_accent
+            .or(kde5_accent)
+            .map(|(r, g, b)| format!("#{:02X}{:02X}{:02X}", r, g, b))
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
