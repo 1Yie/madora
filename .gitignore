@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .cargo/
 .env
+.env.local
+.env.*.local
+.env.*
