@@ -50,6 +50,14 @@ jobs:
             patchelf \
             fuse
 
+      - name: Install OpenSSL (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $vcpkg = if (Test-Path 'C:\vcpkg\vcpkg.exe') { 'C:\vcpkg\vcpkg.exe' } else { 'vcpkg' }
+          & $vcpkg integrate install
+          & $vcpkg install openssl:x64-windows-static-md
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:

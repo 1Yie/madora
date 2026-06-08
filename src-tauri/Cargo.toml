@@ -45,7 +45,9 @@ dotenv = "0.15"
 getrandom = "0.2"
 keyring = "4"
 keyring-core = "1"
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
+
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 git2 = { version = "0.20", features = ["vendored-libgit2"] }
 
