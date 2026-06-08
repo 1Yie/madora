@@ -54,6 +54,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
+
       - name: Run Rust tests
         run: cargo test
         working-directory: ./src-tauri
@@ -78,7 +79,31 @@ jobs:
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
 
-      - name: Build and release
+      - name: Build CLI binary (macOS universal)
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          cargo build -p madora-cli --release --target aarch64-apple-darwin
+          cargo build -p madora-cli --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create \
+            target/aarch64-apple-darwin/release/mado \
+            target/x86_64-apple-darwin/release/mado \
+            -output target/release/mado
+        working-directory: ./src-tauri
+
+      - name: Build CLI binary (Linux / Windows)
+        if: matrix.platform != 'macos-latest'
+        shell: bash
+        run: cargo build -p madora-cli --release
+        working-directory: ./src-tauri
+
+      - name: Create platform-agnostic binary path (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: cp src-tauri/target/release/mado.exe src-tauri/target/release/mado
+
+      - name: Build and release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,3 +114,19 @@ jobs:
           releaseDraft: true
           prerelease: false
 
+      - name: Upload CLI binary to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          EXT="${{ matrix.platform == 'windows-latest' && '.exe' || '' }}"
+          case "${{ matrix.platform }}" in
+            macos-latest)   PLATFORM="aarch64-apple-darwin"  ;;
+            ubuntu-22.04)   PLATFORM="x86_64-unknown-linux-gnu" ;;
+            windows-latest) PLATFORM="x86_64-pc-windows-msvc" ;;
+          esac
+          BINARY="src-tauri/target/release/mado${EXT}"
+          ASSET="mado-${PLATFORM}${EXT}"
+          gh release upload "$TAG" "${BINARY}#${ASSET}" --clobber
