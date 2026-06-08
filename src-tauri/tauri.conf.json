@@ -18,7 +18,7 @@
 		]
 	},
 	"build": {
-		"beforeBuildCommand": "bun run build && mkdir -p src-tauri/target/release && touch src-tauri/target/release/mado",
+		"beforeBuildCommand": "bun run build && node scripts/ensure-mado-bin.mjs",
 		"beforeDevCommand": "bun run dev",
 		"devUrl": "http://localhost:1420",
 		"frontendDist": "../dist"
