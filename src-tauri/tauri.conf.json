@@ -18,7 +18,7 @@
 		]
 	},
 	"build": {
-		"beforeBuildCommand": "bun run build",
+		"beforeBuildCommand": "bun run build && node -e \"const f=require('fs'),p=require('path'),c=p.join('src-tauri','target','release','mado');f.existsSync(c)?0:(f.mkdirSync(p.dirname(c),{recursive:true}),f.writeFileSync(c,''))\"",
 		"beforeDevCommand": "bun run dev",
 		"devUrl": "http://localhost:1420",
 		"frontendDist": "../dist"
@@ -49,6 +49,9 @@
 			}
 		},
 		"publisher": "ichiyo",
+		"resources": {
+			"target/release/mado": "binaries/mado"
+		},
 		"targets": "all"
 	},
 	"identifier": "in.ichiyo.madora",

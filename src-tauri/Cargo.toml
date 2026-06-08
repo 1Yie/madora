@@ -1,3 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "madora-cli",
+]
+
 [package]
 name = "madora"
 version = "0.3.1"
@@ -49,16 +56,3 @@ winreg = "0.10"
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"
-
-
-
-
-
-
-
-
-
-
-
-
-
