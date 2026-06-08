@@ -123,6 +123,19 @@ export async function copyWorkspaceNode(opts: {
 	});
 }
 
+/** Copies external files into the workspace. */
+export async function importExternalFiles(opts: {
+	destinationDirectory: string;
+	rootPath: string;
+	sourcePaths: string[];
+}): Promise<ExplorerNode[]> {
+	return invoke<ExplorerNode[]>('import_external_files', {
+		destinationDirectory: opts.destinationDirectory,
+		rootPath: opts.rootPath,
+		sourcePaths: opts.sourcePaths,
+	});
+}
+
 /** Moves a file or directory within the workspace. */
 export async function moveWorkspaceNode(opts: {
 	destinationDirectory: string;

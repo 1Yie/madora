@@ -445,6 +445,38 @@ fn ensure_target_available(target_path: &Path) -> Result<(), String> {
     Err(format!("目标已存在: {}", target_path.display()))
 }
 
+/// If the target path already exists, resolve an available path by appending
+/// ` (1)`, ` (2)`, etc. to the stem (same pattern as import external files).
+/// Otherwise returns the original path unchanged.
+fn resolve_available_path(target_path: &Path) -> PathBuf {
+    if !target_path.exists() {
+        return target_path.to_path_buf();
+    }
+
+    let parent = target_path.parent().unwrap_or(Path::new(""));
+    let stem = target_path
+        .file_stem()
+        .map(|s| s.to_string_lossy())
+        .unwrap_or_default()
+        .to_string();
+    let ext = target_path
+        .extension()
+        .map(|s| format!(".{}", s.to_string_lossy()))
+        .unwrap_or_default();
+    let mut counter = 1;
+
+    loop {
+        let new_name = format!("{} ({}){}", stem, counter, ext);
+        let new_path = parent.join(&new_name);
+
+        if !new_path.exists() {
+            break new_path;
+        }
+
+        counter += 1;
+    }
+}
+
 fn copy_workspace_node_recursive(
     source_path: &Path,
     destination_path: &Path,
@@ -570,6 +602,53 @@ pub fn move_workspace_node(
     fs::rename(source_path, destination_path).map_err(|error| error.to_string())
 }
 
+/// Allowed extensions for external file import (markdown & images only).
+fn is_allowed_import_extension(path: &Path) -> bool {
+    classify_file_kind(path).is_some_and(|kind| {
+        matches!(
+            kind,
+            ExplorerFileKind::Markdown | ExplorerFileKind::Image
+        )
+    })
+}
+
+pub fn import_external_file(
+    root_path: &Path,
+    destination_directory: &Path,
+    source_path: &Path,
+) -> Result<ExplorerNode, String> {
+    if !source_path.exists() {
+        return Err(format!("源文件不存在: {}", source_path.display()));
+    }
+
+    if !source_path.is_file() {
+        return Err(format!("只能导入文件: {}", source_path.display()));
+    }
+
+    if !is_allowed_import_extension(source_path) {
+        return Err(format!(
+            "不支持的文件类型: {}（仅支持 .md/.mdx 和图片格式）",
+            source_path.display()
+        ));
+    }
+
+    ensure_within_root(root_path, destination_directory)?;
+
+    if !destination_directory.is_dir() {
+        return Err("目标目录不存在".to_string());
+    }
+
+    let file_name = path_name(source_path);
+    let dest_path = resolve_available_path(&destination_directory.join(&file_name));
+
+    fs::copy(source_path, &dest_path)
+        .map_err(|error| format!("复制文件失败: {}", error))?;
+
+    let file_kind = classify_file_kind(&dest_path).unwrap_or(ExplorerFileKind::Text);
+
+    Ok(build_file_node(root_path, &dest_path, file_kind))
+}
+
 pub fn copy_workspace_node(
     root_path: &Path,
     source_path: &Path,
@@ -600,9 +679,9 @@ pub fn copy_workspace_node(
     let destination_path = destination_directory.join(file_name);
 
     ensure_parent_exists(&destination_path)?;
-    ensure_target_available(&destination_path)?;
+    let resolved_path = resolve_available_path(&destination_path);
 
-    copy_workspace_node_recursive(source_path, &destination_path)
+    copy_workspace_node_recursive(source_path, &resolved_path)
 }
 
 #[cfg(test)]

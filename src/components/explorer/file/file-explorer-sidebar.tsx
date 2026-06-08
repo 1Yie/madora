@@ -22,12 +22,14 @@ import {
 import {
 	type FormEvent,
 	type ReactNode,
+	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
 	useLayoutEffect,
 	useState,
 } from 'react';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { pathExists } from '@/invoke/system';
 import { Button } from '@/components/ui/button';
 import {
@@ -110,6 +112,10 @@ type FileExplorerSidebarProps = {
 	onRestoreDeletedNode: (targetPath: string) => Promise<void>;
 	onOpenFolder: () => void;
 	onPasteNode: (destinationPath: string | null) => Promise<void>;
+	onImportExternalFiles?: (
+		sourcePaths: string[],
+		destinationPath: string | null
+	) => Promise<void>;
 	onRefresh: () => void;
 	sortEnabled: boolean;
 	onSortToggle: () => void;
@@ -1171,6 +1177,7 @@ function FileTreeNode({
 					clipboard={clipboard}
 					onAction={(action) => onContextAction(action, node)}
 					pasteDisabled={!clipboard}
+					isDeletedGitEntry={isDeletedGitEntry}
 					target={node}
 				/>
 			</ContextMenuRoot>
@@ -1199,6 +1206,7 @@ export function FileExplorerSidebar({
 	onOpenFolder,
 	onRefresh,
 	onPasteNode,
+	onImportExternalFiles,
 	onGitRefresh,
 	onGitRefreshWorkspace,
 	onGitStatusChange,
@@ -1207,6 +1215,7 @@ export function FileExplorerSidebar({
 	onSelectNode,
 	onClearClipboard,
 }: FileExplorerSidebarProps) {
+	const sidebarRef = useRef<HTMLElement>(null);
 	const [expansionState, setExpansionState] = useState<ExplorerExpansionState>({
 		collapsedPaths: new Set(),
 		expandedPaths: new Set(),
@@ -1225,6 +1234,85 @@ export function FileExplorerSidebar({
 	const [bookmarksExpanded, setBookmarksExpanded] = useState(true);
 	const [pendingScrollToPath, setPendingScrollToPath] = useState<string | null>(
 		null
+	);
+	const [isDragOver, setIsDragOver] = useState(false);
+
+	// HTML5 dragover visual (always fires; Tauri handles actual drop data)
+	const handleDragOver = useCallback(
+		(e: React.DragEvent) => {
+			if (!root) return;
+			e.preventDefault();
+			e.stopPropagation();
+			e.dataTransfer.dropEffect = 'copy';
+			setIsDragOver(true);
+		},
+		[root]
+	);
+
+	const handleDragLeave = useCallback((e: React.DragEvent) => {
+		if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+		setIsDragOver(false);
+	}, []);
+
+	const handleDrop = useCallback(
+		(e: React.DragEvent) => {
+			e.preventDefault();
+			e.stopPropagation();
+			setIsDragOver(false);
+
+			if (!root || !onImportExternalFiles) return;
+
+			const sourcePaths: string[] = [];
+
+			// 1. files[].path (Tauri webview extension on macOS)
+			for (let i = 0; i < e.dataTransfer.files.length; i++) {
+				const file = e.dataTransfer.files[i];
+				const path = (file as unknown as { path?: string }).path;
+
+				if (path) sourcePaths.push(path);
+			}
+
+			// 2. text/uri-list (always available for Finder drags)
+			if (sourcePaths.length === 0) {
+				const uriList = e.dataTransfer.getData('text/uri-list');
+
+				if (uriList) {
+					for (const uri of uriList.split('\n')) {
+						const trimmed = uri.trim();
+
+						if (trimmed.startsWith('file://')) {
+							sourcePaths.push(decodeURI(trimmed.slice(7)));
+						}
+					}
+				}
+			}
+
+			// 3. text/plain direct path fallback
+			if (sourcePaths.length === 0) {
+				const text = e.dataTransfer.getData('text/plain');
+
+				if (text && text.trim().length > 5 && !text.includes('\n')) {
+					sourcePaths.push(text.trim());
+				}
+			}
+
+			if (sourcePaths.length === 0) {
+				showErrorToast('无法读取拖放的文件路径');
+				return;
+			}
+
+			// Determine target directory
+			const destNode = hoveredNodeRef.current ?? null;
+			const destPath =
+				destNode?.kind === 'directory'
+					? destNode.path
+					: destNode
+						? getParentPath(destNode.path)
+						: root.path;
+
+			void onImportExternalFiles(sourcePaths, destPath);
+		},
+		[onImportExternalFiles, root]
 	);
 	const createTargetNode = resolveCreateTargetNode(root, selectedPath);
 	const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
@@ -1404,12 +1492,40 @@ export function FileExplorerSidebar({
 		}
 	}, [pendingScrollToPath, flatItems, virtualizer]);
 
+	// Shared helper: interpret clipboard text as file path(s) or file name
+	async function handleClipboardText(
+		text: string,
+		destPath: string | null,
+		doImport: typeof onImportExternalFiles,
+		doCreateMarkdown: typeof onCreateMarkdown
+	) {
+		const trimmed = text.trim();
+
+		if (!trimmed) return;
+
+		// Long text (looks like a file path)
+		if (trimmed.length > 10 && !trimmed.includes('\n')) {
+			void doImport?.([trimmed], destPath);
+			return;
+		}
+
+		// Short text (file name for quick creation)
+		if (trimmed.length < 200 && !trimmed.includes('\n') && doCreateMarkdown) {
+			void doCreateMarkdown(trimmed, destPath);
+			showSuccessToast(`已创建文件 "${trimmed}"`);
+		}
+	}
+
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (pendingAction !== null) return;
 
+			// Only handle shortcuts when the event target is inside the sidebar
+			if (!sidebarRef.current?.contains(e.target as Node)) return;
+
 			// Never intercept inside native inputs (rename/create dialogs)
 			const tag = (e.target as HTMLElement).tagName;
+
 			if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
 			// Prefer the node under the mouse cursor, fall back to selection
@@ -1419,6 +1535,7 @@ export function FileExplorerSidebar({
 					? findNodeByPath(mergedRoot, selectedPath)
 					: null);
 			const mod = e.ctrlKey || e.metaKey;
+
 			if (mod && e.key === 'c' && node) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
@@ -1434,6 +1551,91 @@ export function FileExplorerSidebar({
 				e.preventDefault();
 				void onPasteNode(node?.path ?? null);
 				showSuccessToast(`已粘贴 "${clipboard.item.name}"`);
+			} else if (mod && e.key === 'v' && !clipboard) {
+				// System clipboard: read proactively via navigator.clipboard
+				// (paste event may not fire when no editable element is focused)
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+
+				const destNode = hoveredNodeRef.current ?? null;
+				const destPath =
+					destNode?.kind === 'directory'
+						? destNode.path
+						: destNode
+							? getParentPath(destNode.path)
+							: (root?.path ?? null);
+
+				void (async () => {
+					try {
+						if (!navigator.clipboard?.read) {
+							// Fall back to readText
+							const text = await navigator.clipboard.readText();
+
+							if (!text) return;
+							await handleClipboardText(
+								text,
+								destPath,
+								onImportExternalFiles,
+								onCreateMarkdown
+							);
+							return;
+						}
+
+						const items = await navigator.clipboard.read();
+						const filePaths: string[] = [];
+						let text: string | null = null;
+
+						for (const item of items) {
+							if (item.types.includes('text/uri-list')) {
+								const blob = await item.getType('text/uri-list');
+								const content = await blob.text();
+
+								for (const line of content.split('\n')) {
+									const trimmed = line.trim();
+
+									if (trimmed.startsWith('file://')) {
+										filePaths.push(decodeURI(trimmed.slice(7)));
+									}
+								}
+							}
+
+							if (item.types.includes('text/plain') && !text) {
+								const blob = await item.getType('text/plain');
+								text = await blob.text();
+							}
+						}
+
+						if (filePaths.length > 0) {
+							void onImportExternalFiles?.(filePaths, destPath);
+							return;
+						}
+
+						if (text != null) {
+							await handleClipboardText(
+								text,
+								destPath,
+								onImportExternalFiles,
+								onCreateMarkdown
+							);
+						}
+					} catch {
+						try {
+							// read() failed, try readText
+							const text = await navigator.clipboard.readText();
+
+							if (text) {
+								await handleClipboardText(
+									text,
+									destPath,
+									onImportExternalFiles,
+									onCreateMarkdown
+								);
+							}
+						} catch {
+							// Clipboard API unavailable
+						}
+					}
+				})();
 			} else if (e.key === 'Delete' && node) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
@@ -1459,6 +1661,154 @@ export function FileExplorerSidebar({
 		onCutNode,
 		onPasteNode,
 		pendingAction,
+		selectedPath,
+	]);
+
+	// ── Tauri native drag-drop event (provides real file paths) ──────
+	useEffect(() => {
+		if (!root || !onImportExternalFiles) return;
+
+		let unlistenDragDrop: (() => void) | null = null;
+
+		void getCurrentWebview()
+			.onDragDropEvent((event) => {
+				const { type } = event.payload;
+
+				if (type === 'over' || type === 'enter') {
+					setIsDragOver(true);
+				} else if (type === 'leave') {
+					setIsDragOver(false);
+				} else if (type === 'drop') {
+					setIsDragOver(false);
+
+					const sourcePaths = event.payload.paths;
+
+					if (sourcePaths.length === 0) return;
+
+					// Determine target directory
+					const destNode =
+						hoveredNodeRef.current ??
+						(selectedPath && mergedRoot
+							? findNodeByPath(mergedRoot, selectedPath)
+							: null);
+					const destPath =
+						destNode?.kind === 'directory'
+							? destNode.path
+							: destNode
+								? getParentPath(destNode.path)
+								: root.path;
+
+					void onImportExternalFiles(sourcePaths, destPath);
+				}
+			})
+			.then((unlisten) => {
+				unlistenDragDrop = unlisten;
+			});
+
+		return () => {
+			setIsDragOver(false);
+			unlistenDragDrop?.();
+		};
+	}, [mergedRoot, onImportExternalFiles, root, selectedPath]);
+
+	// Fallback paste event listener
+	useEffect(() => {
+		function onPaste(e: ClipboardEvent) {
+			// Only handle paste when the event target is inside the sidebar
+			if (!sidebarRef.current?.contains(e.target as Node)) return;
+
+			const target = e.target as HTMLElement | null;
+			const tag = target?.tagName ?? '';
+
+			if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+			if (clipboard || !root || (!onImportExternalFiles && !onCreateMarkdown))
+				return;
+
+			const data = e.clipboardData;
+
+			if (!data) return;
+
+			const filePaths: string[] = [];
+
+			// 1. clipboardData.files (Tauri webview extension)
+			for (let i = 0; i < data.files.length; i++) {
+				const file = data.files[i];
+				const path = (file as unknown as { path?: string }).path;
+
+				if (path) filePaths.push(path);
+			}
+
+			// 2. text/uri-list for file:// URLs
+			if (filePaths.length === 0) {
+				const uriList = data.getData('text/uri-list');
+
+				if (uriList) {
+					for (const uri of uriList.split('\n')) {
+						const trimmed = uri.trim();
+
+						if (trimmed.startsWith('file://')) {
+							filePaths.push(decodeURI(trimmed.slice(7)));
+						}
+					}
+				}
+			}
+
+			// 3. text/plain — file path or new file name
+			const text = data.getData('text/plain');
+
+			if (text && text.trim().length > 0 && !text.includes('\n')) {
+				// Could be a file path — try to import
+				const maybePath = text.trim();
+
+				if (
+					filePaths.length === 0 &&
+					onImportExternalFiles &&
+					maybePath.length > 10
+				) {
+					filePaths.push(maybePath);
+				}
+			}
+
+			const destNode =
+				hoveredNodeRef.current ??
+				(selectedPath && mergedRoot
+					? findNodeByPath(mergedRoot, selectedPath)
+					: null);
+			const destPath =
+				destNode?.kind === 'directory'
+					? destNode.path
+					: destNode
+						? getParentPath(destNode.path)
+						: (root?.path ?? null);
+
+			if (filePaths.length > 0 && onImportExternalFiles) {
+				e.preventDefault();
+				void onImportExternalFiles(filePaths, destPath);
+				return;
+			}
+
+			// 4. Short text — use as file name
+			if (
+				text &&
+				onCreateMarkdown &&
+				text.trim().length > 0 &&
+				text.trim().length < 200 &&
+				!text.includes('\n')
+			) {
+				e.preventDefault();
+				void onCreateMarkdown(text.trim(), destPath);
+			}
+		}
+
+		document.addEventListener('paste', onPaste);
+		return () => document.removeEventListener('paste', onPaste);
+	}, [
+		clipboard,
+		mergedRoot,
+		onCreateMarkdown,
+		onImportExternalFiles,
+		root,
 		selectedPath,
 	]);
 
@@ -1645,6 +1995,7 @@ export function FileExplorerSidebar({
 	return (
 		<>
 			<aside
+				ref={sidebarRef}
 				className="flex min-w-0 flex-1 flex-col bg-sidebar
 					text-sidebar-foreground"
 			>
@@ -1889,9 +2240,13 @@ export function FileExplorerSidebar({
 					<ContextMenuTrigger className="min-h-0 flex flex-1">
 						<div
 							ref={viewportRef}
-							className="overflow-auto size-full min-h-0 px-2"
+							className={`overflow-auto size-full min-h-0 px-2 transition-colors
+								${isDragOver ? 'bg-sidebar-accent/40 ring-2 ring-primary/40 ring-inset' : ''}`}
 							data-os-scroll
 							data-native-dialog-scroll-lock
+							onDragOver={handleDragOver}
+							onDragLeave={handleDragLeave}
+							onDrop={handleDrop}
 						>
 							{mergedRoot ? (
 								<div
