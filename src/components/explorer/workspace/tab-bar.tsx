@@ -25,6 +25,7 @@ export type TabEntry = {
 	previewLoading: boolean;
 	previewError: string | null;
 	previewRequestId: number;
+	unsaved: boolean;
 };
 
 type TabBarProps = {
@@ -119,8 +120,8 @@ export function TabBar({
 					ref={isScroll ? contentRef : undefined}
 					className={
 						isScroll
-							? 'flex flex-row h-full w-max items-end'
-							: 'flex flex-row flex-wrap items-end mb-[-1px]'
+							? 'flex flex-row h-full w-max items-stretch'
+							: 'flex flex-row flex-wrap items-end -mb-px'
 					}
 				>
 					{tabs.map((tab) => {
@@ -153,21 +154,47 @@ export function TabBar({
 											'focus-visible:outline-none focus-visible:bg-muted/50',
 											isActive
 												? 'bg-background text-foreground'
-												: 'text-muted-foreground hover:text-foreground'
+												: 'text-muted-foreground hover:text-foreground',
+											tab.node.isMissing &&
+												`text-muted-foreground/60
+												hover:text-muted-foreground/80`
 										)}
 										onClick={() => onSelectTab(tab.id)}
+										onMouseDown={(e) => {
+											if (e.button === 1) {
+												e.preventDefault();
+												onCloseTab(tab.id);
+											}
+										}}
 										role="tab"
 										aria-selected={isActive}
 										type="button"
 									>
 										{isActive && (
 											<div
-												className="absolute inset-x-0 top-0 h-0.5 bg-primary"
+												className={cn(
+													'absolute inset-x-0 top-0 h-0.5',
+													tab.node.isMissing
+														? 'bg-muted-foreground/40'
+														: 'bg-primary'
+												)}
 												aria-hidden="true"
 											/>
 										)}
-										<Icon className="size-3.5 shrink-0" />
-										<span className="max-w-32 truncate">{fileName}</span>
+										<Icon
+											className={cn(
+												'size-3.5 shrink-0',
+												tab.node.isMissing && 'opacity-50'
+											)}
+										/>
+										<span
+											className={cn(
+												'max-w-32 truncate leading-4 pb-px',
+												tab.node.isMissing && 'line-through'
+											)}
+										>
+											{fileName}
+										</span>
 										<span
 											className={cn(
 												`ml-0.5 flex size-4 shrink-0 items-center justify-center
@@ -191,7 +218,21 @@ export function TabBar({
 											tabIndex={-1}
 											aria-label={`关闭 ${fileName}`}
 										>
-											<X className="size-3" />
+											{tab.unsaved ? (
+												<>
+													<span className="group-hover:hidden">
+														<span
+															className="block size-2 rounded-full
+																bg-muted-foreground"
+														/>
+													</span>
+													<span className="hidden group-hover:block">
+														<X className="size-3" />
+													</span>
+												</>
+											) : (
+												<X className="size-3" />
+											)}
 										</span>
 									</button>
 								</ContextMenuTrigger>

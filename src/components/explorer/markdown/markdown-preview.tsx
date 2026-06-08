@@ -1,11 +1,11 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { ComponentProps } from 'react';
+import { useEffect, useState, type ComponentProps } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { openUrl } from '@/invoke/opener';
-import { getParentPath, joinExplorerPath } from '@/lib/path-utils';
+import { resolveImageSrc as resolveImageSrcBackend } from '@/invoke/workspace';
 
 import { cn } from '@/lib/utils';
 import { HighlightedCodeBlock } from './code-block-highlight';
@@ -19,7 +19,8 @@ type MarkdownPreviewProps = {
 	rootPath: string | null;
 };
 
-/** Normalize a filesystem path while preserving its absolute root or drive. */
+/** Normalize a filesystem path while preserving its absolute root or drive.
+ *  (Used only for the final convertFileSrc call on the returned path.) */
 function normalizeFileSystemPath(path: string): string {
 	const normalized = path.replace(/\\/g, '/');
 	const driveMatch = normalized.match(/^[A-Za-z]:/);
@@ -56,14 +57,17 @@ function normalizeFileSystemPath(path: string): string {
 	return suffix;
 }
 
-function resolveImageSrc(
+/**
+ * Synchronous fallback for image resolution (used for initial render
+ * before the async backend call completes).
+ */
+function resolveImageSrcSync(
 	src: string | undefined,
 	filePath: string,
 	rootPath: string | null
 ): string | undefined {
 	if (!src) return undefined;
 
-	// Leave URLs and data URIs untouched
 	if (
 		src.startsWith('http://') ||
 		src.startsWith('https://') ||
@@ -74,9 +78,10 @@ function resolveImageSrc(
 	}
 
 	if (src.startsWith('/') && rootPath) {
-		// Absolute path — resolve relative to workspace root
+		const trimmedRoot = rootPath.replace(/\\/g, '/').replace(/\/+$/, '');
+		const relativeSrc = src.replace(/^\/+/, '');
 		const absolutePath = normalizeFileSystemPath(
-			joinExplorerPath(rootPath, src.slice(1))
+			`${trimmedRoot}/${relativeSrc}`
 		);
 		try {
 			return convertFileSrc(absolutePath);
@@ -86,15 +91,121 @@ function resolveImageSrc(
 	}
 
 	// Relative path — resolve relative to the markdown file's directory
-	const fileDir = getParentPath(filePath);
-	if (!fileDir) return src;
-	const absolutePath = normalizeFileSystemPath(joinExplorerPath(fileDir, src));
-	try {
-		return convertFileSrc(absolutePath);
-	} catch {
+	const fileDir = filePath.replace(/\\/g, '/');
+	const lastSlash = fileDir.lastIndexOf('/');
+	if (lastSlash >= 0) {
+		const basePath = fileDir.slice(0, lastSlash);
+		const absolutePath = normalizeFileSystemPath(`${basePath}/${src}`);
+		try {
+			return convertFileSrc(absolutePath);
+		} catch {
+			return src;
+		}
+	}
+
+	return src;
+}
+
+/**
+ * Async image resolution via backend, with synchronous fallback.
+ * The backend is the single source of truth for file path resolution.
+ */
+async function resolveImageSrc(
+	src: string | undefined,
+	filePath: string,
+	rootPath: string | null
+): Promise<string | undefined> {
+	if (!src) return undefined;
+
+	if (
+		src.startsWith('http://') ||
+		src.startsWith('https://') ||
+		src.startsWith('data:') ||
+		src.startsWith('asset://')
+	) {
 		return src;
 	}
+
+	try {
+		const result = await resolveImageSrcBackend(src, filePath, rootPath);
+
+		// The backend returns a data URL when the file was read successfully,
+		// or the resolved absolute path as fallback.
+		if (result.startsWith('data:')) {
+			return result;
+		}
+
+		// Fallback: convert the filesystem path to a Tauri asset URL
+		try {
+			return convertFileSrc(result);
+		} catch {
+			return result;
+		}
+	} catch {
+		// Fallback to synchronous resolution
+		return resolveImageSrcSync(src, filePath, rootPath);
+	}
 }
+
+// ─── Standalone image component with async resolution ─────────────
+
+function MarkdownImage({
+	src,
+	alt,
+	filePath,
+	rootPath,
+	// react-markdown passes a `node` prop (the MDAST AST node object).
+	// It would serialize as [object Object] on the DOM element, so we
+	// explicitly discard it and spread only valid HTML attributes.
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	node: _node,
+	...rest
+}: {
+	src?: string;
+	alt?: string;
+	filePath: string;
+	rootPath: string | null;
+	node?: unknown;
+	[key: string]: unknown;
+}) {
+	const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() =>
+		resolveImageSrcSync(src, filePath, rootPath)
+	);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		void resolveImageSrc(src, filePath, rootPath).then((result) => {
+			if (!cancelled) {
+				setResolvedSrc(result);
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [src, filePath, rootPath]);
+
+	return (
+		<img
+			{...rest}
+			src={resolvedSrc}
+			alt={alt}
+			loading="lazy"
+			draggable={false}
+			onDragStart={(e) => e.preventDefault()}
+			style={
+				{
+					...(rest.style as React.CSSProperties),
+					WebkitUserDrag: 'none',
+					userSelect: 'none',
+				} as React.CSSProperties
+			}
+		/>
+	);
+}
+
+// ─── Components factory ─────────────────────────────────────────
 
 const components = (
 	filePath: string,
@@ -141,13 +252,8 @@ const components = (
 			<table className="my-0!">{children}</table>
 		</div>
 	),
-	img: ({ src, alt, ...props }) => (
-		<img
-			src={resolveImageSrc(src, filePath, rootPath)}
-			alt={alt}
-			loading="lazy"
-			{...props}
-		/>
+	img: (props) => (
+		<MarkdownImage {...props} filePath={filePath} rootPath={rootPath} />
 	),
 	details: ({ children, ...props }) => <details {...props}>{children}</details>,
 	summary: ({ children, ...props }) => <summary {...props}>{children}</summary>,

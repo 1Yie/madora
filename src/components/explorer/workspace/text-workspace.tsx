@@ -89,6 +89,11 @@ export function TextWorkspace({
 						detail: { filePath },
 					})
 				);
+				window.dispatchEvent(
+					new CustomEvent('editor-dirty-changed', {
+						detail: { filePath },
+					})
+				);
 			} catch (error) {
 				if (saveRequestIdRef.current !== requestId) {
 					return;
@@ -162,7 +167,16 @@ export function TextWorkspace({
 			return;
 		}
 
-		if (value === lastSavedValueRef.current) {
+		const isDirty = value !== lastSavedValueRef.current;
+
+		// Notify parent of dirty state change
+		window.dispatchEvent(
+			new CustomEvent('editor-dirty-changed', {
+				detail: { filePath },
+			})
+		);
+
+		if (!isDirty) {
 			return;
 		}
 
