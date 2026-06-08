@@ -1,3 +1,23 @@
+## [0.3.2](https://github.com/1Yie/madora/compare/v0.3.1...v0.3.2) (2026-06-08)
+
+### Bug Fixes
+
+- bake AUTH_SERVER_URL at compile time for CI builds ([0b901e0](https://github.com/1Yie/madora/commit/0b901e09ae93a00a8e516803299017d10f54c984))
+- bake AUTH_SERVER_URL at compile time for CI builds ([9dcf317](https://github.com/1Yie/madora/commit/9dcf317f38faf0bcf87e608e98a224ed24ebf3c5))
+- bake AUTH_SERVER_URL at compile time via build.rs ([9bf2b23](https://github.com/1Yie/madora/commit/9bf2b2372df9f7cadf1e292d04d9790923fa056f))
+- load .env from exe directory for packaged builds ([594989c](https://github.com/1Yie/madora/commit/594989ca48cc0dd7b94a8098021f7e4c839c9508))
+- load AUTH_SERVER_URL from runtime .env instead of build-time embedding ([05a4ad4](https://github.com/1Yie/madora/commit/05a4ad4b5dc1c4b762b4740dc21b3e313072e8be))
+- remove flaky require_api_key test, test cache directly ([a3a271e](https://github.com/1Yie/madora/commit/a3a271ebf21076bfe0ba64d9fe95250b18cedc5d))
+- remove non-existent .env resource from tauri config ([7717e74](https://github.com/1Yie/madora/commit/7717e7434adfeae528a93697142bc0d6fee56685))
+
+### Features
+
+- **editor:** add tab unsaved indicator and async image resolution ([5c321d3](https://github.com/1Yie/madora/commit/5c321d34e98f09f3e7d54a802104431c691f4e9b))
+- embed AUTH_SERVER_URL at build time with dotenv fallback ([6fc67fc](https://github.com/1Yie/madora/commit/6fc67fceb93ed6fc851b8810fb152796fbc35547))
+- **explorer:** persist workspace state through Rust backend ([9ed84df](https://github.com/1Yie/madora/commit/9ed84dff303f504d1390e02f59007fecab3df02c))
+- **explorer:** support external file import via drag-drop and clipboard ([28a1ae5](https://github.com/1Yie/madora/commit/28a1ae585fc807409f6726e06a2675df92012f0d))
+- **system:** add CLI binary management in settings ([d270d1f](https://github.com/1Yie/madora/commit/d270d1f2efa774c4d724359955095e2e51f8b00a))
+
 ## [0.3.1](https://github.com/1Yie/madora/compare/v0.3.0...v0.3.1) (2026-06-05)
 
 ### Bug Fixes
