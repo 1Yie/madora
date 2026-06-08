@@ -3,3 +3,4 @@ pub mod explorer;
 pub mod git;
 pub mod license;
 pub mod project;
+pub mod workspace;

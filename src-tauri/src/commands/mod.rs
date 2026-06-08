@@ -7,3 +7,4 @@ pub mod secure_storage;
 pub mod system;
 pub mod theme;
 pub mod utility;
+pub mod workspace;

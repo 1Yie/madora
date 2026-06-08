@@ -94,6 +94,16 @@ const emptyStatus: GitStatus = {
 	files: [],
 };
 
+const defaultWorkspaceState = {
+	rootPath: '/workspace',
+	openTabPaths: [] as string[],
+	lastActiveFilePath: null as string | null,
+	sidebarWidth: 320,
+	sortEnabled: true,
+	showHiddenFiles: false,
+	tabBarMode: 'scroll',
+};
+
 vi.mock('@/components/system/ai-settings-provider', () => ({
 	useAiSettings: () => ({ showHiddenFiles: false }),
 }));
@@ -156,12 +166,16 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', () => ({
 
 describe('WorkspaceBrowser', () => {
 	const mockInvoke = vi.mocked(invoke);
+	let workspaceState: typeof defaultWorkspaceState;
 
 	beforeEach(() => {
 		window.localStorage.clear();
-		window.localStorage.setItem('madora-workspace-root-path', '/workspace');
+		workspaceState = { ...defaultWorkspaceState };
+
 		mockInvoke.mockImplementation(async (command) => {
 			switch (command) {
+				case 'get_workspace_state':
+					return workspaceState;
 				case 'scan_workspace_folder':
 					return mockInvoke.mock.calls.filter(
 						([calledCommand]) => calledCommand === 'copy_workspace_node'
@@ -181,6 +195,16 @@ describe('WorkspaceBrowser', () => {
 						size: 6,
 						truncated: false,
 					};
+				case 'set_workspace_root':
+				case 'set_open_tab_paths':
+				case 'set_active_tab':
+				case 'add_tab':
+				case 'close_tab':
+				case 'close_tabs':
+				case 'set_sidebar_width':
+				case 'set_tab_bar_mode':
+				case 'clear_workspace_state':
+					return undefined;
 				default:
 					return undefined;
 			}
@@ -217,6 +241,9 @@ describe('WorkspaceBrowser', () => {
 	});
 
 	it('restores the last opened file into the tab bar on mount', async () => {
+		// Simulate a restored state with an active file path
+		workspaceState.lastActiveFilePath = '/workspace/readme.md';
+
 		render(<WorkspaceBrowser />);
 
 		await waitFor(() => {
@@ -226,17 +253,15 @@ describe('WorkspaceBrowser', () => {
 			expect(
 				screen.getAllByText('active:/workspace/readme.md').length
 			).toBeGreaterThan(0);
-			expect(window.localStorage.getItem('madora-open-tab-paths')).toBe(
-				JSON.stringify(['/workspace/readme.md'])
-			);
 		});
 	});
 
 	it('restores multiple persisted tabs without clearing storage on boot', async () => {
-		window.localStorage.setItem(
-			'madora-open-tab-paths',
-			JSON.stringify(['/workspace/readme.md', '/workspace/notes.md'])
-		);
+		workspaceState.openTabPaths = [
+			'/workspace/readme.md',
+			'/workspace/notes.md',
+		];
+		workspaceState.lastActiveFilePath = '/workspace/readme.md';
 
 		render(<WorkspaceBrowser />);
 
@@ -248,21 +273,13 @@ describe('WorkspaceBrowser', () => {
 			expect(
 				screen.getAllByText('active:/workspace/readme.md').length
 			).toBeGreaterThan(0);
-			expect(window.localStorage.getItem('madora-open-tab-paths')).toBe(
-				JSON.stringify(['/workspace/readme.md', '/workspace/notes.md'])
-			);
 		});
 	});
 
-	it('updates tab bar mode immediately when the setting changes', async () => {
+	it('reads tab bar mode from workspace state', async () => {
+		workspaceState.tabBarMode = 'wrap';
+
 		render(<WorkspaceBrowser />);
-
-		await waitFor(() => {
-			expect(screen.getAllByText('mode:scroll').length).toBeGreaterThan(0);
-		});
-
-		window.localStorage.setItem('madora-tab-bar-mode', 'wrap');
-		window.dispatchEvent(new Event('storage'));
 
 		await waitFor(() => {
 			expect(screen.getAllByText('mode:wrap').length).toBeGreaterThan(0);

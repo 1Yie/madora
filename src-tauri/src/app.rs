@@ -1,8 +1,8 @@
 use std::env;
 
 use crate::{
-    commands::{ai, explorer, git, license, project, secure_storage, system, utility},
-    services::{ai::AiCompletionService, license::LicenseService},
+    commands::{ai, explorer, git, license, project, secure_storage, system, utility, workspace},
+    services::{ai::AiCompletionService, license::LicenseService, workspace::WorkspaceStore},
 };
 use tauri::Manager;
 use tauri_plugin_prevent_default::Flags;
@@ -46,11 +46,18 @@ pub fn run() {
         });
     }
 
-    builder = builder.setup(|_app| {
+    builder = builder.setup(|app| {
         #[cfg(all(target_os = "windows", not(debug_assertions)))]
-        configure_windows_webview(_app);
+        configure_windows_webview(app);
 
-        _app.manage(LicenseService::new());
+        app.manage(LicenseService::new());
+
+        // Initialize workspace store with app data directory for persistence
+        let app_data_dir = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        app.manage(WorkspaceStore::new(app_data_dir));
 
         Ok(())
     });
@@ -71,7 +78,19 @@ pub fn run() {
             explorer::rename_workspace_node,
             explorer::delete_workspace_node,
             explorer::move_workspace_node,
+            explorer::import_external_files,
             explorer::copy_workspace_node,
+            workspace::get_workspace_state,
+            workspace::set_workspace_root,
+            workspace::add_tab,
+            workspace::close_tab,
+            workspace::close_tabs,
+            workspace::set_active_tab,
+            workspace::set_sidebar_width,
+            workspace::set_tab_bar_mode,
+            workspace::set_open_tab_paths,
+            workspace::clear_workspace_state,
+            workspace::resolve_image_src,
             git::git_status,
             git::git_init,
             git::git_set_remote,
@@ -100,6 +119,9 @@ pub fn run() {
             project::read_file_content,
             project::scan_project,
             system::show_window,
+            system::get_cli_status,
+            system::install_cli,
+            system::uninstall_cli,
             license::get_license_status,
             license::activate_license,
             license::verify_license,

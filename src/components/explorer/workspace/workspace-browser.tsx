@@ -3,6 +3,7 @@ import {
 	createWorkspaceDirectory,
 	copyWorkspaceNode,
 	deleteWorkspaceNode,
+	importExternalFiles,
 	moveWorkspaceNode,
 	pickWorkspaceFolder,
 	readWorkspaceDirectory,
@@ -10,21 +11,27 @@ import {
 	renameWorkspaceNode,
 	scanWorkspaceFolder,
 } from '@/invoke/explorer';
-import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
 import {
-	useCallback,
-	useEffect,
-	useRef,
-	useState,
-	useSyncExternalStore,
-} from 'react';
+	getWorkspaceState,
+	setWorkspaceRoot,
+	addTab as addTabBackend,
+	closeTab as closeTabBackend,
+	closeTabs as closeTabsBackend,
+	setActiveTab as setActiveTabBackend,
+	setSidebarWidth as setSidebarWidthBackend,
+	setOpenTabPaths as setOpenTabPathsBackend,
+	clearWorkspaceState,
+} from '@/invoke/workspace';
+import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { isEditorDirty } from '@/lib/unsaved-registry';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import { FilePreview } from '@/components/explorer/file/file-preview';
 import { TabBar } from '@/components/explorer/workspace/tab-bar';
 import type { TabEntry } from '@/components/explorer/workspace/tab-bar';
-import { showErrorToast } from '@/components/ui/toast';
+import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 
 import {
 	getParentPath,
@@ -41,11 +48,6 @@ import type {
 } from '../types';
 import type { GitStatus } from '../git/git-types';
 
-const WORKSPACE_ROOT_STORAGE_KEY = 'madora-workspace-root-path';
-const LAST_OPEN_FILE_STORAGE_KEY = 'madora-last-open-file-path';
-const OPEN_TABS_STORAGE_KEY = 'madora-open-tab-paths';
-const SIDEBAR_WIDTH_STORAGE_KEY = 'madora-workspace-sidebar-width';
-const TAB_BAR_MODE_STORAGE_KEY = 'madora-tab-bar-mode';
 const MARKDOWN_DRAFT_KEY_PREFIX = 'madora-markdown-draft:';
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
@@ -80,90 +82,6 @@ function clearAllMarkdownDrafts(): void {
 
 function clampSidebarWidth(width: number): number {
 	return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
-}
-
-function subscribeToTabBarMode(callback: () => void): () => void {
-	if (typeof window === 'undefined') {
-		return () => {};
-	}
-
-	const handleChange = () => callback();
-	window.addEventListener('storage', handleChange);
-
-	return () => {
-		window.removeEventListener('storage', handleChange);
-	};
-}
-
-function getStoredTabBarMode(): 'scroll' | 'wrap' {
-	if (typeof window === 'undefined') {
-		return 'scroll';
-	}
-
-	return window.localStorage.getItem(TAB_BAR_MODE_STORAGE_KEY) === 'wrap'
-		? 'wrap'
-		: 'scroll';
-}
-
-function getServerTabBarModeSnapshot(): 'scroll' | 'wrap' {
-	return 'scroll';
-}
-
-function getStoredOpenTabPaths(rootPath: string | null = null): string[] {
-	try {
-		const saved = window.localStorage.getItem(OPEN_TABS_STORAGE_KEY);
-
-		if (!saved) {
-			return [];
-		}
-
-		const parsed = JSON.parse(saved);
-
-		if (!Array.isArray(parsed)) {
-			return [];
-		}
-
-		const seen = new Set<string>();
-		const paths: string[] = [];
-
-		for (const value of parsed) {
-			if (typeof value !== 'string') {
-				continue;
-			}
-
-			const normalizedPath = normalizeExplorerPath(value);
-
-			if (
-				seen.has(normalizedPath) ||
-				(rootPath !== null && !isSameOrDescendantPath(normalizedPath, rootPath))
-			) {
-				continue;
-			}
-
-			seen.add(normalizedPath);
-			paths.push(value);
-		}
-
-		return paths;
-	} catch {
-		return [];
-	}
-}
-
-function getInitialSidebarWidth(): number {
-	const savedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
-
-	if (!savedWidth) {
-		return DEFAULT_SIDEBAR_WIDTH;
-	}
-
-	const parsedWidth = Number(savedWidth);
-
-	if (!Number.isFinite(parsedWidth)) {
-		return DEFAULT_SIDEBAR_WIDTH;
-	}
-
-	return clampSidebarWidth(parsedWidth);
 }
 
 function findFirstFile(node: ExplorerNode): ExplorerNode | null {
@@ -269,15 +187,60 @@ function throwWithCause(message: string, cause: unknown): never {
 	throw error;
 }
 
+/**
+ * State needed for initialising the workspace browser from backend.
+ * Fetched once on mount via getWorkspaceState().
+ */
+type InitialWorkspaceState = {
+	rootPath: string | null;
+	openTabPaths: string[];
+	lastActiveFilePath: string | null;
+	sidebarWidth: number;
+	tabBarMode: 'scroll' | 'wrap';
+};
+
+async function fetchInitialState(): Promise<InitialWorkspaceState> {
+	try {
+		const state = await getWorkspaceState();
+		return {
+			rootPath: state.rootPath,
+			openTabPaths: state.openTabPaths,
+			lastActiveFilePath: state.lastActiveFilePath,
+			sidebarWidth: state.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
+			tabBarMode: state.tabBarMode === 'wrap' ? 'wrap' : 'scroll',
+		};
+	} catch {
+		return {
+			rootPath: null,
+			openTabPaths: [],
+			lastActiveFilePath: null,
+			sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+			tabBarMode: 'scroll',
+		};
+	}
+}
+
+async function updateSidebarWidth(width: number): Promise<void> {
+	await setSidebarWidthBackend(width).catch(() => {});
+}
+
+async function updateLastActiveFile(filePath: string | null): Promise<void> {
+	await setActiveTabBackend(filePath).catch(() => {});
+}
+
+async function persistTabs(tabs: TabEntry[]): Promise<void> {
+	const paths = tabs.map((t) => t.node.path);
+	await setOpenTabPathsBackend(paths).catch(() => {});
+}
+
 export function WorkspaceBrowser() {
-	const tabBarMode = useSyncExternalStore(
-		subscribeToTabBarMode,
-		getStoredTabBarMode,
-		getServerTabBarModeSnapshot
-	);
 	const { showHiddenFiles } = useAiSettings();
 	const [sortEnabled, setSortEnabled] = useState(true);
-	const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
+	const [initialised, setInitialised] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+	const [tabBarMode, setTabBarModeState] = useState<'scroll' | 'wrap'>(
+		'scroll'
+	);
 	const [root, setRoot] = useState<ExplorerNode | null>(null);
 	const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
 	const [selectedFile, setSelectedFile] = useState<ExplorerNode | null>(null);
@@ -316,53 +279,32 @@ export function WorkspaceBrowser() {
 		clearPreviewState();
 	}, [clearPreviewState]);
 
+	// Persist sidebar width to backend
 	useEffect(() => {
-		window.localStorage.setItem(
-			SIDEBAR_WIDTH_STORAGE_KEY,
-			String(sidebarWidth)
-		);
-	}, [sidebarWidth]);
+		if (!initialised) return;
+		void updateSidebarWidth(sidebarWidth);
+	}, [sidebarWidth, initialised]);
 
+	// Persist last active file to backend
 	useEffect(() => {
+		if (!initialised) return;
 		selectedFileRef.current = selectedFile;
+		void updateLastActiveFile(selectedFile?.path ?? null);
+	}, [selectedFile, initialised]);
 
-		if (selectedFile) {
-			window.localStorage.setItem(
-				LAST_OPEN_FILE_STORAGE_KEY,
-				selectedFile.path
-			);
-		}
-	}, [selectedFile]);
+	// Persist tabs to backend
+	useEffect(() => {
+		if (!tabsPersistenceReadyRef.current || !initialised) return;
+		void persistTabs(tabs);
+	}, [tabs, initialised]);
 
 	useEffect(() => {
-		if (!tabsPersistenceReadyRef.current) {
-			return;
-		}
-
-		if (tabs.length === 0) {
-			window.localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
-			return;
-		}
-
-		window.localStorage.setItem(
-			OPEN_TABS_STORAGE_KEY,
-			JSON.stringify(tabs.map((tab) => tab.node.path))
-		);
-	}, [tabs]);
-
-	useEffect(() => {
-		if (!sidebarError) {
-			return;
-		}
-
+		if (!sidebarError) return;
 		showErrorToast('工作区操作失败', sidebarError);
 	}, [sidebarError]);
 
 	useEffect(() => {
-		if (!previewError) {
-			return;
-		}
-
+		if (!previewError) return;
 		showErrorToast('文件读取失败', previewError);
 	}, [previewError]);
 
@@ -530,22 +472,27 @@ export function WorkspaceBrowser() {
 			previewLoading: false,
 			previewError: null,
 			previewRequestId: 0,
+			unsaved: false,
 		};
 	}, []);
 
 	const restoreTabs = useCallback(
-		async (nextRoot: ExplorerNode, fallbackFile: ExplorerNode | null) => {
+		async (
+			nextRoot: ExplorerNode,
+			tabPaths: string[],
+			lastActiveFilePath: string | null,
+			fallbackFile: ExplorerNode | null
+		) => {
 			let resolvedRoot = nextRoot;
 			const restoredTabs: TabEntry[] = [];
-			const storedTabPaths = getStoredOpenTabPaths(nextRoot.path);
-			const tabPaths =
-				storedTabPaths.length > 0
-					? storedTabPaths
+			const paths =
+				tabPaths.length > 0
+					? tabPaths
 					: fallbackFile
 						? [fallbackFile.path]
 						: [];
 
-			for (const path of tabPaths) {
+			for (const path of paths) {
 				const { node, root: nextResolvedRoot } = await resolveNodeFromPath(
 					resolvedRoot,
 					path
@@ -569,9 +516,13 @@ export function WorkspaceBrowser() {
 				restoredTabs.push(createTabEntry(node));
 			}
 
-			const preferredPath = fallbackFile
-				? normalizeExplorerPath(fallbackFile.path)
-				: null;
+			// Determine active tab: prefer the last active file path from state,
+			// then fallback file, then first tab.
+			const preferredPath = lastActiveFilePath
+				? normalizeExplorerPath(lastActiveFilePath)
+				: fallbackFile
+					? normalizeExplorerPath(fallbackFile.path)
+					: null;
 			const activeTab = preferredPath
 				? restoredTabs.find(
 						(tab) => normalizeExplorerPath(tab.node.path) === preferredPath
@@ -613,6 +564,10 @@ export function WorkspaceBrowser() {
 			setActiveTabId(newTab.id);
 		}
 
+		// Notify backend
+		void addTabBackend(node.path).catch(() => {});
+		void setActiveTabBackend(node.path).catch(() => {});
+
 		if (node.isMissing) {
 			setSelectedNodePath(node.path);
 			setSelectedFile(node);
@@ -627,15 +582,41 @@ export function WorkspaceBrowser() {
 
 	const handleSelectTab = (tabId: string) => {
 		const tab = tabs.find((t) => t.id === tabId);
-		if (tab && tab.id !== activeTabId) {
+		if (!tab) return;
+
+		// If file no longer exists in tree, mark tab as missing instead of
+		// triggering a failed file read.
+		if (root && !findNodeByPath(root, tab.node.path)) {
+			if (tab.id !== activeTabId) {
+				const updatedTab = {
+					...tab,
+					node: { ...tab.node, isMissing: true },
+				};
+				setTabs((prev) => prev.map((t) => (t.id === tabId ? updatedTab : t)));
+				setActiveTabId(tabId);
+				setSelectedNodePath(tab.node.path);
+				setSelectedFile(updatedTab.node);
+				setPreview(null);
+				setPreviewError(null);
+				setPreviewLoading(false);
+			}
+			return;
+		}
+
+		if (tab.id !== activeTabId) {
 			void selectNode(tab.node);
 		}
 	};
 
 	const handleCloseTab = (tabId: string) => {
 		const wasActive = activeTabId === tabId;
+		const tab = tabs.find((t) => t.id === tabId);
 		const newTabs = tabs.filter((t) => t.id !== tabId);
 		setTabs(newTabs);
+
+		if (tab) {
+			void closeTabBackend(tab.node.path).catch(() => {});
+		}
 
 		if (wasActive) {
 			if (newTabs.length > 0) {
@@ -645,6 +626,7 @@ export function WorkspaceBrowser() {
 				void selectNode(next.node);
 			} else {
 				setActiveTabId(null);
+				void setActiveTabBackend(null).catch(() => {});
 				clearSelectionAndPreview();
 			}
 		}
@@ -652,8 +634,15 @@ export function WorkspaceBrowser() {
 
 	const handleCloseTabs = (tabIds: string[]) => {
 		const wasActive = activeTabId ? tabIds.includes(activeTabId) : false;
+		const closedPaths = tabIds
+			.map((id) => tabs.find((t) => t.id === id)?.node.path)
+			.filter(Boolean) as string[];
 		const newTabs = tabs.filter((t) => !tabIds.includes(t.id));
 		setTabs(newTabs);
+
+		if (closedPaths.length > 0) {
+			void closeTabsBackend(closedPaths).catch(() => {});
+		}
 
 		if (wasActive) {
 			if (newTabs.length > 0) {
@@ -663,6 +652,7 @@ export function WorkspaceBrowser() {
 				void selectNode(next.node);
 			} else {
 				setActiveTabId(null);
+				void setActiveTabBackend(null).catch(() => {});
 				clearSelectionAndPreview();
 			}
 		}
@@ -774,34 +764,22 @@ export function WorkspaceBrowser() {
 			setLoadingPaths(new Set());
 			setClipboard(null);
 
-			const savedLastOpenFilePath = window.localStorage.getItem(
-				LAST_OPEN_FILE_STORAGE_KEY
-			);
-			const { node: nextSelectedFile, root: resolvedRoot } =
-				await resolveNodeFromPath(nextRoot, savedLastOpenFilePath);
-
-			setRoot(resolvedRoot);
-			queueMicrotask(() => setGitStatus(null));
-			window.localStorage.setItem(
-				WORKSPACE_ROOT_STORAGE_KEY,
-				resolvedRoot.path
-			);
-
-			const fileToOpen =
-				nextSelectedFile?.kind === 'file'
-					? nextSelectedFile
-					: findFirstFile(resolvedRoot);
+			// Restore tabs from backend state, or open first file
+			const fileToOpen = findFirstFile(nextRoot);
 			const {
 				activeNode,
 				activeTabId: restoredActiveTabId,
 				root: rootWithTabs,
 				tabs: restoredTabs,
-			} = await restoreTabs(resolvedRoot, fileToOpen);
+			} = await restoreTabs(nextRoot, [], null, fileToOpen);
 
 			tabsPersistenceReadyRef.current = true;
 			setRoot(rootWithTabs);
 			setTabs(restoredTabs);
 			setActiveTabId(restoredActiveTabId);
+
+			// Persist workspace root to backend
+			void setWorkspaceRoot(rootWithTabs.path).catch(() => {});
 
 			if (activeNode) {
 				void loadPreview(activeNode);
@@ -814,6 +792,19 @@ export function WorkspaceBrowser() {
 			setSidebarBusy(false);
 		}
 	};
+
+	const syncTabNodesWithTree = useCallback((treeRoot: ExplorerNode) => {
+		setTabs((prev) =>
+			prev.map((tab) => {
+				const node = findNodeByPath(treeRoot, tab.node.path);
+				if (!node) {
+					// File no longer exists in tree — mark as missing
+					return { ...tab, node: { ...tab.node, isMissing: true } };
+				}
+				return { ...tab, node };
+			})
+		);
+	}, []);
 
 	const refreshFolder = async () => {
 		if (!root) {
@@ -832,8 +823,9 @@ export function WorkspaceBrowser() {
 
 			setLoadingPaths(new Set());
 			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
 			setSidebarError(null);
-			window.localStorage.setItem(WORKSPACE_ROOT_STORAGE_KEY, nextRoot.path);
+			void setWorkspaceRoot(nextRoot.path).catch(() => {});
 			void syncSelectionWithRoot(nextRoot, selectedNodePath);
 		} catch (error) {
 			setSidebarError(getErrorMessage(error));
@@ -881,6 +873,7 @@ export function WorkspaceBrowser() {
 
 			setLoadingPaths(new Set());
 			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
 			await syncSelectionWithRoot(nextRoot, createdPath);
 
 			// Refresh git status after updating the tree so newly created files are
@@ -926,6 +919,7 @@ export function WorkspaceBrowser() {
 
 			setLoadingPaths(new Set());
 			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
 			await syncSelectionWithRoot(nextRoot, selectedNodePath);
 
 			// Make sure git status is refreshed so the new directory shows up as
@@ -978,6 +972,7 @@ export function WorkspaceBrowser() {
 
 			setLoadingPaths(new Set());
 			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
 
 			if (clipboard && nextClipboardPath) {
 				setClipboard({
@@ -991,12 +986,9 @@ export function WorkspaceBrowser() {
 			}
 
 			if (nextSelectedPath) {
-				window.localStorage.setItem(
-					LAST_OPEN_FILE_STORAGE_KEY,
-					nextSelectedPath
-				);
+				void setActiveTabBackend(nextSelectedPath).catch(() => {});
 			} else {
-				window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+				void setActiveTabBackend(null).catch(() => {});
 			}
 
 			await syncSelectionWithRoot(nextRoot, nextSelectedPath);
@@ -1043,17 +1035,28 @@ export function WorkspaceBrowser() {
 
 			setRoot(nextRoot);
 
+			// Close tabs for the deleted path
+			const normalizedTargetPath = normalizeExplorerPath(targetPath);
+			setTabs((prev) => {
+				const toClose = prev.filter(
+					(t) => normalizeExplorerPath(t.node.path) === normalizedTargetPath
+				);
+				for (const t of toClose) {
+					void closeTabBackend(t.node.path).catch(() => {});
+				}
+				return prev.filter(
+					(t) => normalizeExplorerPath(t.node.path) !== normalizedTargetPath
+				);
+			});
+
 			if (clipboard && nextClipboardPath === null) {
 				setClipboard(null);
 			}
 
 			if (nextSelectedPath) {
-				window.localStorage.setItem(
-					LAST_OPEN_FILE_STORAGE_KEY,
-					nextSelectedPath
-				);
+				void setActiveTabBackend(nextSelectedPath).catch(() => {});
 			} else {
-				window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+				void setActiveTabBackend(null).catch(() => {});
 			}
 
 			await syncSelectionWithRoot(nextRoot, nextSelectedPath);
@@ -1088,6 +1091,101 @@ export function WorkspaceBrowser() {
 			},
 			mode: 'copy',
 		});
+	};
+
+	const ALLOWED_IMPORT_EXTENSIONS = new Set([
+		'png',
+		'jpg',
+		'jpeg',
+		'gif',
+		'webp',
+		'bmp',
+		'svg',
+		'md',
+		'markdown',
+		'mdx',
+	]);
+
+	const importExternalFilesHandler = async (
+		sourcePaths: string[],
+		destinationPath: string | null
+	) => {
+		if (!root) {
+			return;
+		}
+
+		const destinationDirectory = resolveDestinationDirectory(destinationPath);
+
+		if (!destinationDirectory) {
+			return;
+		}
+
+		// Filter to allowed file types only (markdown & images)
+		const validPaths = sourcePaths.filter((p) => {
+			const dot = p.lastIndexOf('.');
+
+			if (dot === -1) return false;
+
+			const ext = p.slice(dot + 1).toLowerCase();
+
+			return ALLOWED_IMPORT_EXTENSIONS.has(ext);
+		});
+		const skippedCount = sourcePaths.length - validPaths.length;
+
+		if (validPaths.length === 0) {
+			if (skippedCount > 0) {
+				showErrorToast('仅支持导入 .md/.mdx 文件和图片');
+			}
+
+			return;
+		}
+
+		setOperationBusy('move');
+		setSidebarError(null);
+
+		try {
+			const importedNodes = await importExternalFiles({
+				destinationDirectory,
+				rootPath: root.path,
+				sourcePaths: validPaths,
+			});
+
+			const nextRoot = await scanWorkspaceFolder({
+				rootPath: root.path,
+				sort: sortEnabled,
+			});
+
+			setLoadingPaths(new Set());
+			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
+
+			// Select the first imported file
+			if (importedNodes.length > 0) {
+				const firstNode = importedNodes[0];
+
+				if (firstNode) {
+					void setActiveTabBackend(firstNode.path).catch(() => {});
+					await syncSelectionWithRoot(nextRoot, firstNode.path);
+				}
+			}
+
+			void refreshGitStatus(nextRoot.path);
+
+			if (skippedCount > 0) {
+				showSuccessToast(
+					`已导入 ${importedNodes.length} 个文件，${skippedCount} 个跳过（仅支持 .md/.mdx 和图片）`
+				);
+			} else {
+				showSuccessToast(`已导入 ${importedNodes.length} 个文件`);
+			}
+		} catch (error) {
+			const message = getErrorMessage(error);
+
+			setSidebarError(message);
+			throwWithCause(message, error);
+		} finally {
+			setOperationBusy(null);
+		}
 	};
 
 	const pasteNode = async (destinationPath: string | null) => {
@@ -1136,15 +1234,13 @@ export function WorkspaceBrowser() {
 
 			setLoadingPaths(new Set());
 			setRoot(nextRoot);
+			syncTabNodesWithTree(nextRoot);
 			setClipboard(null);
 
 			if (nextSelectedPath) {
-				window.localStorage.setItem(
-					LAST_OPEN_FILE_STORAGE_KEY,
-					nextSelectedPath
-				);
+				void setActiveTabBackend(nextSelectedPath).catch(() => {});
 			} else {
-				window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+				void setActiveTabBackend(null).catch(() => {});
 			}
 
 			await syncSelectionWithRoot(nextRoot, nextSelectedPath);
@@ -1200,77 +1296,83 @@ export function WorkspaceBrowser() {
 		}
 	};
 
+	// ─── Initialisation (mount) ─────────────────────────────────────
+
 	useEffect(() => {
-		const savedRootPath = window.localStorage.getItem(
-			WORKSPACE_ROOT_STORAGE_KEY
-		);
-		const savedLastOpenFilePath = window.localStorage.getItem(
-			LAST_OPEN_FILE_STORAGE_KEY
-		);
-
-		if (!savedRootPath) {
-			return;
-		}
-
 		let active = true;
 
-		const restoreWorkspace = async () => {
+		const initialise = async () => {
 			setSidebarBusy(true);
 			setSidebarError(null);
 
 			try {
+				const initialState = await fetchInitialState();
+
+				if (!active) return;
+
+				setSidebarWidth(clampSidebarWidth(initialState.sidebarWidth));
+				setTabBarModeState(initialState.tabBarMode);
+
+				if (!initialState.rootPath) {
+					if (!active) return;
+					tabsPersistenceReadyRef.current = true;
+					setInitialised(true);
+					setSidebarBusy(false);
+					queueMicrotask(() => clearSelectionAndPreview());
+					return;
+				}
+
 				const nextRoot = await scanWorkspaceFolder({
-					rootPath: savedRootPath,
+					rootPath: initialState.rootPath,
 					showHiddenFiles,
 					sort: sortEnabled,
 				});
 
-				if (!active) {
-					return;
-				}
+				if (!active) return;
 
 				setLoadingPaths(new Set());
 				setClipboard(null);
+
+				const fileToOpen = initialState.lastActiveFilePath
+					? null // resolveNodeFromPath will find it
+					: findFirstFile(nextRoot);
 				const { node: nextSelectedFile, root: resolvedRoot } =
-					await resolveNodeFromPath(nextRoot, savedLastOpenFilePath);
+					await resolveNodeFromPath(nextRoot, initialState.lastActiveFilePath);
 
-				if (!active) {
-					return;
-				}
+				if (!active) return;
 
-				const fileToOpen =
-					nextSelectedFile?.kind === 'file'
-						? nextSelectedFile
-						: findFirstFile(resolvedRoot);
+				const resolvedFileToOpen =
+					nextSelectedFile?.kind === 'file' ? nextSelectedFile : fileToOpen;
 				const {
 					activeNode,
 					activeTabId: restoredActiveTabId,
 					root: rootWithTabs,
 					tabs: restoredTabs,
-				} = await restoreTabs(resolvedRoot, fileToOpen);
+				} = await restoreTabs(
+					resolvedRoot,
+					initialState.openTabPaths,
+					initialState.lastActiveFilePath,
+					resolvedFileToOpen
+				);
+
+				if (!active) return;
 
 				tabsPersistenceReadyRef.current = true;
 				setRoot(rootWithTabs);
 				setTabs(restoredTabs);
 				setActiveTabId(restoredActiveTabId);
-				window.localStorage.setItem(
-					WORKSPACE_ROOT_STORAGE_KEY,
-					rootWithTabs.path
-				);
+				setInitialised(true);
 
 				if (activeNode) {
 					void loadPreview(activeNode);
 				} else {
-					clearSelectionAndPreview();
+					queueMicrotask(() => clearSelectionAndPreview());
 				}
 			} catch (error) {
-				if (!active) {
-					return;
-				}
+				if (!active) return;
 
-				window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
-				window.localStorage.removeItem(OPEN_TABS_STORAGE_KEY);
-				window.localStorage.removeItem(WORKSPACE_ROOT_STORAGE_KEY);
+				// Failed to restore — clear state and start fresh
+				void clearWorkspaceState().catch(() => {});
 				tabsPersistenceReadyRef.current = true;
 				setRoot(null);
 				setClipboard(null);
@@ -1285,17 +1387,66 @@ export function WorkspaceBrowser() {
 			}
 		};
 
-		void restoreWorkspace();
+		void initialise();
 
 		return () => {
 			active = false;
 		};
-	}, [
-		clearSelectionAndPreview,
-		resolveNodeFromPath,
-		restoreTabs,
-		showHiddenFiles,
-	]);
+		// Only run once on mount
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	const refreshUnsavedState = useCallback((filePath?: string) => {
+		setTabs((prev) =>
+			prev.map((tab) => {
+				if (
+					filePath &&
+					normalizeExplorerPath(tab.node.path) !==
+						normalizeExplorerPath(filePath)
+				) {
+					return tab;
+				}
+
+				return { ...tab, unsaved: isEditorDirty(tab.node.path) };
+			})
+		);
+	}, []);
+
+	// Track unsaved state via custom events
+	useEffect(() => {
+		const handleDirtyChanged = (e: Event) => {
+			const { filePath } =
+				(e as CustomEvent<{ filePath?: string }>).detail ?? {};
+			if (filePath) {
+				refreshUnsavedState(filePath);
+			} else {
+				refreshUnsavedState();
+			}
+		};
+
+		const handleFileSaved = (e: Event) => {
+			const { filePath } =
+				(e as CustomEvent<{ filePath?: string }>).detail ?? {};
+			if (filePath) {
+				setTabs((prev) =>
+					prev.map((tab) =>
+						normalizeExplorerPath(tab.node.path) ===
+						normalizeExplorerPath(filePath)
+							? { ...tab, unsaved: false }
+							: tab
+					)
+				);
+			}
+		};
+
+		window.addEventListener('editor-dirty-changed', handleDirtyChanged);
+		window.addEventListener('workspace-file-saved', handleFileSaved);
+
+		return () => {
+			window.removeEventListener('editor-dirty-changed', handleDirtyChanged);
+			window.removeEventListener('workspace-file-saved', handleFileSaved);
+		};
+	}, [refreshUnsavedState]);
 
 	const refreshGitStatus = useCallback(
 		async (targetRootPath?: string | null) => {
@@ -1393,7 +1544,7 @@ export function WorkspaceBrowser() {
 			return;
 		}
 
-		window.localStorage.removeItem(LAST_OPEN_FILE_STORAGE_KEY);
+		void setActiveTabBackend(null).catch(() => {});
 
 		if (!root) {
 			queueMicrotask(() => clearSelectionAndPreview());
@@ -1410,6 +1561,20 @@ export function WorkspaceBrowser() {
 		selectedFile,
 		syncSelectionWithRoot,
 	]);
+
+	if (!initialised) {
+		return (
+			<div className="flex h-full min-h-0 bg-background text-foreground">
+				<div
+					className="relative flex h-full min-h-0 shrink-0"
+					style={{ width: `${sidebarWidth}px` }}
+				>
+					<div className="flex-1" />
+				</div>
+				<main className="flex min-w-0 flex-1 flex-col overflow-hidden" />
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex h-full min-h-0 bg-background text-foreground">
@@ -1430,6 +1595,7 @@ export function WorkspaceBrowser() {
 					onCreateMarkdown={createMarkdownDocument}
 					onCutNode={cutNode}
 					onDeleteNode={deleteNode}
+					onImportExternalFiles={importExternalFilesHandler}
 					onRestoreDeletedNode={restoreDeletedNode}
 					onOpenFolder={openFolder}
 					onPasteNode={pasteNode}
@@ -1449,11 +1615,9 @@ export function WorkspaceBrowser() {
 							});
 							setLoadingPaths(new Set());
 							setRoot(nextRoot);
+							syncTabNodesWithTree(nextRoot);
 							setSidebarError(null);
-							window.localStorage.setItem(
-								WORKSPACE_ROOT_STORAGE_KEY,
-								nextRoot.path
-							);
+							void setWorkspaceRoot(nextRoot.path).catch(() => {});
 							void syncSelectionWithRoot(nextRoot, selectedNodePath);
 						} catch (error) {
 							setSidebarError(getErrorMessage(error));

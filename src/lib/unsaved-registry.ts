@@ -62,6 +62,20 @@ export function unregisterEditor(id: string) {
 	editors.delete(id);
 }
 
+export function isEditorDirty(filePath: string): boolean {
+	for (const entry of editors.values()) {
+		if (entry.filePath === filePath) {
+			try {
+				return entry.isDirty();
+			} catch {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 export function hasUnsaved(): boolean {
 	for (const entry of editors.values()) {
 		try {
