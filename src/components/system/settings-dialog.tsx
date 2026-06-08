@@ -1,7 +1,8 @@
 import { Bolt, XIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AboutSettings } from '@/components/system/setting/about';
 import { AppearanceSettings } from '@/components/system/setting/appearance';
+import { CliSettings } from '@/components/system/setting/cli';
 import { EditorSettings } from '@/components/system/setting/editor';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { LicenseSettings } from '@/components/system/setting/license';
@@ -24,6 +25,7 @@ function SettingsContent({
 	onRequestLicenseActivation: () => void;
 }) {
 	if (section === 'editor') return <EditorSettings />;
+	if (section === 'cli') return <CliSettings />;
 	if (section === 'license')
 		return <LicenseSettings onRequestActivation={onRequestLicenseActivation} />;
 	if (section === 'about') return <AboutSettings />;
@@ -35,6 +37,11 @@ export function SettingsDialog() {
 	const [activeSection, setActiveSection] =
 		useState<SettingsSectionId>('appearance');
 	const [showLicenseActivation, setShowLicenseActivation] = useState(false);
+	const scrollRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		scrollRef.current?.scrollTo(0, 0);
+	}, [activeSection]);
 
 	const currentSection =
 		settingsSections.find((section) => section.id === activeSection) ??
@@ -80,7 +87,10 @@ export function SettingsDialog() {
 								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
 									bg-popover"
 							>
-								<div className="overflow-auto size-full min-h-0 flex-1">
+								<div
+									ref={scrollRef}
+									className="overflow-auto size-full min-h-0 flex-1"
+								>
 									<div className="space-y-6 p-4 sm:p-6">
 										<div className="space-y-1">
 											<p
