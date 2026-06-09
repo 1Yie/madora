@@ -1034,7 +1034,7 @@ function FileTreeNode({
 				{Array.from({ length: depth }, (_, i) => (
 					<div
 						key={`g-${i}`}
-						className="absolute top-0 w-px bg-border/60 pointer-events-none"
+						className="absolute top-0 w-px bg-border/60 pointer-events-none z-0"
 						style={{ left: `${i * 14 + 18}px`, height: '100%' }}
 					/>
 				))}
@@ -1142,7 +1142,7 @@ function FileTreeNode({
 			{Array.from({ length: depth }, (_, i) => (
 				<div
 					key={`g-${i}`}
-					className="absolute top-0 w-px bg-border/60 pointer-events-none"
+					className="absolute top-0 w-px bg-border/60 pointer-events-none z-0"
 					style={{ left: `${i * 14 + 18}px`, height: '100%' }}
 				/>
 			))}
@@ -2280,27 +2280,53 @@ export function FileExplorerSidebar({
 												}}
 											>
 												{item.type === 'loading' ? (
-													<div
-														className="px-2 py-1.5"
-														style={{
-															paddingLeft: `${item.depth * 14 + 44}px`,
-														}}
-													>
-														<div className="space-y-2 py-1">
-															<Skeleton className="h-4 w-40" />
-															<Skeleton className="h-4 w-32" />
-															<Skeleton className="h-4 w-36" />
+													<div className="relative px-2 py-1.5">
+														{/* Guide lines for ancestor depths */}
+														{Array.from({ length: item.depth }, (_, i) => (
+															<div
+																key={`gl-${i}`}
+																className="absolute top-0 w-px bg-border/60
+																	pointer-events-none z-0"
+																style={{
+																	left: `${i * 14 + 18}px`,
+																	height: '100%',
+																}}
+															/>
+														))}
+														<div
+															style={{
+																paddingLeft: `${item.depth * 14 + 44}px`,
+															}}
+														>
+															<div className="space-y-2 py-1">
+																<Skeleton className="h-4 w-40" />
+																<Skeleton className="h-4 w-32" />
+																<Skeleton className="h-4 w-36" />
+															</div>
 														</div>
 													</div>
 												) : item.type === 'empty' ? (
-													<div
-														className="rounded-md px-2 py-3
-															text-muted-foreground text-xs"
-														style={{
-															paddingLeft: `${item.depth * 14 + 44}px`,
-														}}
-													>
-														未找到文件
+													<div className="relative rounded-md px-2 py-3">
+														{/* Guide lines for ancestor depths */}
+														{Array.from({ length: item.depth }, (_, i) => (
+															<div
+																key={`ge-${i}`}
+																className="absolute top-0 w-px bg-border/60
+																	pointer-events-none z-0"
+																style={{
+																	left: `${i * 14 + 18}px`,
+																	height: '100%',
+																}}
+															/>
+														))}
+														<div
+															className="text-muted-foreground text-xs"
+															style={{
+																paddingLeft: `${item.depth * 14 + 44}px`,
+															}}
+														>
+															未找到文件
+														</div>
 													</div>
 												) : (
 													<FileTreeNode
