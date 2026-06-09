@@ -1,3 +1,16 @@
+## [0.3.3](https://github.com/1Yie/madora/compare/v0.3.2...v0.3.3) (2026-06-09)
+
+### Bug Fixes
+
+- **build:** replace node -e script in beforeBuildCommand with shell commands ([7ef0e43](https://github.com/1Yie/madora/commit/7ef0e434a81be7ca0790dcbc2b95c5400aeb163e))
+- **build:** resolve OpenSSL vendored build failure on Windows MSVC ([71d9f92](https://github.com/1Yie/madora/commit/71d9f9297b50fd34603708ff7faacf776dee5aa4))
+- **build:** use cross-platform node script for beforeBuildCommand ([b24f2f6](https://github.com/1Yie/madora/commit/b24f2f613229ca4f75cec3e2f1ebd8b9a6f34163))
+- **build:** vendor openssl-sys for cross-compilation support ([5158ba5](https://github.com/1Yie/madora/commit/5158ba582f0790c43ce2711a050c99be09371edc))
+
+### Features
+
+- **explorer:** add drag-and-drop tab reordering with cross-platform consistent drag preview ([ab88d1a](https://github.com/1Yie/madora/commit/ab88d1afc23ada6f7e3c07477fc72435eeeba16b))
+
 ## [0.3.2](https://github.com/1Yie/madora/compare/v0.3.1...v0.3.2) (2026-06-08)
 
 ### Bug Fixes
