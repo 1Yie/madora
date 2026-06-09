@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { SaveMode } from '@/components/system/ai-settings-provider';
+import type { SaveMode } from '@/components/system/app-settings-provider';
 import { useEditor } from '@/hooks/use-editor';
 import { Spinner } from '@/components/ui/spinner';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';

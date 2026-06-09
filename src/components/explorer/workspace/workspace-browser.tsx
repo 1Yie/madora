@@ -25,7 +25,7 @@ import {
 import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { useAppSettings } from '@/components/system/app-settings-provider';
 import { isEditorDirty } from '@/lib/unsaved-registry';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import { FilePreview } from '@/components/explorer/file/file-preview';
@@ -249,7 +249,7 @@ async function persistTabs(tabs: TabEntry[]): Promise<void> {
 }
 
 export function WorkspaceBrowser() {
-	const { showHiddenFiles } = useAiSettings();
+	const { showHiddenFiles } = useAppSettings();
 	const [sortEnabled, setSortEnabled] = useState(true);
 	const [initialised, setInitialised] = useState(false);
 	const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
@@ -1530,6 +1530,27 @@ export function WorkspaceBrowser() {
 			);
 		};
 	}, [loadPreview]);
+
+	// Re-scan workspace when showHiddenFiles toggles
+	useEffect(() => {
+		if (!root) return;
+
+		const reScan = async () => {
+			try {
+				const nextRoot = await scanWorkspaceFolder({
+					rootPath: root.path,
+					showHiddenFiles,
+					sort: sortEnabled,
+				});
+				setRoot(nextRoot);
+				syncTabNodesWithTree(nextRoot);
+			} catch {
+				// tree will stay stale but won't crash
+			}
+		};
+
+		void reScan();
+	}, [showHiddenFiles]);
 
 	const refreshGitStatus = useCallback(
 		async (targetRootPath?: string | null) => {

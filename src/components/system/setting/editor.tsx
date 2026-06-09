@@ -15,6 +15,7 @@ import {
 	getProviderDefinitions,
 	useAiSettings,
 } from '@/components/system/ai-settings-provider';
+import { useAppSettings } from '@/components/system/app-settings-provider';
 import {
 	FieldBlock,
 	Option,
@@ -68,18 +69,16 @@ export function EditorSettings() {
 		model,
 		provider,
 		saveApiKey,
-		saveMode,
-		showHiddenFiles,
 		useSsl,
 		setApiUrl,
 		setCustomProtocol,
 		setEnabled,
 		setModel,
 		setProvider,
-		setSaveMode,
-		setShowHiddenFiles,
 		setUseSsl,
 	} = useAiSettings();
+	const { saveMode, showHiddenFiles, setSaveMode, setShowHiddenFiles } =
+		useAppSettings();
 
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
 	const [, setApiKeyBusy] = useState(false);

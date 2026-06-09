@@ -1,7 +1,7 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { useAppSettings } from '@/components/system/app-settings-provider';
 import { showErrorToast } from '@/components/ui/toast';
 import { registerEditor, unregisterEditor } from '@/lib/unsaved-registry';
 
@@ -38,7 +38,7 @@ export function TextWorkspace({
 	rootPath,
 	mode = 'edit',
 }: TextWorkspaceProps) {
-	const { saveMode } = useAiSettings();
+	const { saveMode } = useAppSettings();
 	const [value, setValue] = useState(content);
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');

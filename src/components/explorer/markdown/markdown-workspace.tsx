@@ -1,7 +1,7 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useAiSettings } from '@/components/system/ai-settings-provider';
+import { useAppSettings } from '@/components/system/app-settings-provider';
 import { showErrorToast } from '@/components/ui/toast';
 import {
 	MARKDOWN_DRAFT_STORAGE_KEY_PREFIX,
@@ -65,7 +65,7 @@ export function MarkdownWorkspace({
 	mode,
 	onToggleMode,
 }: MarkdownWorkspaceProps) {
-	const { saveMode } = useAiSettings();
+	const { saveMode } = useAppSettings();
 	const [value, setValue] = useState(() => getInitialValue(filePath, content));
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>

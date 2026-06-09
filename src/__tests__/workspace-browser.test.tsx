@@ -104,8 +104,12 @@ const defaultWorkspaceState = {
 	tabBarMode: 'scroll',
 };
 
+vi.mock('@/components/system/app-settings-provider', () => ({
+	useAppSettings: () => ({ showHiddenFiles: false, saveMode: 'auto' }),
+}));
+
 vi.mock('@/components/system/ai-settings-provider', () => ({
-	useAiSettings: () => ({ showHiddenFiles: false }),
+	useAiSettings: () => ({}),
 }));
 
 vi.mock('@/components/explorer/file/file-preview', () => ({

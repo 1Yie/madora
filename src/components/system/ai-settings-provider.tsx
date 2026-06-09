@@ -10,7 +10,6 @@ import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
 
 import { showErrorToast } from '@/components/ui/toast';
 
-export type SaveMode = 'auto' | 'manual';
 export type AiProvider =
 	| 'anthropic'
 	| 'custom'
@@ -36,8 +35,6 @@ type AiSettingsContextValue = ProviderConfig & {
 	enabled: boolean;
 	hasApiKey: boolean;
 	provider: AiProvider;
-	saveMode: SaveMode;
-	showHiddenFiles: boolean;
 
 	deleteApiKey: () => Promise<void>;
 	saveApiKey: (apiKey: string) => Promise<void>;
@@ -46,8 +43,6 @@ type AiSettingsContextValue = ProviderConfig & {
 	setEnabled: (enabled: boolean) => void;
 	setModel: (model: string) => void;
 	setProvider: (provider: AiProvider) => void;
-	setSaveMode: (saveMode: SaveMode) => void;
-	setShowHiddenFiles: (showHiddenFiles: boolean) => void;
 	setUseSsl: (useSsl: boolean) => void;
 };
 
@@ -117,10 +112,7 @@ const AI_COMPLETION_API_URL_STORAGE_KEY = 'madora-ai-completion-api-url';
 const AI_COMPLETION_CUSTOM_PROTOCOL_STORAGE_KEY =
 	'madora-ai-completion-custom-protocol';
 const AI_COMPLETION_MODEL_STORAGE_KEY = 'madora-ai-completion-model';
-const EDITOR_SAVE_MODE_STORAGE_KEY = 'madora-editor-save-mode';
 const AI_COMPLETION_USE_SSL_STORAGE_KEY = 'madora-ai-completion-use-ssl';
-const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY =
-	'madora-explorer-show-hidden-files';
 
 const AiSettingsContext = createContext<AiSettingsContextValue | null>(null);
 
@@ -199,22 +191,6 @@ function getInitialProvider(): AiProvider {
 	}
 
 	return DEFAULT_PROVIDER;
-}
-
-function getInitialSaveMode(): SaveMode {
-	const storedValue = getStoredValue(EDITOR_SAVE_MODE_STORAGE_KEY);
-
-	return storedValue === 'manual' ? 'manual' : 'auto';
-}
-
-function getInitialShowHiddenFiles(): boolean {
-	const storedValue = getStoredValue(EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY);
-
-	if (storedValue === null) {
-		return false;
-	}
-
-	return storedValue === 'true';
 }
 
 function getDefaultProviderConfig(provider: AiProvider): ProviderConfig {
@@ -387,11 +363,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 	>(readInitialProviderConfigs);
 	const [providerApiKeyAvailability, setProviderApiKeyAvailability] =
 		useState<ProviderApiKeyAvailability>(createProviderApiKeyAvailability);
-	const [saveMode, setSaveMode] = useState<SaveMode>(getInitialSaveMode);
-	const [showHiddenFiles, setShowHiddenFiles] = useState<boolean>(
-		getInitialShowHiddenFiles
-	);
-
 	useEffect(() => {
 		let cancelled = false;
 
@@ -456,17 +427,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 		}
 	}, [providerConfigs]);
 
-	useEffect(() => {
-		window.localStorage.setItem(EDITOR_SAVE_MODE_STORAGE_KEY, saveMode);
-	}, [saveMode]);
-
-	useEffect(() => {
-		window.localStorage.setItem(
-			EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY,
-			String(showHiddenFiles)
-		);
-	}, [showHiddenFiles]);
-
 	const currentConfig = providerConfigs[provider];
 	const hasApiKey = providerApiKeyAvailability[provider];
 
@@ -504,8 +464,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 					getProviderStorageKey(AI_COMPLETION_API_KEY_STORAGE_KEY, provider)
 				);
 			},
-			saveMode,
-			showHiddenFiles,
 			useSsl: currentConfig.useSsl,
 
 			setApiUrl: (apiUrl) => {
@@ -528,8 +486,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 				}));
 			},
 			setProvider,
-			setSaveMode,
-			setShowHiddenFiles,
 			setUseSsl: (useSsl) => {
 				setProviderConfigs((prev) => ({
 					...prev,
@@ -545,8 +501,6 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 			hasApiKey,
 			enabled,
 			provider,
-			saveMode,
-			showHiddenFiles,
 		]
 	);
 
