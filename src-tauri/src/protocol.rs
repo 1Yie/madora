@@ -402,9 +402,16 @@ mod tests {
             .join(outside_dir.path().file_name().unwrap())
             .join("secret.txt");
 
-        if let Ok(canonical) = traversal.canonicalize() {
+        let traversal_result = traversal.canonicalize();
+        // Both outcomes are valid:
+        // 1. canonicalize fails  → path unreachable, traversal naturally blocked
+        // 2. canonicalize succeeds → must resolve outside the workspace root
+        if let Ok(canonical) = traversal_result {
             let canonical_root = workspace_dir.path().canonicalize().unwrap();
-            assert!(!canonical.starts_with(&canonical_root));
+            assert!(
+                !canonical.starts_with(&canonical_root),
+                "path traversal resolved inside workspace: {canonical:?}"
+            );
         }
     }
 
