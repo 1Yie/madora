@@ -156,6 +156,14 @@ export function TextWorkspace({
 			},
 		});
 
+		// Sync tab state with registry after registration, in case the
+		// dirty-change effect skipped its event during sync-from-props.
+		window.dispatchEvent(
+			new CustomEvent('editor-dirty-changed', {
+				detail: { filePath },
+			})
+		);
+
 		return () => {
 			unregisterEditor(editorId);
 		};

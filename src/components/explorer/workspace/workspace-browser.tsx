@@ -1543,7 +1543,6 @@ export function WorkspaceBrowser() {
 					sort: sortEnabled,
 				});
 				setRoot(nextRoot);
-				syncTabNodesWithTree(nextRoot);
 			} catch {
 				// tree will stay stale but won't crash
 			}
