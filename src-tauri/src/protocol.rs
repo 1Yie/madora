@@ -370,15 +370,14 @@ mod tests {
 
     #[test]
     fn path_resolution_outside_root_fails() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
+        let workspace_dir = tempfile::tempdir().unwrap();
+        let outside_dir = tempfile::tempdir().unwrap();
 
-        let outside = PathBuf::from("/tmp");
-        let outside_file = outside.join("madora-test-outside.txt");
+        let outside_file = outside_dir.path().join("madora-test-outside.txt");
         fs::write(&outside_file, b"outside-data").unwrap();
 
         let canonical = outside_file.canonicalize().unwrap();
-        let canonical_root = root.canonicalize().unwrap();
+        let canonical_root = workspace_dir.path().canonicalize().unwrap();
         assert!(!canonical.starts_with(&canonical_root));
 
         let _ = fs::remove_file(&outside_file);
