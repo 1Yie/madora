@@ -1034,7 +1034,7 @@ function FileTreeNode({
 				{Array.from({ length: depth }, (_, i) => (
 					<div
 						key={`g-${i}`}
-						className="absolute top-0 w-px bg-border/50 pointer-events-none"
+						className="absolute top-0 w-px bg-border/60 pointer-events-none"
 						style={{ left: `${i * 14 + 18}px`, height: '100%' }}
 					/>
 				))}
@@ -1142,7 +1142,7 @@ function FileTreeNode({
 			{Array.from({ length: depth }, (_, i) => (
 				<div
 					key={`g-${i}`}
-					className="absolute top-0 w-px bg-border/50 pointer-events-none"
+					className="absolute top-0 w-px bg-border/60 pointer-events-none"
 					style={{ left: `${i * 14 + 18}px`, height: '100%' }}
 				/>
 			))}
