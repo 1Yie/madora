@@ -89,6 +89,7 @@ export function SettingsDialog() {
 							>
 								<div
 									ref={scrollRef}
+									key={activeSection}
 									className="overflow-auto size-full min-h-0 flex-1"
 								>
 									<div className="space-y-6 p-4 sm:p-6">
