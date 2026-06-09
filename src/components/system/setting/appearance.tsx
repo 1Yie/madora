@@ -8,6 +8,7 @@ import {
 } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
+import { setTabBarMode } from '@/invoke/workspace';
 
 function hexToRgb(hex: string) {
 	const h = hex.replace(/^#/, '');
@@ -106,7 +107,10 @@ function TabBarModeSetting() {
 	const handleChange = (newMode: 'scroll' | 'wrap') => {
 		setMode(newMode);
 		window.localStorage.setItem(TAB_BAR_MODE_KEY, newMode);
-		window.dispatchEvent(new Event('storage'));
+		window.dispatchEvent(
+			new CustomEvent(TAB_BAR_MODE_KEY, { detail: newMode })
+		);
+		void setTabBarMode(newMode);
 	};
 
 	return (

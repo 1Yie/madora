@@ -34,6 +34,7 @@ type TabBarProps = {
 	onSelectTab: (tabId: string) => void;
 	onCloseTab: (tabId: string) => void;
 	onCloseTabs: (tabIds: string[]) => void;
+	onReorderTabs: (fromIndex: number, toIndex: number) => void;
 	tabBarMode: 'scroll' | 'wrap';
 };
 export function TabBar({
@@ -42,6 +43,7 @@ export function TabBar({
 	onSelectTab,
 	onCloseTab,
 	onCloseTabs,
+	onReorderTabs,
 	tabBarMode,
 }: TabBarProps) {
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -49,6 +51,80 @@ export function TabBar({
 	const [showLeftShadow, setShowLeftShadow] = useState(false);
 	const [showRightShadow, setShowRightShadow] = useState(false);
 	const isScroll = tabBarMode === 'scroll';
+	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+	const dragIdRef = useRef<string | null>(null);
+
+	const dragGhostRef = useRef<HTMLElement | null>(null);
+
+	const handleDragStart = (e: React.DragEvent, tabId: string) => {
+		dragIdRef.current = tabId;
+		e.dataTransfer.effectAllowed = 'move';
+		e.dataTransfer.setData('text/plain', tabId);
+
+		// Clone the actual tab so the drag preview matches the real tab styling.
+		// Use CSS transform:scale(1/dpr) to neutralise DPR differences — on a
+		// 2× display the clone is rendered at 0.5× so the browser-captured
+		// bitmap is the same pixel size as the CSS box, producing a consistent
+		// drag-image size across platforms and DPRs.
+		dragGhostRef.current?.remove();
+		const original = e.currentTarget as HTMLElement;
+		const ghost = original.cloneNode(true) as HTMLElement;
+		const dpr = window.devicePixelRatio || 1;
+		const style = getComputedStyle(document.documentElement);
+		const bgVar = style.getPropertyValue('--color-background').trim();
+		ghost.style.position = 'fixed';
+		ghost.style.top = '0';
+		ghost.style.left = '0';
+		ghost.style.pointerEvents = 'none';
+		ghost.style.zIndex = '-1';
+		ghost.style.transformOrigin = 'top left';
+		ghost.style.transform = `scale(${1 / dpr})`;
+		// Inactive tabs have no bg; give the ghost a solid bg so it isn't translucent
+		if (bgVar) ghost.style.backgroundColor = bgVar;
+		ghost.querySelector('[role="button"]')?.remove();
+		document.body.append(ghost);
+		dragGhostRef.current = ghost;
+		e.dataTransfer.setDragImage(ghost, 6 / dpr, 16 / dpr);
+
+		// Dim the source tab
+		if (e.currentTarget instanceof HTMLElement) {
+			requestAnimationFrame(() => {
+				e.currentTarget.classList.add('opacity-40');
+			});
+		}
+	};
+
+	const handleDragEnd = (e: React.DragEvent) => {
+		dragIdRef.current = null;
+		setDragOverIndex(null);
+		dragGhostRef.current?.remove();
+		dragGhostRef.current = null;
+		if (e.currentTarget instanceof HTMLElement) {
+			e.currentTarget.classList.remove('opacity-40');
+		}
+	};
+
+	const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
+		e.preventDefault();
+		e.dataTransfer.dropEffect = 'move';
+		setDragOverIndex(targetIndex);
+	};
+
+	const handleDragLeave = (e: React.DragEvent) => {
+		// Only clear when leaving the target element itself, not its children
+		if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+		setDragOverIndex(null);
+	};
+
+	const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+		e.preventDefault();
+		const fromId = dragIdRef.current ?? e.dataTransfer.getData('text/plain');
+		const fromIndex = tabs.findIndex((t) => t.id === fromId);
+		setDragOverIndex(null);
+		dragIdRef.current = null;
+		if (fromIndex === -1 || fromIndex === targetIndex) return;
+		onReorderTabs(fromIndex, targetIndex);
+	};
 
 	useLayoutEffect(() => {
 		if (!isScroll) return;
@@ -144,14 +220,22 @@ export function TabBar({
 							<ContextMenuRoot key={tab.id}>
 								<ContextMenuTrigger>
 									<button
+										draggable
+										onDragStart={(e) => handleDragStart(e, tab.id)}
+										onDragEnd={handleDragEnd}
+										onDragOver={(e) => handleDragOver(e, tabIndex)}
+										onDragLeave={handleDragLeave}
+										onDrop={(e) => handleDrop(e, tabIndex)}
 										className={cn(
 											`group relative flex h-8 shrink-0 cursor-pointer
-											items-center gap-1.5`,
+											items-center gap-1.5 select-none`,
 											'border-r border-border pl-4 pr-1 text-xs',
 											!isScroll && 'border-b border-border',
 											'transition-colors duration-100',
 											'hover:bg-muted/50',
 											'focus-visible:outline-none focus-visible:bg-muted/50',
+											dragOverIndex === tabIndex &&
+												'border-l-2 border-l-primary border-r-0',
 											isActive
 												? 'bg-background text-foreground'
 												: 'text-muted-foreground hover:text-foreground',

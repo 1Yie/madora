@@ -65,6 +65,8 @@ function removeMarkdownDraftsFor(path: string): void {
 	}
 }
 
+const TAB_BAR_MODE_KEY = 'madora-tab-bar-mode';
+
 function clearAllMarkdownDrafts(): void {
 	const keysToRemove: string[] = [];
 	for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -200,6 +202,7 @@ type InitialWorkspaceState = {
 };
 
 async function fetchInitialState(): Promise<InitialWorkspaceState> {
+	const stored = readTabBarModeFromLocalStorage();
 	try {
 		const state = await getWorkspaceState();
 		return {
@@ -207,7 +210,10 @@ async function fetchInitialState(): Promise<InitialWorkspaceState> {
 			openTabPaths: state.openTabPaths,
 			lastActiveFilePath: state.lastActiveFilePath,
 			sidebarWidth: state.sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
-			tabBarMode: state.tabBarMode === 'wrap' ? 'wrap' : 'scroll',
+			tabBarMode:
+				state.tabBarMode === 'wrap' || state.tabBarMode === 'scroll'
+					? state.tabBarMode
+					: stored,
 		};
 	} catch {
 		return {
@@ -215,8 +221,17 @@ async function fetchInitialState(): Promise<InitialWorkspaceState> {
 			openTabPaths: [],
 			lastActiveFilePath: null,
 			sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
-			tabBarMode: 'scroll',
+			tabBarMode: stored,
 		};
+	}
+}
+
+function readTabBarModeFromLocalStorage(): 'scroll' | 'wrap' {
+	try {
+		const stored = window.localStorage.getItem(TAB_BAR_MODE_KEY);
+		return stored === 'wrap' ? 'wrap' : 'scroll';
+	} catch {
+		return 'scroll';
 	}
 }
 
@@ -630,6 +645,16 @@ export function WorkspaceBrowser() {
 				clearSelectionAndPreview();
 			}
 		}
+	};
+
+	const handleReorderTabs = (fromIndex: number, toIndex: number) => {
+		setTabs((prev) => {
+			const next = [...prev];
+			const [moved] = next.splice(fromIndex, 1);
+			next.splice(toIndex, 0, moved);
+			void persistTabs(next);
+			return next;
+		});
 	};
 
 	const handleCloseTabs = (tabIds: string[]) => {
@@ -1562,6 +1587,19 @@ export function WorkspaceBrowser() {
 		syncSelectionWithRoot,
 	]);
 
+	// Sync tab bar mode from settings in real-time
+	useEffect(() => {
+		const handleTabBarModeChange = (e: Event) => {
+			const detail = (e as CustomEvent<'scroll' | 'wrap'>).detail;
+			if (detail === 'scroll' || detail === 'wrap') {
+				setTabBarModeState(detail);
+			}
+		};
+		window.addEventListener(TAB_BAR_MODE_KEY, handleTabBarModeChange);
+		return () =>
+			window.removeEventListener(TAB_BAR_MODE_KEY, handleTabBarModeChange);
+	}, []);
+
 	if (!initialised) {
 		return (
 			<div className="flex h-full min-h-0 bg-background text-foreground">
@@ -1665,6 +1703,7 @@ export function WorkspaceBrowser() {
 						onSelectTab={handleSelectTab}
 						onCloseTab={handleCloseTab}
 						onCloseTabs={handleCloseTabs}
+						onReorderTabs={handleReorderTabs}
 						tabBarMode={tabBarMode}
 					/>
 				)}
