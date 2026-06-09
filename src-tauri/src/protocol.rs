@@ -332,7 +332,8 @@ mod tests {
     #[test]
     fn protocol_state_set_and_get() {
         let state = MadoraProtocolState::new();
-        let root = Some(PathBuf::from("/tmp/test-workspace"));
+        let dir = tempfile::tempdir().unwrap();
+        let root = Some(dir.path().to_path_buf());
         state.set_workspace_root(root.clone());
         assert_eq!(state.get_workspace_root(), root);
     }
@@ -340,7 +341,8 @@ mod tests {
     #[test]
     fn protocol_state_clear() {
         let state = MadoraProtocolState::new();
-        state.set_workspace_root(Some(PathBuf::from("/tmp")));
+        let dir = tempfile::tempdir().unwrap();
+        state.set_workspace_root(Some(dir.path().to_path_buf()));
         state.set_workspace_root(None);
         assert!(state.get_workspace_root().is_none());
     }
