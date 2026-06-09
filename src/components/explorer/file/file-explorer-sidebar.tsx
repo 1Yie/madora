@@ -1024,12 +1024,20 @@ function FileTreeNode({
 		return (
 			<div
 				className={cn(
-					'py-0.5',
+					'relative py-0.5',
 					isCopied && 'border-l-2 border-primary/40',
 					isCut && 'border-l-2 border-destructive/40 opacity-50'
 				)}
 				onMouseEnter={() => onHoverNode(node)}
 			>
+				{/* Indentation guide lines for each ancestor depth */}
+				{Array.from({ length: depth }, (_, i) => (
+					<div
+						key={`g-${i}`}
+						className="absolute top-0 w-px bg-border/50 pointer-events-none"
+						style={{ left: `${i * 14 + 18}px`, height: '100%' }}
+					/>
+				))}
 				<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 					<ContextMenuTrigger>
 						<div
@@ -1124,12 +1132,20 @@ function FileTreeNode({
 	return (
 		<div
 			className={cn(
-				'py-0.5',
+				'relative py-0.5',
 				isCopied && 'border-l-2 border-primary/40',
 				isCut && 'border-l-2 border-destructive/40 opacity-50'
 			)}
 			onMouseEnter={() => onHoverNode(node)}
 		>
+			{/* Indentation guide lines for each ancestor depth */}
+			{Array.from({ length: depth }, (_, i) => (
+				<div
+					key={`g-${i}`}
+					className="absolute top-0 w-px bg-border/50 pointer-events-none"
+					style={{ left: `${i * 14 + 18}px`, height: '100%' }}
+				/>
+			))}
 			<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 				<ContextMenuTrigger>
 					<button
