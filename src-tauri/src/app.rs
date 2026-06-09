@@ -8,6 +8,8 @@ use crate::{
 use tauri::Manager;
 #[cfg(target_os = "windows")]
 use tauri_plugin_prevent_default::PlatformOptions;
+#[cfg(not(debug_assertions))]
+use tauri_plugin_prevent_default::Flags;
 
 pub fn run() {
     let mut builder = tauri::Builder::default()
