@@ -1041,7 +1041,7 @@ function FileTreeNode({
 				<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 					<ContextMenuTrigger>
 						<div
-							className="flex w-full items-center gap-1"
+							className="flex w-full items-center gap-1 relative z-10"
 							style={{ paddingLeft: `${depth * 14 + 8}px` }}
 						>
 							<button
@@ -1152,7 +1152,7 @@ function FileTreeNode({
 						type="button"
 						className={cn(
 							`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left
-							text-sm transition-colors`,
+							text-sm transition-colors relative z-10`,
 							isActuallySelected
 								? 'bg-sidebar-primary text-sidebar-primary-foreground'
 								: contextMenuOpen
@@ -2294,6 +2294,7 @@ export function FileExplorerSidebar({
 															/>
 														))}
 														<div
+															className="relative z-10"
 															style={{
 																paddingLeft: `${item.depth * 14 + 44}px`,
 															}}
@@ -2320,7 +2321,8 @@ export function FileExplorerSidebar({
 															/>
 														))}
 														<div
-															className="text-muted-foreground text-xs"
+															className="text-muted-foreground text-xs relative
+																z-10"
 															style={{
 																paddingLeft: `${item.depth * 14 + 44}px`,
 															}}
