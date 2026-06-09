@@ -362,8 +362,8 @@ export function MarkdownEditor({
 			) : null}
 			<div className={explorerEditorStatusBarClassName}>
 				<div
-					className="flex min-w-0 items-center gap-2 leading-none
-						text-muted-foreground"
+					className={`flex min-w-0 items-center gap-2 leading-none
+						text-muted-foreground${mode === 'preview' ? ' invisible' : ''}`}
 				>
 					{saveStatus === 'saving' ? (
 						<Spinner className="size-3.5 shrink-0 flex-none text-primary" />
@@ -376,12 +376,18 @@ export function MarkdownEditor({
 					className="flex shrink-0 items-center gap-3 text-muted-foreground
 						tabular-nums"
 				>
-					<span>
+					<span className={mode === 'preview' ? 'invisible' : ''}>
 						行 {cursorPos.line}, 列 {cursorPos.col}
 					</span>
-					<span>{characterCount} 字符</span>
-					<span>{encoding ?? '-'}</span>
-					<span>{lineEnding}</span>
+					<span className={mode === 'preview' ? 'invisible' : ''}>
+						{characterCount} 字符
+					</span>
+					<span className={mode === 'preview' ? 'invisible' : ''}>
+						{encoding ?? '-'}
+					</span>
+					<span className={mode === 'preview' ? 'invisible' : ''}>
+						{lineEnding}
+					</span>
 					{onToggleMode && (
 						<button
 							onClick={onToggleMode}
