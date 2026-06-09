@@ -183,6 +183,19 @@ function scrollParentToCursor(view: EditorView, pos: number): void {
 	});
 }
 
+/**
+ * Like scrollParentToCursor, but skips if the user has manually scrolled
+ * away. During AI streaming, this prevents scroll-jank — once the user
+ * scrolls, we assume they don't want auto-scroll forcing the view back to
+ * the cursor. Resets when the user clicks or types in the editor.
+ */
+let userScrolledAway = false;
+
+function scrollIfUserHasNotScrolledAway(view: EditorView, pos: number): void {
+	if (userScrolledAway) return;
+	scrollParentToCursor(view, pos);
+}
+
 function getContinuedCompletionPreview(
 	preview: CompletionPreviewState,
 	transaction: Transaction
@@ -937,7 +950,7 @@ export function useEditor({
 							});
 
 							// Scroll to keep ghost text visible as it grows
-							scrollParentToCursor(currentView, cursor);
+							scrollIfUserHasNotScrolledAway(currentView, cursor);
 						});
 					},
 				});
@@ -991,7 +1004,7 @@ export function useEditor({
 							internalCompletionEffect.of(true),
 						],
 					});
-					scrollParentToCursor(currentView, cursor);
+					scrollIfUserHasNotScrolledAway(currentView, cursor);
 				}
 
 				setCompletionStatus(
@@ -1284,6 +1297,8 @@ export function useEditor({
 						if (!internalUpdate && !externalSyncUpdate) {
 							if (!compositionInputUpdate) {
 								if (update.docChanged || update.selectionSet) {
+									// User is typing or clicking — re-enable auto-scroll
+									userScrolledAway = false;
 									scrollParentToCursor(
 										update.view,
 										update.view.state.selection.main.head
@@ -1319,6 +1334,12 @@ export function useEditor({
 		if (externalViewRef) externalViewRef.current = view;
 		view.focus();
 
+		userScrolledAway = false;
+		const onWheel = () => {
+			userScrolledAway = true;
+		};
+		editorRef.current.addEventListener('wheel', onWheel, { passive: true });
+
 		// Initialize cursor position
 		const initPos = view.state.selection.main.head;
 		const initLine = view.state.doc.lineAt(initPos);
@@ -1331,6 +1352,7 @@ export function useEditor({
 				window.clearTimeout(autoCompletionTimerRef.current);
 			if (cooldownTimerRef.current !== null)
 				window.clearTimeout(cooldownTimerRef.current);
+			editorRef.current?.removeEventListener('wheel', onWheel);
 			view.destroy();
 			viewRef.current = null;
 		};
