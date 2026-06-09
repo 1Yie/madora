@@ -172,7 +172,7 @@ pub async fn import_external_files(
 
     tauri::async_runtime::spawn_blocking(move || {
         let mut imported_nodes = Vec::new();
-        let mut skipped_count = 0u32;
+        let mut _skipped_count = 0u32;
 
         for source_path_str in source_paths {
             let source_path = PathBuf::from(source_path_str);
@@ -183,7 +183,7 @@ pub async fn import_external_files(
                 &source_path,
             ) {
                 Ok(node) => imported_nodes.push(node),
-                Err(_) => skipped_count += 1,
+                Err(_) => _skipped_count += 1,
             }
         }
 
