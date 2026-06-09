@@ -135,11 +135,9 @@ pub async fn install_cli(app: tauri::AppHandle) -> Result<serde_json::Value, Str
     }
 
     let binary = find_cli_binary(&app).ok_or_else(|| {
-        format!(
-            "未找到 mado 二进制文件。\n\
+        "未找到 mado 二进制文件。\n\
 			 请先运行 cargo build -p madora-cli 构建 CLI 工具，\n\
-			 或安装 Madora 桌面版（内嵌 CLI 二进制）。"
-        )
+			 或安装 Madora 桌面版（内嵌 CLI 二进制）。".to_string()
     })?;
 
     let home = std::env::var("HOME")

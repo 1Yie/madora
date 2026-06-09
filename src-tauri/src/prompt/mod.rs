@@ -19,6 +19,12 @@ pub struct PromptContext {
     pub title: String,
 }
 
+impl Default for PromptManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptManager {
     pub fn new() -> Self {
         Self {

@@ -49,6 +49,12 @@ struct InFlightCompletionRequest {
     result: Mutex<Option<Result<String, String>>>,
 }
 
+impl Default for AiCompletionService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AiCompletionService {
     pub fn new() -> Self {
         let client = Client::builder()
@@ -116,7 +122,7 @@ fn build_completion_cache_key(
         suffix: request
             .suffix
             .as_deref()
-            .map(|s| truncate_suffix_for_cache(s)),
+            .map(truncate_suffix_for_cache),
     }
 }
 

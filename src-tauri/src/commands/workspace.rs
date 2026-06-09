@@ -1,4 +1,5 @@
 use crate::models::workspace::WorkspaceState;
+use crate::protocol::MadoraProtocolState;
 use crate::services::workspace::WorkspaceStore;
 use tauri::State;
 
@@ -12,8 +13,12 @@ pub async fn get_workspace_state(
 #[tauri::command]
 pub async fn set_workspace_root(
     store: State<'_, WorkspaceStore>,
+    protocol_state: State<'_, MadoraProtocolState>,
     root_path: Option<String>,
 ) -> Result<(), String> {
+    // Sync the workspace root into the protocol handler state
+    protocol_state
+        .set_workspace_root(root_path.as_ref().map(std::path::PathBuf::from));
     store.set_root_path(root_path)
 }
 

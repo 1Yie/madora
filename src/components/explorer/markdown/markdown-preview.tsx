@@ -1,13 +1,21 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
-import { useEffect, useState, type ComponentProps } from 'react';
+import { useCallback, useState, type ComponentProps } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import type { Plugin } from 'unified';
 import { openUrl } from '@/invoke/opener';
-import { resolveImageSrc as resolveImageSrcBackend } from '@/invoke/workspace';
 
 import { cn } from '@/lib/utils';
+import {
+	Dialog,
+	DialogPopup,
+	DialogHeader,
+	DialogTitle,
+	DialogDescription,
+	DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { HighlightedCodeBlock } from './code-block-highlight';
 
 type MarkdownPreviewProps = {
@@ -19,14 +27,16 @@ type MarkdownPreviewProps = {
 	rootPath: string | null;
 };
 
-/** Normalize a filesystem path while preserving its absolute root or drive.
- *  (Used only for the final convertFileSrc call on the returned path.) */
-function normalizeFileSystemPath(path: string): string {
-	const normalized = path.replace(/\\/g, '/');
-	const driveMatch = normalized.match(/^[A-Za-z]:/);
-	const hasLeadingSlash = normalized.startsWith('/');
+/**
+ * Normalise a filesystem path (remove `.`, resolve `..`, replace `\\` with `/`).
+ * Returns the normalised absolute path.
+ */
+function normaliseFilePath(path: string): string {
+	const normalised = path.replace(/\\/g, '/');
+	const driveMatch = normalised.match(/^[A-Za-z]:/);
+	const hasLeadingSlash = normalised.startsWith('/');
 	const offset = driveMatch ? driveMatch[0].length : hasLeadingSlash ? 1 : 0;
-	const segments = normalized.slice(offset).split('/');
+	const segments = normalised.slice(offset).split('/');
 	const result: string[] = [];
 
 	for (const segment of segments) {
@@ -58,96 +68,79 @@ function normalizeFileSystemPath(path: string): string {
 }
 
 /**
- * Synchronous fallback for image resolution (used for initial render
- * before the async backend call completes).
+ * Safely URL-decode a string. If decoding fails (malformed encoding),
+ * returns the original string unchanged.
  */
-function resolveImageSrcSync(
+function tryDecodeURI(value: string): string {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
+}
+
+/**
+ * Resolve a markdown image / link source to a `madora://` URL.
+ *
+ * - URLs (http/https/data/asset/madora) are returned unchanged.
+ * - Absolute paths (`/img/...`) are resolved against the workspace root.
+ * - Relative paths (`./img.png`, `../img.png`) are resolved against the
+ *   markdown file's parent directory.
+ *
+ * The returned `madora://` URL is handled by the Tauri backend custom
+ * protocol, which validates the path is within the workspace and serves
+ * the file.
+ */
+function resolveToMadoraUrl(
 	src: string | undefined,
 	filePath: string,
 	rootPath: string | null
 ): string | undefined {
 	if (!src) return undefined;
 
+	// Decode URL-encoded characters (e.g. %E6%B5%8B → 测)
+	// so Chinese / non-ASCII filenames resolve correctly.
+	const decoded = tryDecodeURI(src);
+
+	// Already a protocol URL we can use directly
 	if (
-		src.startsWith('http://') ||
-		src.startsWith('https://') ||
-		src.startsWith('data:') ||
-		src.startsWith('asset://')
+		decoded.startsWith('http://') ||
+		decoded.startsWith('https://') ||
+		decoded.startsWith('data:') ||
+		decoded.startsWith('asset://') ||
+		decoded.startsWith('madora://')
 	) {
-		return src;
+		return decoded;
 	}
 
-	if (src.startsWith('/') && rootPath) {
+	let absolutePath: string;
+
+	if (decoded.startsWith('/')) {
+		// Absolute path in markdown — resolve against workspace root
+		if (!rootPath) {
+			return decoded;
+		}
+
 		const trimmedRoot = rootPath.replace(/\\/g, '/').replace(/\/+$/, '');
-		const relativeSrc = src.replace(/^\/+/, '');
-		const absolutePath = normalizeFileSystemPath(
-			`${trimmedRoot}/${relativeSrc}`
-		);
-		try {
-			return convertFileSrc(absolutePath);
-		} catch {
-			return src;
-		}
-	}
+		const relativeSrc = decoded.replace(/^\/+/, '');
+		absolutePath = normaliseFilePath(`${trimmedRoot}/${relativeSrc}`);
+	} else {
+		// Relative path — resolve against the markdown file's directory
+		const fileDir = filePath.replace(/\\/g, '/');
+		const lastSlash = fileDir.lastIndexOf('/');
 
-	// Relative path — resolve relative to the markdown file's directory
-	const fileDir = filePath.replace(/\\/g, '/');
-	const lastSlash = fileDir.lastIndexOf('/');
-	if (lastSlash >= 0) {
+		if (lastSlash < 0) {
+			return decoded;
+		}
+
 		const basePath = fileDir.slice(0, lastSlash);
-		const absolutePath = normalizeFileSystemPath(`${basePath}/${src}`);
-		try {
-			return convertFileSrc(absolutePath);
-		} catch {
-			return src;
-		}
+		absolutePath = normaliseFilePath(`${basePath}/${decoded}`);
 	}
 
-	return src;
+	return `madora://localhost${absolutePath}`;
 }
 
-/**
- * Async image resolution via backend, with synchronous fallback.
- * The backend is the single source of truth for file path resolution.
- */
-async function resolveImageSrc(
-	src: string | undefined,
-	filePath: string,
-	rootPath: string | null
-): Promise<string | undefined> {
-	if (!src) return undefined;
-
-	if (
-		src.startsWith('http://') ||
-		src.startsWith('https://') ||
-		src.startsWith('data:') ||
-		src.startsWith('asset://')
-	) {
-		return src;
-	}
-
-	try {
-		const result = await resolveImageSrcBackend(src, filePath, rootPath);
-
-		// The backend returns a data URL when the file was read successfully,
-		// or the resolved absolute path as fallback.
-		if (result.startsWith('data:')) {
-			return result;
-		}
-
-		// Fallback: convert the filesystem path to a Tauri asset URL
-		try {
-			return convertFileSrc(result);
-		} catch {
-			return result;
-		}
-	} catch {
-		// Fallback to synchronous resolution
-		return resolveImageSrcSync(src, filePath, rootPath);
-	}
-}
-
-// ─── Standalone image component with async resolution ─────────────
+// ─── Standalone image component with `madora://` resolution ──────────────
 
 function MarkdownImage({
 	src,
@@ -168,23 +161,7 @@ function MarkdownImage({
 	node?: unknown;
 	[key: string]: unknown;
 }) {
-	const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(() =>
-		resolveImageSrcSync(src, filePath, rootPath)
-	);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		void resolveImageSrc(src, filePath, rootPath).then((result) => {
-			if (!cancelled) {
-				setResolvedSrc(result);
-			}
-		});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [src, filePath, rootPath]);
+	const resolvedSrc = resolveToMadoraUrl(src, filePath, rootPath);
 
 	return (
 		<img
@@ -205,23 +182,112 @@ function MarkdownImage({
 	);
 }
 
-// ─── Components factory ─────────────────────────────────────────
+// ─── Link handler for internal file navigation ───────────────────────────
 
-const components = (
-	filePath: string,
-	rootPath: string | null
-): ComponentProps<typeof Markdown>['components'] => ({
-	a: ({ href, children, ...props }) => (
+/**
+ * Track which external directories the user has trusted for the session.
+ * Once trusted, files under that directory open without prompting again.
+ */
+const trustedExternalRoots = new Set<string>();
+
+function MarkdownLink({
+	href,
+	children,
+	filePath,
+	rootPath,
+	onExternalFile,
+	...props
+}: {
+	href?: string;
+	children?: React.ReactNode;
+	filePath: string;
+	rootPath: string | null;
+	onExternalFile: (path: string) => void;
+	[key: string]: unknown;
+}) {
+	const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+		if (!href) return;
+
+		// ── http/https: open in the system browser ──────────
+		if (href.startsWith('http://') || href.startsWith('https://')) {
+			event.preventDefault();
+			void openUrl(href);
+			return;
+		}
+
+		// ── Resolve the link to an absolute filesystem path ──
+		const resolved = resolveToMadoraUrl(href, filePath, rootPath);
+
+		if (!resolved) return;
+
+		// ── madora://localhost: internal file navigation ────
+		if (resolved.startsWith('madora://localhost')) {
+			event.preventDefault();
+
+			const absolutePath = resolved.slice('madora://localhost'.length);
+
+			const isMarkdown = /\.(md|markdown|mdx)$/i.test(absolutePath);
+
+			// Determine if the file is within the workspace root
+			const isWithinWorkspace =
+				rootPath !== null &&
+				absolutePath.startsWith(rootPath.replace(/\\/g, '/'));
+
+			if (isMarkdown) {
+				if (isWithinWorkspace) {
+					// Directly navigate — same workspace
+					window.dispatchEvent(
+						new CustomEvent('madora-navigate-file', {
+							detail: { filePath: absolutePath },
+						})
+					);
+				} else if (rootPath && trustedExternalRoots.has(rootPath)) {
+					// Already trusted this workspace root
+					window.dispatchEvent(
+						new CustomEvent('madora-navigate-file', {
+							detail: { filePath: absolutePath },
+						})
+					);
+				} else {
+					// External markdown — delegate to the parent for trust dialog
+					onExternalFile(absolutePath);
+				}
+			} else {
+				// Non-markdown file — load via protocol in a new window
+				window.open(resolved, '_blank');
+			}
+		}
+	};
+
+	return (
 		<a
 			{...props}
 			href={href}
-			onClick={(event) => {
-				event.preventDefault();
-				if (href) openUrl(href);
-			}}
+			onClick={handleClick}
+			draggable={false}
+			onDragStart={(e) => e.preventDefault()}
 		>
 			{children}
 		</a>
+	);
+}
+
+// ─── Components factory ─────────────────────────────────────────────────
+
+const components = (
+	filePath: string,
+	rootPath: string | null,
+	onExternalFile: (path: string) => void
+): ComponentProps<typeof Markdown>['components'] => ({
+	a: ({ href, children }) => (
+		<MarkdownLink
+			href={href}
+			filePath={filePath}
+			rootPath={rootPath}
+			onExternalFile={onExternalFile}
+		>
+			{children}
+		</MarkdownLink>
 	),
 	ol: ({ start, children, ...props }) => (
 		<ol start={start} {...props}>
@@ -240,13 +306,51 @@ const components = (
 				/>
 			);
 		}
+		// Indented code block or inline code — strip `node` from props
+		// to avoid `node="[object Object]"` leaking to the DOM.
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { node: _node, ...rest } = props;
 		return (
-			<code className={className} {...props}>
+			<code
+				className={className}
+				{...rest}
+				style={{
+					whiteSpace: 'pre-wrap',
+					wordBreak: 'break-word',
+				}}
+			>
 				{children}
 			</code>
 		);
 	},
-	pre: ({ children }) => <div>{children}</div>,
+	pre: ({ children }) => {
+		// HighlightedCodeBlock renders a <div> (for fenced blocks with a
+		// language).  Everything else inside <pre> is a plain code block
+		// (fenced without language, or legacy indented) — render as-is.
+		const child = Array.isArray(children) ? children[0] : children;
+		const isFencedWithLang =
+			child !== null &&
+			child !== undefined &&
+			typeof child === 'object' &&
+			'type' in child &&
+			(child as React.ReactElement).type !== 'code';
+
+		if (isFencedWithLang) {
+			return <div>{children}</div>;
+		}
+
+		// Plain code block — render as <pre> without special indented styling
+		return (
+			<pre
+				style={{
+					whiteSpace: 'pre-wrap',
+					wordBreak: 'break-word',
+				}}
+			>
+				{children}
+			</pre>
+		);
+	},
 	table: ({ children }) => (
 		<div className="overflow-x-auto my-6">
 			<table className="my-0!">{children}</table>
@@ -259,12 +363,79 @@ const components = (
 	summary: ({ children, ...props }) => <summary {...props}>{children}</summary>,
 });
 
+/**
+ * Remark plugin that disables CommonMark indented code block parsing.
+ * Lines that start with 4+ spaces or a tab are treated as regular
+ * paragraph content instead of indented code blocks.
+ *
+ * Fenced code blocks (```) are NOT affected.
+ */
+const remarkDisableIndentedCode: Plugin = function () {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const data = this.data() as any;
+	(data.micromarkExtensions ??= []).push({
+		disable: { null: ['codeIndented'] },
+	});
+};
 export function MarkdownPreview({
 	className,
 	content,
 	filePath,
 	rootPath,
 }: MarkdownPreviewProps) {
+	// Normalize leading whitespace: each indent unit (tab or 4 consecutive
+	// spaces) produces the same visual width — 4 em-spaces (\u2003).
+	// Leftover 1-3 spaces become NBSP (\u00A0) so they aren't collapsed.
+	const displayContent = content.replace(/^([ \t]+)/gm, (match) => {
+		// Normalize: treat each \t as 4 spaces, then produce 1 em-space per
+		// indent unit (tab or 4-space group).  This way pressing Tab twice
+		// yields \t\t → 2 em-spaces, the standard Chinese paragraph indent.
+		// Leftover 1-3 spaces become NBSP so they aren't collapsed.
+		const normalized = match.replace(/\t/g, '    ');
+		const groups = Math.floor(normalized.length / 4);
+		const remainder = normalized.length % 4;
+		return (
+			'\u2003'.repeat(groups * 2) + // each indent unit → 2 em-spaces
+			'\u00A0'.repeat(remainder) // leftover spaces → NBSP
+		);
+	});
+
+	// ── External file trust dialog state ────────────────────
+	const [pendingExternalPath, setPendingExternalPath] = useState<string | null>(
+		null
+	);
+
+	const handleExternalFile = useCallback(
+		(path: string) => {
+			if (rootPath && trustedExternalRoots.has(rootPath)) {
+				// Already trusted — navigate directly
+				window.dispatchEvent(
+					new CustomEvent('madora-navigate-file', {
+						detail: { filePath: path },
+					})
+				);
+			} else {
+				// New external path — show trust dialog
+				setPendingExternalPath(path);
+			}
+		},
+		[rootPath]
+	);
+
+	const handleConfirmTrust = useCallback(() => {
+		if (!pendingExternalPath || !rootPath) return;
+
+		trustedExternalRoots.add(rootPath);
+
+		window.dispatchEvent(
+			new CustomEvent('madora-navigate-file', {
+				detail: { filePath: pendingExternalPath },
+			})
+		);
+
+		setPendingExternalPath(null);
+	}, [pendingExternalPath, rootPath]);
+
 	return (
 		<div
 			className={cn(
@@ -272,16 +443,49 @@ export function MarkdownPreview({
 				className
 			)}
 			data-os-scroll
+			draggable={false}
+			onDragStart={(e) => e.preventDefault()}
 		>
 			<div className="prose-custom p-6">
 				<Markdown
-					components={components(filePath, rootPath)}
-					remarkPlugins={[remarkMath, remarkGfm]}
+					components={components(filePath, rootPath, handleExternalFile)}
+					remarkPlugins={[remarkDisableIndentedCode, remarkMath, remarkGfm]}
 					rehypePlugins={[rehypeKatex]}
 				>
-					{content}
+					{displayContent}
 				</Markdown>
 			</div>
+
+			<Dialog
+				open={pendingExternalPath !== null}
+				onOpenChange={(open: boolean) => {
+					if (!open) setPendingExternalPath(null);
+				}}
+			>
+				<DialogPopup showCloseButton={false}>
+					<DialogHeader>
+						<DialogTitle>允许打开外部文件？</DialogTitle>
+						<DialogDescription>
+							此链接指向当前工作区以外的位置，打开后将允许读取该目录下的文件。
+							<code
+								className="mt-2 block break-all rounded bg-muted px-2 py-1.5
+									text-base text-muted-foreground"
+							>
+								{pendingExternalPath}
+							</code>
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button
+							variant="outline"
+							onClick={() => setPendingExternalPath(null)}
+						>
+							取消
+						</Button>
+						<Button onClick={handleConfirmTrust}>允许访问</Button>
+					</DialogFooter>
+				</DialogPopup>
+			</Dialog>
 		</div>
 	);
 }

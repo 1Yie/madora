@@ -1473,6 +1473,64 @@ export function WorkspaceBrowser() {
 		};
 	}, [refreshUnsavedState]);
 
+	// Handle internal markdown link navigation via `madora://` protocol
+	useEffect(() => {
+		const handleNavigateFile = (e: Event) => {
+			const detail = (e as CustomEvent).detail;
+			if (!detail?.filePath) return;
+
+			const filePath: string = detail.filePath;
+
+			// Create a new ExplorerNode for the file
+			const node: ExplorerNode = {
+				name: filePath.split('/').pop() ?? filePath,
+				path: filePath,
+				relativePath: filePath,
+				kind: 'file',
+				fileKind: /\.(md|markdown|mdx)$/i.test(filePath)
+					? ('markdown' as const)
+					: null,
+				hasChildren: false,
+				loaded: true,
+				children: [],
+			};
+
+			// Try to reuse existing tab or create a new one
+			setTabs((prev) => {
+				const normalizedPath = normalizeExplorerPath(filePath);
+				const existingTab = prev.find(
+					(t) => normalizeExplorerPath(t.node.path) === normalizedPath
+				);
+
+				if (existingTab) {
+					setActiveTabId(existingTab.id);
+					return prev;
+				}
+
+				const newTab = createTabEntry(node);
+				setActiveTabId(newTab.id);
+				return [...prev, newTab];
+			});
+
+			void addTabBackend(filePath).catch(() => {});
+			void setActiveTabBackend(filePath).catch(() => {});
+
+			void loadPreview(node);
+		};
+
+		window.addEventListener(
+			'madora-navigate-file',
+			handleNavigateFile as EventListener
+		);
+
+		return () => {
+			window.removeEventListener(
+				'madora-navigate-file',
+				handleNavigateFile as EventListener
+			);
+		};
+	}, [loadPreview]);
+
 	const refreshGitStatus = useCallback(
 		async (targetRootPath?: string | null) => {
 			const nextRootPath = targetRootPath ?? root?.path ?? null;

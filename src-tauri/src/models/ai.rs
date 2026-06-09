@@ -1,26 +1,25 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Default)]
 pub enum CustomProviderProtocol {
     #[serde(rename = "anthropic")]
     Anthropic,
     #[serde(rename = "openai")]
+    #[default]
     OpenAi,
 }
 
-impl Default for CustomProviderProtocol {
-    fn default() -> Self {
-        Self::OpenAi
-    }
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Default)]
 pub enum AiProvider {
     #[serde(rename = "anthropic")]
     Anthropic,
     #[serde(rename = "custom")]
     Custom,
     #[serde(rename = "deepseek")]
+    #[default]
     DeepSeek,
     #[serde(rename = "kimi")]
     Kimi,
@@ -34,11 +33,6 @@ pub enum AiProvider {
     OpenAi,
 }
 
-impl Default for AiProvider {
-    fn default() -> Self {
-        Self::DeepSeek
-    }
-}
 
 impl AiProvider {
     pub fn as_key(self) -> &'static str {

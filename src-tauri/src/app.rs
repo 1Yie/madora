@@ -2,10 +2,10 @@ use std::env;
 
 use crate::{
     commands::{ai, explorer, git, license, project, secure_storage, system, utility, workspace},
+    protocol::MadoraProtocolState,
     services::{ai::AiCompletionService, license::LicenseService, workspace::WorkspaceStore},
 };
 use tauri::Manager;
-use tauri_plugin_prevent_default::Flags;
 #[cfg(target_os = "windows")]
 use tauri_plugin_prevent_default::PlatformOptions;
 
@@ -51,15 +51,30 @@ pub fn run() {
         configure_windows_webview(app);
 
         app.manage(LicenseService::new());
+        app.manage(MadoraProtocolState::new());
 
         // Initialize workspace store with app data directory for persistence
         let app_data_dir = app
             .path()
             .app_data_dir()
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
-        app.manage(WorkspaceStore::new(app_data_dir));
+        let workspace_store = WorkspaceStore::new(app_data_dir);
+
+        // Sync initial workspace root into the protocol state
+        if let Ok(state) = workspace_store.get_state() {
+            if let Some(root) = &state.root_path {
+                app.state::<MadoraProtocolState>()
+                    .set_workspace_root(Some(std::path::PathBuf::from(root)));
+            }
+        }
+
+        app.manage(workspace_store);
 
         Ok(())
+    });
+
+    builder = builder.register_uri_scheme_protocol("madora", |ctx, request| {
+        crate::protocol::handle_madora_protocol(ctx, request)
     });
 
     builder

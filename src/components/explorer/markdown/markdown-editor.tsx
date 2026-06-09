@@ -368,7 +368,7 @@ export function MarkdownEditor({
 					{saveStatus === 'saving' ? (
 						<Spinner className="size-3.5 shrink-0 flex-none text-primary" />
 					) : null}
-					<span className="truncate">
+					<span className="truncate flex items-center">
 						{getSaveStatusNode(saveStatus, saveMode)}
 					</span>
 				</div>

@@ -122,6 +122,12 @@ pub struct LicenseService {
     cached_verification: Mutex<Option<(LicenseStatus, Instant)>>,
 }
 
+impl Default for LicenseService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LicenseService {
     pub fn new() -> Self {
         let client = Client::builder()
@@ -381,11 +387,10 @@ impl LicenseService {
         {
             let cache = self.cached_verification.lock().unwrap();
             if let Some((status, time)) = cache.as_ref() {
-                if time.elapsed() < VERIFY_CACHE_TTL {
-                    if matches!(status.state, LicenseState::Active | LicenseState::Trial) {
+                if time.elapsed() < VERIFY_CACHE_TTL
+                    && matches!(status.state, LicenseState::Active | LicenseState::Trial) {
                         return Ok(status.clone());
                     }
-                }
             }
         }
 
