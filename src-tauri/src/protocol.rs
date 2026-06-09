@@ -387,12 +387,23 @@ mod tests {
 
     #[test]
     fn path_traversal_attempt_fails() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().to_path_buf();
+        let workspace_dir = tempfile::tempdir().unwrap();
+        let outside_dir = tempfile::tempdir().unwrap();
 
-        let traversal = root.join("images/../../../etc/passwd");
+        let outside_file = outside_dir.path().join("secret.txt");
+        fs::write(&outside_file, b"secret").unwrap();
+
+        // Build a traversal path from workspace into the outside dir
+        // using ..  Both tempdirs share the same parent (system temp),
+        // so ../<outside_dir_name>/secret.txt resolves cross-platform.
+        let traversal = workspace_dir
+            .path()
+            .join("..")
+            .join(outside_dir.path().file_name().unwrap())
+            .join("secret.txt");
+
         if let Ok(canonical) = traversal.canonicalize() {
-            let canonical_root = root.canonicalize().unwrap();
+            let canonical_root = workspace_dir.path().canonicalize().unwrap();
             assert!(!canonical.starts_with(&canonical_root));
         }
     }
