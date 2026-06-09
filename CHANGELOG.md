@@ -1,3 +1,15 @@
+## [0.3.4](https://github.com/1Yie/madora/compare/v0.3.3...v0.3.4) (2026-06-09)
+
+### Bug Fixes
+
+- hide editor status bar items in preview mode ([95db4d6](https://github.com/1Yie/madora/commit/95db4d6822ab10b6ec479dd32d822ace01bc44f6))
+- prevent scroll-jank during AI streaming when user scrolls ([a9fbdcf](https://github.com/1Yie/madora/commit/a9fbdcf542359a3df9943d407b30bea47b616a49))
+- reset settings dialog scroll position on section change ([bd97f20](https://github.com/1Yie/madora/commit/bd97f205e9388277465f1613abb01082e45e75f5))
+
+### Features
+
+- disable indented code block parsing and add visible tab/space indentation ([9f74e89](https://github.com/1Yie/madora/commit/9f74e8991e7c0d55c3e60c22a2ed39d165d5b83a))
+
 ## [0.3.3](https://github.com/1Yie/madora/compare/v0.3.2...v0.3.3) (2026-06-09)
 
 ### Bug Fixes
