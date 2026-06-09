@@ -1,3 +1,19 @@
+## [0.3.5](https://github.com/1Yie/madora/compare/v0.3.4...v0.3.5) (2026-06-09)
+
+### Bug Fixes
+
+- prevent syncTabNodesWithTree from marking subdirectory files as missing ([0a19faf](https://github.com/1Yie/madora/commit/0a19fafed8c83ed3502dbdb7b2bbf201dcb5bba2))
+- **test:** make path_traversal_attempt_fails cross-platform with tempdir ([4eee0ce](https://github.com/1Yie/madora/commit/4eee0cecea135fea7cd34ac2e8bd1758e95684b5))
+- **test:** replace hardcoded /tmp path with tempdir for cross-platform compat ([55e3356](https://github.com/1Yie/madora/commit/55e3356b452b04893f1974d41551eb8910c4825a))
+- **test:** replace remaining /tmp hardcoded paths with tempdir in state tests ([1fc49a8](https://github.com/1Yie/madora/commit/1fc49a8613c337b7ac655dd1955fbd584d9e80cb))
+- **tree:** merge chevron rotation effects to fix expand animation ([439491f](https://github.com/1Yie/madora/commit/439491fd48d2e32b58a0c076a62b0d8e0d9b3ef2))
+- **tree:** move guide lines behind selection with relative z-10 on content ([a0591fb](https://github.com/1Yie/madora/commit/a0591fb946ab1debb477d775b04e6db65d1083e4))
+- **tree:** set guide lines behind selection with z-0 ([bd8fe05](https://github.com/1Yie/madora/commit/bd8fe0506d83173d54e148c163b91e64bf38d59f))
+
+### Features
+
+- **tree:** add indentation guide lines to file tree ([71abe44](https://github.com/1Yie/madora/commit/71abe44c8e5abefa1d5ad9be21b61ffa1ff6f43f))
+
 ## [0.3.4](https://github.com/1Yie/madora/compare/v0.3.3...v0.3.4) (2026-06-09)
 
 ### Bug Fixes
