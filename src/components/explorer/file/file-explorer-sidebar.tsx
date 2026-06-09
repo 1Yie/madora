@@ -26,7 +26,6 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
-	useLayoutEffect,
 	useState,
 } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -990,30 +989,24 @@ function FileTreeNode({
 	const isSelected = isActuallySelected || contextMenuOpen;
 	const isExpanded = isDirectory && expandedPaths.has(node.path);
 
-	// Keep the chevron in sync even when a virtualized row gets reused for
-	// a different directory node.
-	useLayoutEffect(() => {
-		if (chevronRef.current) {
-			chevronRef.current.style.transform = isExpanded
-				? 'rotate(90deg)'
-				: 'rotate(0deg)';
-		}
-	}, [isExpanded, node.path]);
-
-	// Animate rotation only on user click
+	// Keep chevron rotation in sync — animated on user click, instant otherwise.
 	useEffect(() => {
-		if (!userToggledRef.current || !chevronRef.current) return;
-		userToggledRef.current = false;
-
 		const el = chevronRef.current;
-		el.style.transition = 'transform 150ms ease';
+		if (!el) return;
+
+		if (userToggledRef.current) {
+			userToggledRef.current = false;
+			// User click: animate smoothly
+			el.style.transition = 'transform 150ms ease';
+			el.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
+			const timer = setTimeout(() => {
+				el.style.transition = '';
+			}, 200);
+			return () => clearTimeout(timer);
+		}
+
+		// Virtual row reuse or programmatic change: jump to position, no animation.
 		el.style.transform = isExpanded ? 'rotate(90deg)' : 'rotate(0deg)';
-
-		const timer = setTimeout(() => {
-			el.style.transition = '';
-		}, 200);
-
-		return () => clearTimeout(timer);
 	}, [isExpanded]);
 
 	const isCopied =
