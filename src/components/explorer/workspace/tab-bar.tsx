@@ -19,6 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
 import { useWorkspace } from '@/context/workspace-provider';
+import { isSameOrDescendantPath } from '@/lib/path-utils';
 
 export type TabEntry = {
 	id: string;
@@ -32,6 +33,7 @@ export type TabEntry = {
 
 export function TabBar() {
 	const {
+		root,
 		tabs,
 		activeTabId,
 		selectTab,
@@ -204,7 +206,6 @@ export function TabBar() {
 						const fileName =
 							tab.node.name ||
 							(tab.node.path.replace(/\\/g, '/').split('/').pop() ?? '');
-
 						const tabIndex = tabs.indexOf(tab);
 						const leftTabIds = tabs.slice(0, tabIndex).map((t) => t.id);
 						const rightTabIds = tabs.slice(tabIndex + 1).map((t) => t.id);
@@ -280,7 +281,11 @@ export function TabBar() {
 													tab.node.isMissing && 'line-through'
 												)}
 											>
-												{fileName}
+												{root &&
+												!isSameOrDescendantPath(tab.node.path, root.path) &&
+												!tab.node.isMissing
+													? `⟨${fileName}⟩`
+													: fileName}
 											</span>
 											<span
 												className={cn(
@@ -324,6 +329,9 @@ export function TabBar() {
 										</TooltipTrigger>
 										<TooltipPopup side="bottom" sideOffset={0}>
 											{tab.node.path}
+											{root &&
+												!isSameOrDescendantPath(tab.node.path, root.path) &&
+												' - 非工作区'}
 										</TooltipPopup>
 									</Tooltip>
 								</ContextMenuTrigger>
