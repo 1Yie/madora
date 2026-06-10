@@ -84,6 +84,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             utility::greet,
             utility::path_exists,
+            utility::absolute_path_exists,
             crate::commands::theme::get_system_theme,
             explorer::pick_workspace_folder,
             explorer::scan_workspace_folder,

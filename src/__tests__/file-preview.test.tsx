@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 
+import { useWorkspaceStore } from '@/context/workspace-provider';
 import { FilePreview } from '@/components/explorer/file/file-preview';
 import type {
 	ExplorerNode,
 	FilePreview as ExplorerFilePreview,
 } from '@/components/explorer/types';
+
 afterEach(() => {
 	cleanup();
 });
@@ -34,7 +36,7 @@ vi.mock('@/components/explorer/workspace/text-workspace', () => ({
 	),
 }));
 
-const selectedFile: ExplorerNode = {
+const selectedFileNode: ExplorerNode = {
 	name: 'conflict.txt',
 	path: '/repo/conflict.txt',
 	relativePath: 'conflict.txt',
@@ -45,21 +47,103 @@ const selectedFile: ExplorerNode = {
 	children: [],
 };
 
+function createMockContextValue(overrides?: Record<string, unknown>) {
+	const noop = () => undefined;
+	const asyncNoop = async () => {};
+	return {
+		root: {
+			...selectedFileNode,
+			name: 'repo',
+			path: '/repo',
+			kind: 'directory' as const,
+			hasChildren: true,
+			loaded: true,
+			children: [selectedFileNode],
+		},
+		initialised: true,
+		loadingPaths: new Set<string>(),
+		expandDirectory: asyncNoop,
+		tabs: [],
+		activeTabId: null,
+		selectTab: noop,
+		closeTabAction: noop,
+		closeTabsAction: noop,
+		reorderTabs: noop,
+		tabBarMode: 'scroll' as const,
+		selectedFile: null,
+		selectedNodePath: null,
+		preview: null,
+		previewLoading: false,
+		selectNode: asyncNoop,
+		sidebarWidth: 320,
+		sidebarBusy: false,
+		operationBusy: null,
+		createBusy: false,
+		sortEnabled: true,
+		sidebarError: null,
+		setSidebarWidth: noop,
+		clipboard: null,
+		copyNode: noop,
+		cutNode: noop,
+		pasteNode: asyncNoop,
+		clearClipboard: noop,
+		gitStatus: null,
+		gitBusy: false,
+		refreshGitStatus: asyncNoop,
+		updateGitStatus: noop,
+		createMarkdownDocument: asyncNoop,
+		createDirectory: asyncNoop,
+		renameNode: asyncNoop,
+		deleteNode: asyncNoop,
+		restoreDeletedNode: asyncNoop,
+		importExternalFilesHandler: asyncNoop,
+		openFolder: asyncNoop,
+		refreshFolder: asyncNoop,
+		toggleSort: asyncNoop,
+		gitRefresh: asyncNoop,
+		gitRefreshWorkspace: asyncNoop,
+		...overrides,
+	};
+}
+
 function renderPreview(
 	preview: ExplorerFilePreview,
 	conflictedFilePaths = ['conflict.txt']
 ) {
-	return render(
-		<FilePreview
-			conflictedFilePaths={conflictedFilePaths}
-			loading={false}
-			onOpenFolder={vi.fn()}
-			preview={preview}
-			rootPath="/repo"
-			selectedFile={selectedFile}
-			workspaceOpen
-		/>
+	const gitStatus = {
+		branch: { name: 'main', upstream: null, ahead: 0, behind: 0 },
+		conflictedFiles: conflictedFilePaths,
+		hasRepository: true,
+		hasGitDirectory: true,
+		hasStagedChanges: false,
+		hasUnstagedChanges: false,
+		hasUntrackedFiles: false,
+		isMerging: false,
+		remotes: [],
+		repositoryState: 'merge' as const,
+		stagedCount: 0,
+		totalChangedCount: 0,
+		unstagedCount: 0,
+		files: [],
+	};
+	useWorkspaceStore.setState(
+		createMockContextValue({
+			root: {
+				name: 'repo',
+				path: '/repo',
+				relativePath: '',
+				kind: 'directory',
+				fileKind: null,
+				hasChildren: true,
+				loaded: true,
+				children: [selectedFileNode],
+			},
+			selectedFile: selectedFileNode,
+			preview,
+			gitStatus,
+		})
 	);
+	return render(<FilePreview />);
 }
 
 describe('FilePreview', () => {

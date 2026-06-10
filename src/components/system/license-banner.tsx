@@ -1,7 +1,7 @@
 import { Crown, OctagonX, ShieldAlert } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
-import { useLicense } from '@/components/system/license-provider';
+import { useLicense } from '@/context/license-provider';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 

@@ -5,6 +5,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Plugin } from 'unified';
 import { openUrl } from '@/invoke/opener';
+import { absolutePathExists } from '@/invoke/system';
+import { showErrorToast } from '@/components/ui/toast';
 
 import { cn } from '@/lib/utils';
 import {
@@ -184,18 +186,13 @@ function MarkdownImage({
 
 // ─── Link handler for internal file navigation ───────────────────────────
 
-/**
- * Track which external directories the user has trusted for the session.
- * Once trusted, files under that directory open without prompting again.
- */
-const trustedExternalRoots = new Set<string>();
-
 function MarkdownLink({
 	href,
 	children,
 	filePath,
 	rootPath,
 	onExternalFile,
+	onMissingFile,
 	...props
 }: {
 	href?: string;
@@ -203,9 +200,10 @@ function MarkdownLink({
 	filePath: string;
 	rootPath: string | null;
 	onExternalFile: (path: string) => void;
+	onMissingFile?: (path: string) => void;
 	[key: string]: unknown;
 }) {
-	const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+	const handleClick = async (event: React.MouseEvent<HTMLAnchorElement>) => {
 		if (!href) return;
 
 		// ── http/https: open in the system browser ──────────
@@ -228,7 +226,6 @@ function MarkdownLink({
 
 			const isMarkdown = /\.(md|markdown|mdx)$/i.test(absolutePath);
 
-			// Determine if the file is within the workspace root
 			const isWithinWorkspace =
 				rootPath !== null &&
 				absolutePath.startsWith(rootPath.replace(/\\/g, '/'));
@@ -236,20 +233,23 @@ function MarkdownLink({
 			if (isMarkdown) {
 				if (isWithinWorkspace) {
 					// Directly navigate — same workspace
-					window.dispatchEvent(
-						new CustomEvent('madora-navigate-file', {
-							detail: { filePath: absolutePath },
-						})
-					);
-				} else if (rootPath && trustedExternalRoots.has(rootPath)) {
-					// Already trusted this workspace root
+					let fileExists: boolean;
+					try {
+						fileExists = await absolutePathExists(absolutePath);
+					} catch {
+						fileExists = true;
+					}
+					if (!fileExists) {
+						onMissingFile?.(absolutePath);
+						return;
+					}
 					window.dispatchEvent(
 						new CustomEvent('madora-navigate-file', {
 							detail: { filePath: absolutePath },
 						})
 					);
 				} else {
-					// External markdown — delegate to the parent for trust dialog
+					// External markdown — show trust dialog
 					onExternalFile(absolutePath);
 				}
 			} else {
@@ -277,7 +277,8 @@ function MarkdownLink({
 const components = (
 	filePath: string,
 	rootPath: string | null,
-	onExternalFile: (path: string) => void
+	onExternalFile: (path: string) => void,
+	onMissingFile?: (path: string) => void
 ): ComponentProps<typeof Markdown>['components'] => ({
 	a: ({ href, children }) => (
 		<MarkdownLink
@@ -285,6 +286,7 @@ const components = (
 			filePath={filePath}
 			rootPath={rootPath}
 			onExternalFile={onExternalFile}
+			onMissingFile={onMissingFile}
 		>
 			{children}
 		</MarkdownLink>
@@ -404,28 +406,33 @@ export function MarkdownPreview({
 	const [pendingExternalPath, setPendingExternalPath] = useState<string | null>(
 		null
 	);
-
-	const handleExternalFile = useCallback(
-		(path: string) => {
-			if (rootPath && trustedExternalRoots.has(rootPath)) {
-				// Already trusted — navigate directly
-				window.dispatchEvent(
-					new CustomEvent('madora-navigate-file', {
-						detail: { filePath: path },
-					})
-				);
-			} else {
-				// New external path — show trust dialog
-				setPendingExternalPath(path);
-			}
-		},
-		[rootPath]
+	// Keep last path visible during close animation so content doesn't collapse
+	const [displayExternalPath, setDisplayExternalPath] = useState<string | null>(
+		null
 	);
 
-	const handleConfirmTrust = useCallback(() => {
+	const handleMissingFile = useCallback((path: string) => {
+		showErrorToast('文件不存在', path);
+	}, []);
+
+	const handleExternalFile = useCallback((path: string) => {
+		setDisplayExternalPath(path);
+		setPendingExternalPath(path);
+	}, []);
+
+	const handleConfirmTrust = useCallback(async () => {
 		if (!pendingExternalPath || !rootPath) return;
 
-		trustedExternalRoots.add(rootPath);
+		try {
+			const exists = await absolutePathExists(pendingExternalPath);
+			if (!exists) {
+				showErrorToast('文件不存在', pendingExternalPath);
+				setPendingExternalPath(null);
+				return;
+			}
+		} catch {
+			// Existence check failed — navigate anyway
+		}
 
 		window.dispatchEvent(
 			new CustomEvent('madora-navigate-file', {
@@ -448,7 +455,12 @@ export function MarkdownPreview({
 		>
 			<div className="prose-custom p-6">
 				<Markdown
-					components={components(filePath, rootPath, handleExternalFile)}
+					components={components(
+						filePath,
+						rootPath,
+						handleExternalFile,
+						handleMissingFile
+					)}
 					remarkPlugins={[remarkDisableIndentedCode, remarkMath, remarkGfm]}
 					rehypePlugins={[rehypeKatex]}
 				>
@@ -471,7 +483,7 @@ export function MarkdownPreview({
 								className="mt-2 block break-all rounded bg-muted px-2 py-1.5
 									text-base text-muted-foreground"
 							>
-								{pendingExternalPath}
+								{displayExternalPath}
 							</code>
 						</DialogDescription>
 					</DialogHeader>

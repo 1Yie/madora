@@ -344,6 +344,40 @@ async function fetchInitialState(): Promise<InitialWorkspaceState> {
 	}
 }
 
+function createExternalNode(path: string): ExplorerNode {
+	const name = path.replace(/\\/g, '/').split('/').pop() ?? path;
+	return {
+		name,
+		path,
+		relativePath: path,
+		kind: 'file',
+		fileKind: /\.(md|markdown|mdx)$/i.test(path) ? 'markdown' : null,
+		hasChildren: false,
+		loaded: true,
+		children: [],
+	};
+}
+
+/**
+ * Sync a tab's node with an updated workspace tree.
+ *
+ * - If the node is found in the tree, use the tree node.
+ * - If the node is not found AND the file is outside the workspace,
+ *   keep the tab unchanged — external files are not tree-managed.
+ * - If the node is not found AND the file is inside the workspace,
+ *   mark it as missing (the file was deleted/moved).
+ */
+function syncTabNode(tab: TabEntry, nextRoot: ExplorerNode): TabEntry {
+	const node = findNodeByPath(nextRoot, tab.node.path);
+	if (!node) {
+		if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
+			return tab;
+		}
+		return { ...tab, node: { ...tab.node, isMissing: true } };
+	}
+	return { ...tab, node };
+}
+
 function createTabEntry(node: ExplorerNode): TabEntry {
 	const tabId = `tab-${++tabIdCounter}`;
 	return {
@@ -590,13 +624,24 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 						: [];
 
 			for (const path of tabPaths) {
+				let fileNode: ExplorerNode | null = null;
+				let resolvedRootForPath = restoredRoot;
+
 				const { node, root: nextResolved } = await resolveNodeFromPath(
 					restoredRoot,
 					path
 				);
-				restoredRoot = nextResolved;
-				if (node?.kind !== 'file') continue;
-				const normalizedPath = normalizeExplorerPath(node.path);
+
+				if (node) {
+					fileNode = node;
+					resolvedRootForPath = nextResolved;
+				} else if (isOutsideWorkspace(path, restoredRoot.path)) {
+					fileNode = createExternalNode(path);
+				}
+
+				restoredRoot = resolvedRootForPath;
+				if (fileNode?.kind !== 'file') continue;
+				const normalizedPath = normalizeExplorerPath(fileNode.path);
 				if (
 					restoredTabs.some(
 						(tab) => normalizeExplorerPath(tab.node.path) === normalizedPath
@@ -604,7 +649,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				) {
 					continue;
 				}
-				restoredTabs.push(createTabEntry(node));
+				restoredTabs.push(createTabEntry(fileNode));
 			}
 
 			const preferredPath = initialState.lastActiveFilePath
@@ -739,19 +784,10 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 		if (state.root && !findNodeByPath(state.root, tab.node.path)) {
 			if (isOutsideWorkspace(tab.node.path, state.root.path)) {
 				if (tab.id !== state.activeTabId) {
-					const updatedTab = {
-						...tab,
-						node: { ...tab.node, isMissing: true },
-					};
-					set((s) => ({
-						tabs: s.tabs.map((t) => (t.id === tabId ? updatedTab : t)),
-						activeTabId: tabId,
-						selectedNodePath: tab.node.path,
-						selectedFile: updatedTab.node,
-						preview: null,
-						previewError: null,
-						previewLoading: false,
-					}));
+					set({ activeTabId: tabId });
+					void get().loadPreview(tab.node);
+					void addTabBackend(tab.node.path).catch(() => {});
+					void setActiveTabBackend(tab.node.path).catch(() => {});
 				}
 				return;
 			}
@@ -916,16 +952,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			if (nextSelectedPath) {
@@ -1013,16 +1040,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			await syncSelectionWithRootStore(nextRoot, createdPath);
@@ -1069,16 +1087,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			await syncSelectionWithRootStore(nextRoot, state.selectedNodePath);
@@ -1130,16 +1139,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			if (state.clipboard && nextClipboardPath) {
@@ -1260,24 +1260,9 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			set({ loadingPaths: new Set(), root: nextRoot, gitStatus: nextStatus });
 
-			// Sync tabs, clearing isMissing on the restored file
-			const normalizedTargetPath = normalizeExplorerPath(targetPath);
+			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					const isRestored =
-						normalizeExplorerPath(node.path) === normalizedTargetPath;
-					return {
-						...tab,
-						node: isRestored ? { ...node, isMissing: false } : node,
-					};
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			await syncSelectionWithRootStore(nextRoot, targetPath);
@@ -1337,16 +1322,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			if (importedNodes.length > 0) {
@@ -1444,16 +1420,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			set({ sidebarError: null });
@@ -1523,16 +1490,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			// sync tabs with tree
 			set((s) => ({
-				tabs: s.tabs.map((tab) => {
-					const node = findNodeByPath(nextRoot, tab.node.path);
-					if (!node) {
-						if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
-							return { ...tab, node: { ...tab.node, isMissing: true } };
-						}
-						return tab;
-					}
-					return { ...tab, node };
-				}),
+				tabs: s.tabs.map((tab) => syncTabNode(tab, nextRoot)),
 			}));
 
 			set({ sidebarError: null });

@@ -5,7 +5,7 @@ import {
 	type BundledLanguage,
 	type BundledTheme,
 } from 'shiki';
-import { useTheme } from '@/components/system/theme-provider';
+import { useTheme } from '@/context/theme-provider';
 
 type HighlightedCodeBlockProps = {
 	lang: string;

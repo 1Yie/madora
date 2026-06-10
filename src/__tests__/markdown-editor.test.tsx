@@ -6,7 +6,7 @@ import type { MutableRefObject } from 'react';
 
 import { useEditor } from '@/hooks/use-editor';
 
-vi.mock('@/components/system/ai-settings-provider', () => ({
+vi.mock('@/context/ai-settings-provider', () => ({
 	useAiSettings: () => ({
 		apiUrl: '',
 		customProtocol: 'openai',
@@ -17,7 +17,7 @@ vi.mock('@/components/system/ai-settings-provider', () => ({
 	}),
 }));
 
-vi.mock('@/components/system/theme-provider', () => ({
+vi.mock('@/context/theme-provider', () => ({
 	useTheme: () => ({ resolvedTheme: 'light' }),
 }));
 

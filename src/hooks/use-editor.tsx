@@ -32,8 +32,8 @@ import {
 	type MutableRefObject,
 } from 'react';
 
-import { useAiSettings } from '@/components/system/ai-settings-provider';
-import { useTheme } from '@/components/system/theme-provider';
+import { useAiSettings } from '@/context/ai-settings-provider';
+import { useTheme } from '@/context/theme-provider';
 import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { showErrorToast } from '@/components/ui/toast';
 
@@ -653,6 +653,7 @@ export function useEditor({
 	const cooldownTimerRef = useRef<number | null>(null);
 	const editorRef = useRef<HTMLDivElement | null>(null);
 	const pendingLocalValuesRef = useRef<string[]>([]);
+	const isSavingRef = useRef(false);
 	const pendingRequestRef = useRef<PendingCompletionRequest | null>(null);
 	const requestSequenceRef = useRef(0);
 	const scheduledSnapshotRef = useRef<CompletionSnapshot | null>(null);
@@ -690,7 +691,11 @@ export function useEditor({
 	});
 
 	const handleSave = useEffectEvent(() => {
+		isSavingRef.current = true;
 		onSave?.();
+		Promise.resolve().then(() => {
+			isSavingRef.current = false;
+		});
 	});
 
 	const handleCursorChange = useEffectEvent((line: number, col: number) => {
@@ -1374,7 +1379,7 @@ export function useEditor({
 
 		if (currentValue === value) return;
 
-		if (matchedPendingIndex !== -1 && view.hasFocus) {
+		if (matchedPendingIndex !== -1 && view.hasFocus && !isSavingRef.current) {
 			logCompletionDebug('external-sync-skip:stale-local-echo', {
 				cursor: view.state.selection.main.head,
 				incomingLength: value.length,

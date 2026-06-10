@@ -1,6 +1,6 @@
 import { Check, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { useTheme } from '@/components/system/theme-provider';
+import { useTheme } from '@/context/theme-provider';
 import {
 	Option,
 	SettingsSectionCard,

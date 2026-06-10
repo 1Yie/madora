@@ -104,11 +104,24 @@ const defaultWorkspaceState = {
 	tabBarMode: 'scroll',
 };
 
-vi.mock('@/components/system/app-settings-provider', () => ({
-	useAppSettings: () => ({ showHiddenFiles: false, saveMode: 'auto' }),
-}));
+vi.mock('@/context/app-settings-provider', () => {
+	const mockState = {
+		showHiddenFiles: false,
+		saveMode: 'auto' as const,
+		setSaveMode: vi.fn(),
+		setShowHiddenFiles: vi.fn(),
+	};
+	return {
+		useAppSettings: () => mockState,
+		useAppSettingsStore: Object.assign(
+			(selector?: (s: typeof mockState) => unknown) =>
+				selector ? selector(mockState) : mockState,
+			{ getState: () => mockState, setState: vi.fn() }
+		),
+	};
+});
 
-vi.mock('@/components/system/ai-settings-provider', () => ({
+vi.mock('@/context/ai-settings-provider', () => ({
 	useAiSettings: () => ({}),
 }));
 
@@ -116,57 +129,64 @@ vi.mock('@/components/explorer/file/file-preview', () => ({
 	FilePreview: () => null,
 }));
 
-vi.mock('@/components/explorer/workspace/tab-bar', () => ({
-	TabBar: (props: {
-		tabs: Array<{ id: string; node: { path: string } }>;
-		activeTabId: string | null;
-		tabBarMode: 'scroll' | 'wrap';
-	}) => {
-		const activePath =
-			props.tabs.find((tab) => tab.id === props.activeTabId)?.node.path ??
-			'none';
+vi.mock('@/components/explorer/workspace/tab-bar', async () => {
+	const { useWorkspace } = await import('@/context/workspace-provider');
+	return {
+		TabBar: () => {
+			const { tabs, activeTabId, tabBarMode } = useWorkspace();
+			const safeTabs = (tabs ?? []) as Array<{
+				id: string;
+				node: { path: string };
+			}>;
+			const activePath =
+				safeTabs.find(
+					(tab: { id: string }) => tab.id === (activeTabId as string | null)
+				)?.node.path ?? 'none';
 
-		return (
-			<div>
-				<div>{`tabs:${props.tabs.map((tab) => tab.node.path).join('|')}`}</div>
-				<div>{`active:${activePath}`}</div>
-				<div>{`mode:${props.tabBarMode}`}</div>
-			</div>
-		);
-	},
-}));
+			return (
+				<div>
+					<div>{`tabs:${safeTabs.map((tab) => tab.node.path).join('|')}`}</div>
+					<div>{`active:${activePath}`}</div>
+					<div>{`mode:${tabBarMode as string}`}</div>
+				</div>
+			);
+		},
+	};
+});
 
 vi.mock('@/components/ui/toast', () => ({
 	showErrorToast: vi.fn(),
 }));
 
-vi.mock('@/components/explorer/file/file-explorer-sidebar', () => ({
-	FileExplorerSidebar: (props: {
-		clipboard: { mode: 'copy' | 'cut' } | null;
-		onCopyNode: (node: ExplorerNode) => void;
-		onPasteNode: (destinationPath: string | null) => Promise<void>;
-	}) => (
-		<div>
-			<div>
-				{props.clipboard
-					? `clipboard:${props.clipboard.mode}`
-					: 'clipboard:empty'}
-			</div>
-			<button
-				type="button"
-				onClick={() => props.onCopyNode(rootNode.children[0])}
-			>
-				copy-node
-			</button>
-			<button
-				type="button"
-				onClick={() => void props.onPasteNode('/workspace/docs')}
-			>
-				paste-node
-			</button>
-		</div>
-	),
-}));
+vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
+	const { useWorkspace } = await import('@/context/workspace-provider');
+	return {
+		FileExplorerSidebar: () => {
+			const ctx = useWorkspace();
+			return (
+				<div>
+					<div>
+						{ctx.clipboard
+							? `clipboard:${ctx.clipboard.mode}`
+							: 'clipboard:empty'}
+					</div>
+					<button
+						type="button"
+						onClick={() => ctx.copyNode(rootNode.children[0])}
+					>
+						copy-node
+					</button>
+					<button
+						type="button"
+						onClick={() => void ctx.pasteNode('/workspace/docs')}
+					>
+						paste-node
+					</button>
+				</div>
+			);
+		},
+	};
+});
 
 describe('WorkspaceBrowser', () => {
 	const mockInvoke = vi.mocked(invoke);

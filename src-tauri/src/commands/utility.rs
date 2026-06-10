@@ -16,3 +16,11 @@ pub fn path_exists(root_path: String, path: String) -> Result<bool, String> {
 
     path.try_exists().map_err(|e| e.to_string())
 }
+
+/// Checks whether an absolute path exists on the filesystem without
+/// requiring it to be within any workspace root.
+#[tauri::command]
+pub fn absolute_path_exists(path: String) -> Result<bool, String> {
+    let path = PathBuf::from(path);
+    path.try_exists().map_err(|e| e.to_string())
+}

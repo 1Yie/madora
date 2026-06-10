@@ -20,7 +20,7 @@ vi.mock('@/components/ui/provider-icons', () => ({
 		openai: () => <span data-testid="provider-icon">O</span>,
 	},
 }));
-vi.mock('@/components/system/license-provider', () => {
+vi.mock('@/context/license-provider', () => {
 	const MockLicenseProvider = ({ children }: { children: React.ReactNode }) => (
 		<>{children}</>
 	);
@@ -36,7 +36,7 @@ vi.mock('@/components/system/license-provider', () => {
 	};
 });
 
-import { AiSettingsProvider } from '@/components/system/ai-settings-provider';
+import { AiSettingsProvider } from '@/context/ai-settings-provider';
 import {
 	SetupWizard,
 	shouldShowSetupWizard,

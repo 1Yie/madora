@@ -5,12 +5,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import appIcon from '@/assets/icon.png';
 import providerModels from '@/assets/models.json';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
-import { useLicense } from '@/components/system/license-provider';
+import { useLicense } from '@/context/license-provider';
 import {
 	type CustomProviderProtocol,
 	getProviderDefinitions,
 	useAiSettings,
-} from '@/components/system/ai-settings-provider';
+} from '@/context/ai-settings-provider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import {

@@ -14,8 +14,8 @@ import {
 	type CustomProviderProtocol,
 	getProviderDefinitions,
 	useAiSettings,
-} from '@/components/system/ai-settings-provider';
-import { useAppSettings } from '@/components/system/app-settings-provider';
+} from '@/context/ai-settings-provider';
+import { useAppSettings } from '@/context/app-settings-provider';
 import {
 	FieldBlock,
 	Option,

@@ -17,6 +17,11 @@ export async function pathExists(
 	return invoke<boolean>('path_exists', { rootPath, path });
 }
 
+/** Checks whether an absolute path exists on the filesystem (no workspace root required). */
+export async function absolutePathExists(path: string): Promise<boolean> {
+	return invoke<boolean>('absolute_path_exists', { path });
+}
+
 /** Returns the current OS theme mode and system accent color. */
 export async function getSystemTheme(): Promise<{
 	scheme: string;

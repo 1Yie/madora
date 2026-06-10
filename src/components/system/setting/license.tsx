@@ -9,7 +9,7 @@ import {
 	Zap,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
-import { useLicense } from '@/components/system/license-provider';
+import { useLicense } from '@/context/license-provider';
 import { SettingsSectionCard } from '@/components/system/setting/shared';
 import { Button } from '@/components/ui/button';
 import {

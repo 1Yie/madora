@@ -15,8 +15,10 @@ import {
 	ContextMenuRoot,
 	ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
+import { useWorkspace } from '@/context/workspace-provider';
 
 export type TabEntry = {
 	id: string;
@@ -28,24 +30,17 @@ export type TabEntry = {
 	unsaved: boolean;
 };
 
-type TabBarProps = {
-	tabs: TabEntry[];
-	activeTabId: string | null;
-	onSelectTab: (tabId: string) => void;
-	onCloseTab: (tabId: string) => void;
-	onCloseTabs: (tabIds: string[]) => void;
-	onReorderTabs: (fromIndex: number, toIndex: number) => void;
-	tabBarMode: 'scroll' | 'wrap';
-};
-export function TabBar({
-	tabs,
-	activeTabId,
-	onSelectTab,
-	onCloseTab,
-	onCloseTabs,
-	onReorderTabs,
-	tabBarMode,
-}: TabBarProps) {
+export function TabBar() {
+	const {
+		tabs,
+		activeTabId,
+		selectTab,
+		closeTabAction,
+		closeTabsAction,
+		reorderTabs,
+		tabBarMode,
+	} = useWorkspace();
+
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [showLeftShadow, setShowLeftShadow] = useState(false);
@@ -123,7 +118,7 @@ export function TabBar({
 		setDragOverIndex(null);
 		dragIdRef.current = null;
 		if (fromIndex === -1 || fromIndex === targetIndex) return;
-		onReorderTabs(fromIndex, targetIndex);
+		reorderTabs(fromIndex, targetIndex);
 	};
 
 	useLayoutEffect(() => {
@@ -177,6 +172,8 @@ export function TabBar({
 		};
 	}, [tabs, activeTabId, isScroll]);
 
+	if (tabs.length === 0) return null;
+
 	return (
 		<div className={isScroll ? 'relative' : ''}>
 			<div
@@ -219,122 +216,132 @@ export function TabBar({
 						return (
 							<ContextMenuRoot key={tab.id}>
 								<ContextMenuTrigger>
-									<button
-										draggable
-										onDragStart={(e) => handleDragStart(e, tab.id)}
-										onDragEnd={handleDragEnd}
-										onDragOver={(e) => handleDragOver(e, tabIndex)}
-										onDragLeave={handleDragLeave}
-										onDrop={(e) => handleDrop(e, tabIndex)}
-										className={cn(
-											`group relative flex h-8 shrink-0 cursor-pointer
-											items-center gap-1.5 select-none`,
-											'border-r border-border pl-4 pr-1 text-xs',
-											!isScroll && 'border-b border-border',
-											'transition-colors duration-100',
-											'hover:bg-muted/50',
-											'focus-visible:outline-none focus-visible:bg-muted/50',
-											dragOverIndex === tabIndex &&
-												'border-l-2 border-l-primary border-r-0',
-											isActive
-												? 'bg-background text-foreground'
-												: 'text-muted-foreground hover:text-foreground',
-											tab.node.isMissing &&
-												`text-muted-foreground/60
-												hover:text-muted-foreground/80`
-										)}
-										onClick={() => onSelectTab(tab.id)}
-										onMouseDown={(e) => {
-											if (e.button === 1) {
-												e.preventDefault();
-												onCloseTab(tab.id);
+									<Tooltip>
+										<TooltipTrigger
+											render={
+												<button
+													draggable
+													onDragStart={(e) => handleDragStart(e, tab.id)}
+													onDragEnd={handleDragEnd}
+													onDragOver={(e) => handleDragOver(e, tabIndex)}
+													onDragLeave={handleDragLeave}
+													onDrop={(e) => handleDrop(e, tabIndex)}
+													className={cn(
+														`group relative flex h-8 shrink-0 cursor-pointer
+														items-center gap-1.5 select-none`,
+														'border-r border-border pl-4 pr-1 text-xs',
+														!isScroll && 'border-b border-border',
+														'transition-colors duration-100',
+														'hover:bg-muted/50',
+														`focus-visible:outline-none
+														focus-visible:bg-muted/50`,
+														dragOverIndex === tabIndex &&
+															'border-l-2 border-l-primary border-r-0',
+														isActive
+															? 'bg-background text-foreground'
+															: 'text-muted-foreground hover:text-foreground',
+														tab.node.isMissing &&
+															`text-muted-foreground/60
+															hover:text-muted-foreground/80`
+													)}
+													onClick={() => selectTab(tab.id)}
+													onMouseDown={(e) => {
+														if (e.button === 1) {
+															e.preventDefault();
+															closeTabAction(tab.id);
+														}
+													}}
+													role="tab"
+													aria-selected={isActive}
+													type="button"
+												/>
 											}
-										}}
-										role="tab"
-										aria-selected={isActive}
-										type="button"
-									>
-										{isActive && (
-											<div
+										>
+											{isActive && (
+												<div
+													className={cn(
+														'absolute inset-x-0 top-0 h-0.5',
+														tab.node.isMissing
+															? 'bg-muted-foreground/40'
+															: 'bg-primary'
+													)}
+													aria-hidden="true"
+												/>
+											)}
+											<Icon
 												className={cn(
-													'absolute inset-x-0 top-0 h-0.5',
-													tab.node.isMissing
-														? 'bg-muted-foreground/40'
-														: 'bg-primary'
+													'size-3.5 shrink-0',
+													tab.node.isMissing && 'opacity-50'
 												)}
-												aria-hidden="true"
 											/>
-										)}
-										<Icon
-											className={cn(
-												'size-3.5 shrink-0',
-												tab.node.isMissing && 'opacity-50'
-											)}
-										/>
-										<span
-											className={cn(
-												'max-w-32 truncate leading-4 pb-px',
-												tab.node.isMissing && 'line-through'
-											)}
-										>
-											{fileName}
-										</span>
-										<span
-											className={cn(
-												`ml-0.5 flex size-4 shrink-0 items-center justify-center
-												rounded-sm`,
-												'transition-colors',
-												'hover:bg-muted-foreground/20',
-												'focus-visible:outline-none'
-											)}
-											onClick={(e) => {
-												e.stopPropagation();
-												e.preventDefault();
-												onCloseTab(tab.id);
-											}}
-											onKeyDown={(e) => {
-												if (e.key === 'Enter' || e.key === ' ') {
+											<span
+												className={cn(
+													'max-w-32 truncate leading-4 pb-px',
+													tab.node.isMissing && 'line-through'
+												)}
+											>
+												{fileName}
+											</span>
+											<span
+												className={cn(
+													`ml-0.5 flex size-4 shrink-0 items-center
+													justify-center rounded-sm`,
+													'transition-colors',
+													'hover:bg-muted-foreground/20',
+													'focus-visible:outline-none'
+												)}
+												onClick={(e) => {
 													e.stopPropagation();
-													onCloseTab(tab.id);
-												}
-											}}
-											role="button"
-											tabIndex={-1}
-											aria-label={`关闭 ${fileName}`}
-										>
-											{tab.unsaved ? (
-												<>
-													<span className="group-hover:hidden">
-														<span
-															className="block size-2 rounded-full
-																bg-muted-foreground"
-														/>
-													</span>
-													<span className="hidden group-hover:block">
-														<X className="size-3" />
-													</span>
-												</>
-											) : (
-												<X className="size-3" />
-											)}
-										</span>
-									</button>
+													e.preventDefault();
+													closeTabAction(tab.id);
+												}}
+												onKeyDown={(e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														e.stopPropagation();
+														closeTabAction(tab.id);
+													}
+												}}
+												role="button"
+												tabIndex={-1}
+												aria-label={`关闭 ${fileName}`}
+											>
+												{tab.unsaved ? (
+													<>
+														<span className="group-hover:hidden">
+															<span
+																className="block size-2 rounded-full
+																	bg-muted-foreground"
+															/>
+														</span>
+														<span className="hidden group-hover:block">
+															<X className="size-3" />
+														</span>
+													</>
+												) : (
+													<X className="size-3" />
+												)}
+											</span>
+										</TooltipTrigger>
+										<TooltipPopup side="bottom" sideOffset={0}>
+											{tab.node.path}
+										</TooltipPopup>
+									</Tooltip>
 								</ContextMenuTrigger>
 								<ContextMenuPopup align="start" sideOffset={4}>
-									<MenuItem onClick={() => onCloseTab(tab.id)}>
+									<MenuItem onClick={() => closeTabAction(tab.id)}>
 										<X className="size-3.5" />
 										关闭当前标签页
 									</MenuItem>
 									<MenuSeparator />
 									<MenuItem
-										onClick={() => onCloseTabs(leftTabIds)}
+										onClick={() => closeTabsAction(leftTabIds)}
 										disabled={leftTabIds.length === 0}
 									>
 										<ChevronLeft className="size-3.5" />
 										关闭左侧标签页
 									</MenuItem>
 									<MenuItem
-										onClick={() => onCloseTabs(rightTabIds)}
+										onClick={() => closeTabsAction(rightTabIds)}
 										disabled={rightTabIds.length === 0}
 									>
 										<ChevronRight className="size-3.5" />
@@ -342,13 +349,13 @@ export function TabBar({
 									</MenuItem>
 									<MenuSeparator />
 									<MenuItem
-										onClick={() => onCloseTabs(otherTabIds)}
+										onClick={() => closeTabsAction(otherTabIds)}
 										disabled={otherTabIds.length === 0}
 									>
 										<Focus className="size-3.5" />
 										仅保留当前标签页
 									</MenuItem>
-									<MenuItem onClick={() => onCloseTabs(allTabIds)}>
+									<MenuItem onClick={() => closeTabsAction(allTabIds)}>
 										<SquareX className="size-3.5" />
 										关闭所有标签页
 									</MenuItem>

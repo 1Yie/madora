@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { codeToHtml, type BundledLanguage, type BundledTheme } from 'shiki';
 
-import { useTheme } from '@/components/system/theme-provider';
+import { useTheme } from '@/context/theme-provider';
 import { cn } from '@/lib/utils';
 
 type CodeBlockProps = {

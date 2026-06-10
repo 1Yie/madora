@@ -1,6 +1,6 @@
 import { Loader2, ExternalLink } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { useLicense } from '@/components/system/license-provider';
+import { useLicense } from '@/context/license-provider';
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,

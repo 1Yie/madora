@@ -30,6 +30,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 	}),
 }));
 
+import { useWorkspaceStore } from '@/context/workspace-provider';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import type { ExplorerNode } from '@/components/explorer/types';
 import type { GitStatus } from '@/components/explorer/git/git-types';
@@ -37,6 +38,12 @@ import { pathExists } from '@/invoke/system';
 
 vi.mock('@/invoke/system', () => ({
 	pathExists: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/webview', () => ({
+	getCurrentWebview: () => ({
+		onDragDropEvent: vi.fn(() => Promise.resolve(vi.fn())),
+	}),
 }));
 
 afterEach(() => {
@@ -96,45 +103,147 @@ const emptyStatus: GitStatus = {
 	files: [],
 };
 
-type SidebarProps = Partial<React.ComponentProps<typeof FileExplorerSidebar>>;
+function noop() {}
+function asyncNoop() {
+	return Promise.resolve();
+}
 
-function createSidebarProps(
-	props: SidebarProps = {}
-): React.ComponentProps<typeof FileExplorerSidebar> {
+interface SidebarTestOptions {
+	root?: ExplorerNode;
+	selectedPath?: string | null;
+	busy?: boolean;
+	createBusy?: boolean;
+	gitBusy?: boolean;
+	gitStatus?: GitStatus | null;
+	operationBusy?: 'create' | 'rename' | 'delete' | 'move' | null;
+	clipboard?: {
+		item: { name: string; nodeKind: 'file' | 'directory'; path: string };
+		mode: 'copy' | 'cut';
+	} | null;
+	loadingPaths?: Set<string>;
+	onCopyNode?: (node: ExplorerNode) => void;
+	onCreateMarkdown?: (
+		fileName: string,
+		targetPath: string | null
+	) => Promise<void>;
+	onCreateDirectory?: (
+		directoryName: string,
+		targetPath: string | null
+	) => Promise<void>;
+	onCutNode?: (node: ExplorerNode) => void;
+	onDeleteNode?: (targetPath: string) => Promise<void>;
+	onRestoreDeletedNode?: (targetPath: string) => Promise<void>;
+	onOpenFolder?: () => void;
+	onPasteNode?: (destinationPath: string | null) => Promise<void>;
+	onRefresh?: () => void;
+	sortEnabled?: boolean;
+	onSortToggle?: () => void;
+	onGitRefresh?: () => Promise<void>;
+	onGitRefreshWorkspace?: () => Promise<void>;
+	onGitStatusChange?: (status: GitStatus) => void;
+	onRenameNode?: (targetPath: string, newName: string) => Promise<void>;
+	onExpandDirectory?: (node: ExplorerNode) => void;
+	onSelectNode?: (node: ExplorerNode) => void;
+	onClearClipboard?: () => void;
+}
+
+function createContextValue(opts: SidebarTestOptions = {}) {
+	const {
+		root = rootNode,
+		selectedPath = null,
+		busy = false,
+		createBusy = false,
+		gitBusy = false,
+		gitStatus = emptyStatus,
+		operationBusy = null,
+		clipboard = null,
+		loadingPaths = emptyLoadingPaths,
+		onCopyNode = noop,
+		onCreateMarkdown = asyncNoop,
+		onCreateDirectory = asyncNoop,
+		onCutNode = noop,
+		onDeleteNode = asyncNoop,
+		onRestoreDeletedNode = asyncNoop,
+		onOpenFolder = noop,
+		onPasteNode = asyncNoop,
+		onRefresh = noop,
+		sortEnabled = true,
+		onSortToggle = noop,
+		onGitRefresh = asyncNoop,
+		onGitRefreshWorkspace = asyncNoop,
+		onGitStatusChange = noop,
+		onRenameNode = asyncNoop,
+		onExpandDirectory = noop,
+		onSelectNode = noop,
+		onClearClipboard = noop,
+	} = opts;
+
 	return {
-		root: rootNode,
-		selectedPath: null,
-		busy: false,
-		createBusy: false,
-		gitBusy: false,
-		gitStatus: emptyStatus,
-		operationBusy: null,
-		clipboard: null,
-		loadingPaths: emptyLoadingPaths,
-		onCopyNode: vi.fn(),
-		onCreateMarkdown: vi.fn(),
-		onCreateDirectory: vi.fn(),
-		onCutNode: vi.fn(),
-		onDeleteNode: vi.fn(),
-		onRestoreDeletedNode: vi.fn(),
-		onOpenFolder: vi.fn(),
-		onPasteNode: vi.fn(),
-		onRefresh: vi.fn(),
-		sortEnabled: true,
-		onSortToggle: vi.fn(),
-		onGitRefresh: vi.fn(),
-		onGitRefreshWorkspace: vi.fn(),
-		onGitStatusChange: vi.fn(),
-		onRenameNode: vi.fn(),
-		onExpandDirectory: vi.fn(),
-		onSelectNode: vi.fn(),
-		onClearClipboard: vi.fn(),
-		...props,
+		root,
+		initialised: true,
+		loadingPaths,
+		expandDirectory: onExpandDirectory as (node: ExplorerNode) => Promise<void>,
+		tabs: [],
+		activeTabId: null,
+		selectTab: noop,
+		closeTabAction: noop,
+		closeTabsAction: noop,
+		reorderTabs: noop,
+		tabBarMode: 'scroll' as const,
+		selectedFile: selectedPath
+			? (rootNode.children.find((child) => child.path === selectedPath) ?? null)
+			: null,
+		selectedNodePath: selectedPath,
+		preview: null,
+		previewLoading: false,
+		selectNode: onSelectNode as (node: ExplorerNode) => Promise<void>,
+		sidebarWidth: 320,
+		sidebarBusy: busy,
+		operationBusy,
+		createBusy,
+		sortEnabled,
+		sidebarError: null,
+		setSidebarWidth: noop,
+		clipboard,
+		copyNode: onCopyNode as (node: ExplorerNode) => void,
+		cutNode: onCutNode as (node: ExplorerNode) => void,
+		pasteNode: onPasteNode as (destinationPath: string | null) => Promise<void>,
+		clearClipboard: onClearClipboard as () => void,
+		gitStatus,
+		gitBusy,
+		refreshGitStatus: asyncNoop,
+		updateGitStatus: onGitStatusChange as (status: GitStatus) => void,
+		createMarkdownDocument: onCreateMarkdown as (
+			fileName: string,
+			targetPath: string | null
+		) => Promise<void>,
+		createDirectory: onCreateDirectory as (
+			directoryName: string,
+			targetPath: string | null
+		) => Promise<void>,
+		renameNode: onRenameNode as (
+			targetPath: string,
+			newName: string
+		) => Promise<void>,
+		deleteNode: onDeleteNode as (targetPath: string) => Promise<void>,
+		restoreDeletedNode: onRestoreDeletedNode as (
+			targetPath: string
+		) => Promise<void>,
+		importExternalFilesHandler: asyncNoop,
+		openFolder: onOpenFolder as () => Promise<void>,
+		refreshFolder: onRefresh as () => Promise<void>,
+		toggleSort: onSortToggle as () => Promise<void>,
+		gitRefresh: onGitRefresh as () => Promise<void>,
+		gitRefreshWorkspace: onGitRefreshWorkspace as () => Promise<void>,
+		expandedPaths: new Set<string>(),
+		collapsedPaths: new Set<string>(),
+		expansionRootPath: root?.path ?? null,
 	};
 }
 
-function renderSidebar(props: SidebarProps = {}) {
-	return render(<FileExplorerSidebar {...createSidebarProps(props)} />);
+function renderSidebar(opts: SidebarTestOptions = {}) {
+	useWorkspaceStore.setState(createContextValue(opts));
+	return render(<FileExplorerSidebar />);
 }
 
 describe('FileExplorerSidebar', () => {
@@ -145,9 +254,6 @@ describe('FileExplorerSidebar', () => {
 
 	it('renders file children', () => {
 		renderSidebar();
-		// Names appear both in sidebar list and aria labels —
-		// getAllByText is acceptable when getByRole('treeitem', …) isn't
-		// straightforward due to the custom tree structure.
 		const readmeElements = screen.getAllByText(/readme\.md/);
 		expect(readmeElements.length).toBeGreaterThan(0);
 		const notesElements = screen.getAllByText(/notes\.txt/);
@@ -264,9 +370,8 @@ describe('FileExplorerSidebar', () => {
 			transform: 'rotate(90deg)',
 		});
 
-		view.rerender(
-			<FileExplorerSidebar {...createSidebarProps({ root: nextRoot })} />
-		);
+		useWorkspaceStore.setState(createContextValue({ root: nextRoot }));
+		view.rerender(<FileExplorerSidebar />);
 
 		const gammaToggle = screen.getByLabelText('展开 gamma');
 		expect(gammaToggle.querySelector('svg')).toHaveStyle({
@@ -296,32 +401,30 @@ describe('FileExplorerSidebar', () => {
 		});
 
 		bookmarkExists = false;
-		view.rerender(
-			<FileExplorerSidebar
-				{...createSidebarProps({
-					gitStatus: {
-						...emptyStatus,
-						branch: { name: 'branch-b', upstream: null, ahead: 0, behind: 0 },
-					},
-				})}
-			/>
+		useWorkspaceStore.setState(
+			createContextValue({
+				gitStatus: {
+					...emptyStatus,
+					branch: { name: 'branch-b', upstream: null, ahead: 0, behind: 0 },
+				},
+			})
 		);
+		view.rerender(<FileExplorerSidebar />);
 
 		await waitFor(() => {
 			expect(screen.queryByText('missing.md')).not.toBeInTheDocument();
 		});
 
 		bookmarkExists = true;
-		view.rerender(
-			<FileExplorerSidebar
-				{...createSidebarProps({
-					gitStatus: {
-						...emptyStatus,
-						branch: { name: 'branch-a', upstream: null, ahead: 0, behind: 0 },
-					},
-				})}
-			/>
+		useWorkspaceStore.setState(
+			createContextValue({
+				gitStatus: {
+					...emptyStatus,
+					branch: { name: 'branch-a', upstream: null, ahead: 0, behind: 0 },
+				},
+			})
 		);
+		view.rerender(<FileExplorerSidebar />);
 
 		await waitFor(() => {
 			expect(screen.getByText('missing.md')).toBeInTheDocument();
@@ -472,7 +575,6 @@ describe('FileExplorerSidebar', () => {
 			button.focus();
 			fireEvent.keyDown(button, { key: 'c', ctrlKey: true });
 			fireEvent.keyDown(button, { key: 'x', ctrlKey: true });
-			// Ctrl+V with clipboard should still work (pastes to root)
 			fireEvent.keyDown(button, { key: 'v', ctrlKey: true });
 
 			expect(onCopyNode).not.toHaveBeenCalled();

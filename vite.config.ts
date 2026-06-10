@@ -31,8 +31,10 @@ export default defineConfig(async () => ({
 				}
 			: undefined,
 		watch: {
-			// 3. tell Vite to ignore watching `src-tauri`
-			ignored: ['**/src-tauri/**'],
+			ignored: (filePath: string) => {
+				const srcDir = path.resolve(__dirname, 'src').replace(/\\/g, '/');
+				return !filePath.replace(/\\/g, '/').startsWith(srcDir);
+			},
 		},
 	},
 }));

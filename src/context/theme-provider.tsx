@@ -1,10 +1,5 @@
-import {
-	createContext,
-	useContext,
-	useEffect,
-	useState,
-	type ReactNode,
-} from 'react';
+import create from 'zustand';
+import { useEffect, useMemo, type ReactNode } from 'react';
 
 import { getSystemTheme } from '@/invoke/system';
 
@@ -116,23 +111,20 @@ function getOverlayColor(hex: string, alpha: number) {
 	return `rgb(${rgb.r} ${rgb.g} ${rgb.b} / ${alpha})`;
 }
 
-type ThemeContextValue = {
-	accentMode: AccentMode;
-	resolvedTheme: ResolvedTheme;
+type ThemeState = {
 	theme: Theme;
-	setTheme: (theme: Theme) => void;
-	toggleTheme: () => void;
-	setAccentMode: (mode: AccentMode) => void;
-	/** optional system accent color when available (eg. #RRGGBB) */
-	systemAccent?: string | null;
-	/** last selected preset/custom accent color */
-	accent?: string | null;
-	setAccent: (accent: string | null) => void;
-	/** the final accent color that the UI should use (default/system/custom) */
-	effectiveAccent?: string | null;
+	accentMode: AccentMode;
+	accent: string | null;
+	systemAccent: string | null;
 };
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+type ThemeActions = {
+	setTheme: (theme: Theme) => void;
+	setAccentMode: (mode: AccentMode) => void;
+	setAccent: (accent: string | null) => void;
+};
+
+type ThemeStore = ThemeState & ThemeActions;
 
 function getInitialTheme(): Theme {
 	if (typeof window === 'undefined') {
@@ -172,45 +164,82 @@ function getInitialAccentMode(): AccentMode {
 		: 'system';
 }
 
-function resolveTheme(theme: Theme, prefersDark: boolean): ResolvedTheme {
-	if (theme === 'system') {
-		return prefersDark ? 'dark' : 'light';
-	}
-	return theme;
+function getInitialAccent(): string | null {
+	if (typeof window === 'undefined') return null;
+	const v = window.localStorage.getItem(ACCENT_STORAGE_KEY);
+	return normalizeHexColor(v);
 }
+
+const useThemeStore = create<ThemeStore>((set) => ({
+	theme: getInitialTheme(),
+	accentMode: getInitialAccentMode(),
+	accent: getInitialAccent(),
+	systemAccent: null,
+
+	setTheme: (theme) => {
+		set({ theme });
+		try {
+			window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+		} catch {
+			/* ignore */
+		}
+	},
+
+	setAccentMode: (mode) => {
+		set({ accentMode: mode });
+		try {
+			window.localStorage.setItem(ACCENT_MODE_STORAGE_KEY, mode);
+		} catch {
+			/* ignore */
+		}
+	},
+
+	setAccent: (accent) => {
+		if (accent === null) {
+			set({ accent: null, accentMode: 'default' });
+			try {
+				window.localStorage.removeItem(ACCENT_STORAGE_KEY);
+			} catch {
+				/* ignore */
+			}
+			return;
+		}
+
+		const normalized = normalizeHexColor(accent);
+
+		if (!normalized) {
+			return;
+		}
+
+		set({ accent: normalized, accentMode: 'custom' });
+		try {
+			window.localStorage.setItem(ACCENT_STORAGE_KEY, normalized);
+		} catch {
+			/* ignore */
+		}
+	},
+}));
+
+export { useThemeStore };
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-	const [theme, setTheme] = useState<Theme>(getInitialTheme);
 	const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-	const [systemAccent, setSystemAccent] = useState<string | null>(null);
 
-	function getInitialAccent(): string | null {
-		if (typeof window === 'undefined') return null;
-		const v = window.localStorage.getItem(ACCENT_STORAGE_KEY);
-		return normalizeHexColor(v);
-	}
+	const theme = useThemeStore((s) => s.theme);
+	const accentMode = useThemeStore((s) => s.accentMode);
+	const accent = useThemeStore((s) => s.accent);
 
-	const [accentMode, setAccentModeState] =
-		useState<AccentMode>(getInitialAccentMode);
-	const [accent, setAccentState] = useState<string | null>(getInitialAccent);
-	const effectivePrefersDark = prefersDark;
-	const resolvedTheme = resolveTheme(theme, effectivePrefersDark);
+	const resolvedTheme: ResolvedTheme =
+		theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
 
-	const effectiveAccent =
-		accentMode === 'custom'
-			? accent
-			: accentMode === 'system'
-				? (systemAccent ?? null)
-				: null;
-
+	// Apply dark/light class and color-scheme
 	useEffect(() => {
 		const root = document.documentElement;
-
 		root.classList.toggle('dark', resolvedTheme === 'dark');
 		root.style.colorScheme = resolvedTheme;
-		window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-	}, [resolvedTheme, theme]);
+	}, [resolvedTheme]);
 
-	// Request the system accent color when it's needed.
+	// Fetch system accent color
 	useEffect(() => {
 		let mounted = true;
 
@@ -223,9 +252,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 				const resp = await getSystemTheme();
 
 				if (!mounted) return;
-				setSystemAccent(normalizeHexColor(resp.accent) ?? null);
+				const systemAccent = normalizeHexColor(resp.accent) ?? null;
+				useThemeStore.setState({ systemAccent });
 			} catch (e) {
-				// ignore failures and fall back to CSS media query
 				console.warn('get_system_theme failed:', e);
 			}
 		})();
@@ -235,19 +264,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		};
 	}, [theme, accentMode]);
 
-	// Expose the raw system accent and derive the app's color tokens from the
-	// resolved theme color so buttons, selection states, sidebars, and focus
-	// rings stay in sync.
+	// Apply accent CSS variables
 	useEffect(() => {
 		const root = document.documentElement;
+		const currentState = useThemeStore.getState();
+		const currentSystemAccent = currentState.systemAccent;
+		const currentEffectiveAccent =
+			accentMode === 'custom'
+				? accent
+				: accentMode === 'system'
+					? currentSystemAccent
+					: null;
 
-		if (systemAccent) {
-			root.style.setProperty('--system-accent', systemAccent);
+		if (currentSystemAccent) {
+			root.style.setProperty('--system-accent', currentSystemAccent);
 		} else {
 			root.style.removeProperty('--system-accent');
 		}
 
-		if (!effectiveAccent) {
+		if (!currentEffectiveAccent) {
 			for (const variable of THEME_COLOR_VARIABLES) {
 				root.style.removeProperty(variable);
 			}
@@ -255,7 +290,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 			return;
 		}
 
-		const normalizedAccent = normalizeHexColor(effectiveAccent);
+		const normalizedAccent = normalizeHexColor(currentEffectiveAccent);
 
 		if (!normalizedAccent) {
 			for (const variable of THEME_COLOR_VARIABLES) {
@@ -287,75 +322,57 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 			sidebarAccentOverlay ?? normalizedAccent
 		);
 		root.style.setProperty('--sidebar-ring', normalizedAccent);
-	}, [systemAccent, effectiveAccent, resolvedTheme]);
+	}, [accent, accentMode, resolvedTheme]);
 
-	// persist explicit user accent selection
-	useEffect(() => {
-		try {
-			if (accent) {
-				window.localStorage.setItem(ACCENT_STORAGE_KEY, accent);
-			} else {
-				window.localStorage.removeItem(ACCENT_STORAGE_KEY);
-			}
-		} catch (e) {
-			console.warn('Failed to persist accent selection:', e);
-		}
-	}, [accent]);
-
-	useEffect(() => {
-		try {
-			window.localStorage.setItem(ACCENT_MODE_STORAGE_KEY, accentMode);
-		} catch (e) {
-			console.warn('Failed to persist accent mode selection:', e);
-		}
-	}, [accentMode]);
-
-	return (
-		<ThemeContext.Provider
-			value={{
-				accentMode,
-				resolvedTheme,
-				theme,
-				setTheme,
-				setAccentMode: (mode: AccentMode) => setAccentModeState(mode),
-				toggleTheme: () => {
-					setTheme((currentTheme) =>
-						resolveTheme(currentTheme, effectivePrefersDark) === 'dark'
-							? 'light'
-							: 'dark'
-					);
-				},
-				systemAccent,
-				accent,
-				setAccent: (a: string | null) => {
-					if (a === null) {
-						setAccentModeState('default');
-						return;
-					}
-
-					const normalized = normalizeHexColor(a);
-
-					if (!normalized) {
-						return;
-					}
-
-					setAccentState(normalized);
-					setAccentModeState('custom');
-				},
-				effectiveAccent,
-			}}
-		>
-			{children}
-		</ThemeContext.Provider>
-	);
+	return <>{children}</>;
 }
 
 export function useTheme() {
-	const context = useContext(ThemeContext);
+	const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
 
-	if (!context) {
-		throw new Error('useTheme must be used within ThemeProvider');
-	}
+	const theme = useThemeStore((s) => s.theme);
+	const accentMode = useThemeStore((s) => s.accentMode);
+	const accent = useThemeStore((s) => s.accent);
+	const systemAccent = useThemeStore((s) => s.systemAccent);
 
-	return context;
+	const resolvedTheme: ResolvedTheme =
+		theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
+
+	const effectiveAccent =
+		accentMode === 'custom'
+			? accent
+			: accentMode === 'system'
+				? systemAccent
+				: null;
+
+	const { setTheme, setAccentMode, setAccent } = useThemeStore.getState();
+
+	return useMemo(
+		() => ({
+			accent,
+			accentMode,
+			effectiveAccent,
+			resolvedTheme,
+			systemAccent,
+			theme,
+
+			setAccent,
+			setAccentMode,
+			setTheme,
+			toggleTheme: () => {
+				setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+			},
+		}),
+		[
+			accent,
+			accentMode,
+			effectiveAccent,
+			resolvedTheme,
+			setAccent,
+			setAccentMode,
+			setTheme,
+			systemAccent,
+			theme,
+		]
+	);
 }

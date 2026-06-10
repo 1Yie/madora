@@ -67,6 +67,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { cn } from '@/lib/utils';
 
+import { useWorkspace } from '@/context/workspace-provider';
+
 import type { GitStatus } from '../git/git-types';
 import { GitPanel } from '../git/git-panel';
 import {
@@ -82,51 +84,6 @@ import {
 } from '../../../lib/path-utils';
 import type { ExplorerClipboardItem, ExplorerNode } from '../types';
 
-type WorkspaceOperation = 'create' | 'rename' | 'delete' | 'move' | null;
-
-type FileExplorerSidebarProps = {
-	root: ExplorerNode | null;
-	selectedPath: string | null;
-	busy: boolean;
-	createBusy: boolean;
-	gitBusy: boolean;
-	gitStatus: GitStatus | null;
-	operationBusy: WorkspaceOperation;
-	clipboard: {
-		item: ExplorerClipboardItem;
-		mode: 'copy' | 'cut';
-	} | null;
-	loadingPaths: Set<string>;
-	onCreateMarkdown: (
-		fileName: string,
-		targetPath: string | null
-	) => Promise<void>;
-	onCreateDirectory: (
-		directoryName: string,
-		targetPath: string | null
-	) => Promise<void>;
-	onCopyNode: (node: ExplorerNode) => void;
-	onCutNode: (node: ExplorerNode) => void;
-	onDeleteNode: (targetPath: string) => Promise<void>;
-	onRestoreDeletedNode: (targetPath: string) => Promise<void>;
-	onOpenFolder: () => void;
-	onPasteNode: (destinationPath: string | null) => Promise<void>;
-	onImportExternalFiles?: (
-		sourcePaths: string[],
-		destinationPath: string | null
-	) => Promise<void>;
-	onRefresh: () => void;
-	sortEnabled: boolean;
-	onSortToggle: () => void;
-	onGitRefresh: () => Promise<void>;
-	onGitRefreshWorkspace: () => Promise<void>;
-	onGitStatusChange: (status: GitStatus) => void;
-	onRenameNode: (targetPath: string, newName: string) => Promise<void>;
-	onExpandDirectory: (node: ExplorerNode) => void;
-	onSelectNode: (node: ExplorerNode) => void;
-	onClearClipboard: () => void;
-};
-
 type PendingAction =
 	| { type: 'createMarkdown'; targetPath: string | null }
 	| {
@@ -138,12 +95,6 @@ type PendingAction =
 	| { type: 'delete'; node: ExplorerNode }
 	| { type: 'restoreDeleted'; node: ExplorerNode }
 	| null;
-
-type ExplorerExpansionState = {
-	rootPath: string | null;
-	expandedPaths: Set<string>;
-	collapsedPaths: Set<string>;
-};
 
 type BookmarkVisibilityState = {
 	scopeKey: string;
@@ -511,7 +462,10 @@ function ContextMenuContent({
 	pasteDisabled,
 	target,
 }: {
-	clipboard: FileExplorerSidebarProps['clipboard'];
+	clipboard: {
+		item: ExplorerClipboardItem;
+		mode: 'copy' | 'cut';
+	} | null;
 	includeNodeActions?: boolean;
 	isDeletedGitEntry?: boolean;
 	onAction: (
@@ -957,7 +911,10 @@ function FileTreeNode({
 	selectedPath,
 	toggleDirectory,
 }: {
-	clipboard: FileExplorerSidebarProps['clipboard'];
+	clipboard: {
+		item: ExplorerClipboardItem;
+		mode: 'copy' | 'cut';
+	} | null;
 	depth: number;
 	expandedPaths: Set<string>;
 	gitStatusMap: Map<string, GitFileEntry>;
@@ -1194,42 +1151,39 @@ function FileTreeNode({
 	);
 }
 
-export function FileExplorerSidebar({
-	root,
-	selectedPath,
-	busy,
-	createBusy,
-	gitBusy,
-	gitStatus,
-	operationBusy,
-	clipboard,
-	loadingPaths,
-	onCreateMarkdown,
-	onCreateDirectory,
-	onCopyNode,
-	onCutNode,
-	onDeleteNode,
-	onRestoreDeletedNode,
-	sortEnabled,
-	onSortToggle,
-	onOpenFolder,
-	onRefresh,
-	onPasteNode,
-	onImportExternalFiles,
-	onGitRefresh,
-	onGitRefreshWorkspace,
-	onGitStatusChange,
-	onRenameNode,
-	onExpandDirectory,
-	onSelectNode,
-	onClearClipboard,
-}: FileExplorerSidebarProps) {
+export function FileExplorerSidebar() {
+	const ctx = useWorkspace();
+	const {
+		root,
+		selectedNodePath: selectedPath,
+		createBusy,
+		gitBusy,
+		gitStatus,
+		operationBusy,
+		clipboard,
+		loadingPaths,
+		createMarkdownDocument: onCreateMarkdown,
+		createDirectory: onCreateDirectory,
+		copyNode: onCopyNode,
+		cutNode: onCutNode,
+		deleteNode: onDeleteNode,
+		restoreDeletedNode: onRestoreDeletedNode,
+		sortEnabled,
+		toggleSort: onSortToggle,
+		openFolder: onOpenFolder,
+		refreshFolder: onRefresh,
+		pasteNode: onPasteNode,
+		importExternalFilesHandler: onImportExternalFiles,
+		gitRefresh: onGitRefresh,
+		gitRefreshWorkspace: onGitRefreshWorkspace,
+		updateGitStatus: onGitStatusChange,
+		renameNode: onRenameNode,
+		expandDirectory: onExpandDirectory,
+		selectNode: onSelectNode,
+		clearClipboard: onClearClipboard,
+		sidebarBusy: busy,
+	} = ctx;
 	const sidebarRef = useRef<HTMLElement>(null);
-	const [expansionState, setExpansionState] = useState<ExplorerExpansionState>({
-		collapsedPaths: new Set(),
-		expandedPaths: new Set(),
-		rootPath: null,
-	});
 	const [pendingAction, setPendingAction] = useState<PendingAction>(null);
 	const [bookmarkPaths, setBookmarkPaths] = useState<string[]>(() => {
 		try {
@@ -1386,13 +1340,11 @@ export function FileExplorerSidebar({
 			return new Set<string>();
 		}
 
-		const isCurrentRoot = expansionState.rootPath === expansionRootPath;
+		const isCurrentRoot = expansionRootPath === ctx.expansionRootPath;
 		const collapsedPaths = isCurrentRoot
-			? expansionState.collapsedPaths
+			? ctx.collapsedPaths
 			: new Set<string>();
-		const nextPaths = new Set(
-			isCurrentRoot ? expansionState.expandedPaths : []
-		);
+		const nextPaths = new Set(isCurrentRoot ? ctx.expandedPaths : []);
 
 		// On initial load, default to root expanded unless the user explicitly collapsed it.
 		if (!collapsedPaths.has(mergedRoot.path)) {
@@ -1408,7 +1360,14 @@ export function FileExplorerSidebar({
 		}
 
 		return nextPaths;
-	}, [expansionRootPath, expansionState, mergedRoot, selectedPath]);
+	}, [
+		expansionRootPath,
+		ctx.expansionRootPath,
+		ctx.collapsedPaths,
+		ctx.expandedPaths,
+		mergedRoot,
+		selectedPath,
+	]);
 
 	useEffect(() => {
 		if (!mergedRoot) {
@@ -1434,30 +1393,7 @@ export function FileExplorerSidebar({
 
 	const toggleDirectory = (path: string) => {
 		const isExpanded = resolvedExpandedPaths.has(path);
-
-		setExpansionState((currentState) => {
-			const isCurrentRoot = currentState.rootPath === expansionRootPath;
-			const nextExpandedPaths = new Set(
-				isCurrentRoot ? currentState.expandedPaths : []
-			);
-			const nextCollapsedPaths = new Set(
-				isCurrentRoot ? currentState.collapsedPaths : []
-			);
-
-			if (isExpanded) {
-				nextExpandedPaths.delete(path);
-				nextCollapsedPaths.add(path);
-			} else {
-				nextExpandedPaths.add(path);
-				nextCollapsedPaths.delete(path);
-			}
-
-			return {
-				collapsedPaths: nextCollapsedPaths,
-				expandedPaths: nextExpandedPaths,
-				rootPath: expansionRootPath,
-			};
-		});
+		ctx.toggleDirectory(path, expansionRootPath, isExpanded);
 	};
 
 	const hoveredNodeRef = useRef<ExplorerNode | null>(null);
@@ -1770,11 +1706,7 @@ export function FileExplorerSidebar({
 				// Could be a file path — try to import
 				const maybePath = text.trim();
 
-				if (
-					filePaths.length === 0 &&
-					onImportExternalFiles &&
-					maybePath.length > 10
-				) {
+				if (filePaths.length === 0 && maybePath.length > 10) {
 					filePaths.push(maybePath);
 				}
 			}
@@ -1909,19 +1841,13 @@ export function FileExplorerSidebar({
 		);
 
 		if (isAllExpanded) {
-			setExpansionState((currentState) => ({
-				collapsedPaths: new Set(
-					allDirPaths.filter((p) => p !== mergedRoot.path)
-				),
-				expandedPaths: new Set([mergedRoot.path]),
-				rootPath: currentState.rootPath,
-			}));
+			ctx.setExpansionState(
+				new Set([mergedRoot.path]),
+				new Set(allDirPaths.filter((p) => p !== mergedRoot.path)),
+				ctx.expansionRootPath
+			);
 		} else {
-			setExpansionState(() => ({
-				collapsedPaths: new Set(),
-				expandedPaths: new Set(allDirPaths),
-				rootPath: expansionRootPath,
-			}));
+			ctx.setExpansionState(new Set(allDirPaths), new Set(), expansionRootPath);
 		}
 	};
 
@@ -1948,26 +1874,16 @@ export function FileExplorerSidebar({
 		// Expand all ancestor directories so the file appears in flatItems
 		const ancestors = collectAncestorPaths(mergedRoot, selectedPath);
 
-		setExpansionState((currentState) => {
-			const isCurrentRoot = currentState.rootPath === expansionRootPath;
-			const nextExpanded = new Set(
-				isCurrentRoot ? currentState.expandedPaths : []
-			);
-			const nextCollapsed = new Set(
-				isCurrentRoot ? currentState.collapsedPaths : []
-			);
+		const isCurrentRoot = expansionRootPath === ctx.expansionRootPath;
+		const nextExpanded = new Set(isCurrentRoot ? ctx.expandedPaths : []);
+		const nextCollapsed = new Set(isCurrentRoot ? ctx.collapsedPaths : []);
 
-			for (const ancestor of ancestors) {
-				nextExpanded.add(ancestor);
-				nextCollapsed.delete(ancestor);
-			}
+		for (const ancestor of ancestors) {
+			nextExpanded.add(ancestor);
+			nextCollapsed.delete(ancestor);
+		}
 
-			return {
-				collapsedPaths: nextCollapsed,
-				expandedPaths: nextExpanded,
-				rootPath: expansionRootPath,
-			};
-		});
+		ctx.setExpansionState(nextExpanded, nextCollapsed, expansionRootPath);
 
 		// Scroll after re-render when flatItems includes the file
 		setPendingScrollToPath(selectedPath);
@@ -2440,24 +2356,22 @@ export function FileExplorerSidebar({
 					const targetNode = pendingAction.node;
 
 					if (targetNode) {
-						setExpansionState((currentState) => {
-							const isCurrentRoot = currentState.rootPath === expansionRootPath;
-							const nextExpandedPaths = new Set(
-								isCurrentRoot ? currentState.expandedPaths : []
-							);
-							const nextCollapsedPaths = new Set(
-								isCurrentRoot ? currentState.collapsedPaths : []
-							);
+						const isCurrentRoot = expansionRootPath === ctx.expansionRootPath;
+						const nextExpandedPaths = new Set(
+							isCurrentRoot ? ctx.expandedPaths : []
+						);
+						const nextCollapsedPaths = new Set(
+							isCurrentRoot ? ctx.collapsedPaths : []
+						);
 
-							nextExpandedPaths.add(targetNode.path);
-							nextCollapsedPaths.delete(targetNode.path);
+						nextExpandedPaths.add(targetNode.path);
+						nextCollapsedPaths.delete(targetNode.path);
 
-							return {
-								collapsedPaths: nextCollapsedPaths,
-								expandedPaths: nextExpandedPaths,
-								rootPath: expansionRootPath,
-							};
-						});
+						ctx.setExpansionState(
+							nextExpandedPaths,
+							nextCollapsedPaths,
+							expansionRootPath
+						);
 					}
 
 					await onCreateDirectory(directoryName, pendingAction.targetPath);

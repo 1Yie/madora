@@ -18,6 +18,7 @@ import { ConflictEditor } from '../git/conflict-editor';
 import { MarkdownWorkspace } from '../markdown/markdown-workspace';
 import { normalizeExplorerPath } from '../../../lib/path-utils';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
+import { useWorkspace } from '@/context/workspace-provider';
 import { TextWorkspace } from '../workspace/text-workspace';
 
 function inferLanguage(fileName: string): string | undefined {
@@ -66,16 +67,6 @@ function inferLanguage(fileName: string): string | undefined {
 // }
 
 type EditorMode = 'edit' | 'preview';
-
-type FilePreviewProps = {
-	conflictedFilePaths: string[];
-	loading: boolean;
-	onOpenFolder: () => void;
-	preview: FilePreviewData | null;
-	rootPath: string | null;
-	selectedFile: ExplorerNode | null;
-	workspaceOpen: boolean;
-};
 
 function EmptyIcon({ children }: { children: React.ReactNode }) {
 	return (
@@ -208,7 +199,7 @@ function PreviewState({
 	rootPath: string | null;
 	selectedFile: ExplorerNode;
 }) {
-	if (loading) {
+	if (loading && !preview) {
 		return (
 			<div className="space-y-4 p-6">
 				<Skeleton className="h-8 w-1/3 rounded-md" />
@@ -283,15 +274,18 @@ function PreviewState({
 	);
 }
 
-export function FilePreview({
-	conflictedFilePaths,
-	loading,
-	preview,
-	rootPath,
-	selectedFile,
-	workspaceOpen,
-	onOpenFolder,
-}: FilePreviewProps) {
+export function FilePreview() {
+	const {
+		selectedFile,
+		preview,
+		previewLoading: loading,
+		root,
+		gitStatus,
+		openFolder: onOpenFolder,
+	} = useWorkspace();
+	const conflictedFilePaths = gitStatus?.conflictedFiles ?? [];
+	const rootPath = root?.path ?? null;
+	const workspaceOpen = Boolean(root);
 	const [markdownMode, setMarkdownMode] = useState<EditorMode>('edit');
 	const toggleMode = () =>
 		setMarkdownMode((m) => (m === 'edit' ? 'preview' : 'edit'));
