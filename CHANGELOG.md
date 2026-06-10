@@ -1,3 +1,15 @@
+## [0.3.6](https://github.com/1Yie/madora/compare/v0.3.5...v0.3.6) (2026-06-10)
+
+### Bug Fixes
+
+- **cli:** show human-readable output in interactive mode ([00134ce](https://github.com/1Yie/madora/commit/00134ce7f7e0fad14ddbf5c2fa7809b83d077b14))
+- **preview:** sync preview content when navigating to already-open file ([c2fe948](https://github.com/1Yie/madora/commit/c2fe94860f8dcd0df2c60dd1f3fdbb1f1cb861f6))
+- **tabs:** preserve external workspace file tabs after tree operations ([89c773b](https://github.com/1Yie/madora/commit/89c773b4e6b2b2494b1889c2b92fc46ce21cc36d))
+
+### Features
+
+- **tab-bar:** distinguish non-workspace files in tab labels ([9df89a8](https://github.com/1Yie/madora/commit/9df89a8a730dfb001353dd864b4f8684f54279ad))
+
 ## [0.3.5](https://github.com/1Yie/madora/compare/v0.3.4...v0.3.5) (2026-06-09)
 
 ### Bug Fixes

@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "madora"
-version = "0.3.5"
+version = "0.3.6"
 description = "Markdown editing, powered by AI"
 authors = ["ichiyo"]
 edition = "2021"
@@ -59,6 +59,7 @@ winreg = "0.10"
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"
+
 
 
 
