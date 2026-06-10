@@ -224,11 +224,10 @@ fn edit_completion(current_text: &str) -> io::Result<Option<String>> {
     let status = std::process::Command::new(&editor)
         .arg(&tmp)
         .status()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("启动编辑器 {editor} 失败: {e}")))?;
+        .map_err(|e| io::Error::other(format!("启动编辑器 {editor} 失败: {e}")))?;
 
     if !status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             format!("编辑器 {editor} 异常退出"),
         ));
     }

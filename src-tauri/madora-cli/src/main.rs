@@ -65,23 +65,25 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-    let result = run().await;
+    let cli = Cli::parse();
+    let no_interactive = cli.no_interactive;
+    let result = run(&cli).await;
     match result {
-        Ok(json_line) => {
-            if let Some(line) = json_line {
-                println!("{line}");
-            }
-        }
+        Ok(Some(msg)) => println!("{msg}"),
+        Ok(None) => {}
         Err(e) => {
-            let json_err = serde_json::json!({"status": "error", "message": e});
-            eprintln!("{json_err}");
+            if no_interactive {
+                let json_err = serde_json::json!({"status": "error", "message": e});
+                eprintln!("{json_err}");
+            } else {
+                eprintln!("\u{9519}\u{8bef}: {e}");
+            }
             std::process::exit(1);
         }
     }
 }
 
-async fn run() -> Result<Option<String>, String> {
-    let cli = Cli::parse();
+async fn run(cli: &Cli) -> Result<Option<String>, String> {
 
     // ── Resolve API key ──
     let api_key = resolve_api_key(cli.provider, cli.api_key.as_deref())?;
@@ -151,58 +153,94 @@ async fn run() -> Result<Option<String>, String> {
 
     // ── no-interactive mode ──
     if cli.no_interactive {
-        if let Some(ref path) = file_path {
-            // File mode: show preview as JSON, then wait for y/n from stdin
-            let preview_json = serde_json::json!({
-                "status": "preview",
-                "completion": completion_result,
-                "completed_content": completed_content,
-                "path": path,
-            });
-            println!("{preview_json}");
-
-            eprint!("Apply? (y/N): ");
-            std::io::Write::flush(&mut std::io::stderr())
-                .map_err(|e| format!("刷新 stderr 失败: {e}"))?;
-
-            let mut input = String::new();
-            std::io::stdin()
-                .read_line(&mut input)
-                .map_err(|e| format!("读取确认失败: {e}"))?;
-
-            if input.trim().eq_ignore_ascii_case("y") {
-                std::fs::write(path, &completed_content)
-                    .map_err(|e| format!("写入文件失败: {e}"))?;
-                let result_json =
-                    serde_json::json!({"status": "success", "path": path});
-                return Ok(Some(result_json.to_string()));
-            } else {
-                let result_json = serde_json::json!({"status": "rejected"});
-                eprintln!("{result_json}");
-                std::process::exit(1);
-            }
-        } else {
-            // Stdin mode: print completed content, then JSON
-            println!("{completed_content}");
-            let json = serde_json::json!({
-                "status": "success",
-                "completion": completion_result,
-                "completed_content": completed_content,
-                "path": file_path,
-            });
-            return Ok(Some(json.to_string()));
-        }
+        return handle_no_interactive(
+            &file_path,
+            &completion_result,
+            &completed_content,
+        );
     }
 
     // ── TUI diff preview ──
     let diff = compute_diff(&content, &completed_content);
     if diff.lines.is_empty() {
-        let json = serde_json::json!({"status": "no_change"});
-        eprintln!("{json}");
+        eprintln!("\u{8865}\u{5168}\u{5185}\u{5bb9}\u{4e0e}\u{539f}\u{6587}\u{6863}\u{76f8}\u{540c}\u{ff0c}\u{65e0}\u{53d8}\u{5316}");
         return Ok(None);
     }
 
-    match tui::run_tui(&diff, &display_path, &cursor_display, &completion_result) {
+    // ── Interactive TUI diff preview ──
+    let tui_result = tui::run_tui(&diff, &display_path, &cursor_display, &completion_result);
+    handle_tui_result(
+        tui_result,
+        &file_path,
+        &display_path,
+        &content,
+        &completion_result,
+        &completed_content,
+        &suffix_opt,
+        &request,
+    )
+}
+
+/// Handle --no-interactive mode: JSON output for scripts/AI.
+fn handle_no_interactive(
+    file_path: &Option<String>,
+    completion_result: &str,
+    completed_content: &str,
+) -> Result<Option<String>, String> {
+    if let Some(ref path) = file_path {
+        // File mode: show preview as JSON, then wait for y/n from stdin
+        let preview_json = serde_json::json!({
+            "status": "preview",
+            "completion": completion_result,
+            "completed_content": completed_content,
+            "path": path,
+        });
+        println!("{preview_json}");
+
+        eprint!("Apply? (y/N): ");
+        std::io::Write::flush(&mut std::io::stderr())
+            .map_err(|e| format!("刷新 stderr 失败: {e}"))?;
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("读取确认失败: {e}"))?;
+
+        if input.trim().eq_ignore_ascii_case("y") {
+            std::fs::write(path, completed_content)
+                .map_err(|e| format!("写入文件失败: {e}"))?;
+            let result_json = serde_json::json!({"status": "success", "path": path});
+            Ok(Some(result_json.to_string()))
+        } else {
+            let result_json = serde_json::json!({"status": "rejected"});
+            eprintln!("{result_json}");
+            std::process::exit(1);
+        }
+    } else {
+        // Stdin mode: print completed content, then JSON
+        println!("{completed_content}");
+        let json = serde_json::json!({
+            "status": "success",
+            "completion": completion_result,
+            "completed_content": completed_content,
+            "path": file_path,
+        });
+        Ok(Some(json.to_string()))
+    }
+}
+
+/// Handle interactive TUI result: produce human-readable output.
+fn handle_tui_result(
+    tui_result: Result<tui::TuiResult, std::io::Error>,
+    file_path: &Option<String>,
+    display_path: &str,
+    _content: &str,
+    _completion_result: &str,
+    completed_content: &str,
+    suffix_opt: &Option<String>,
+    request: &CompletionRequest,
+) -> Result<Option<String>, String> {
+    match tui_result {
         Ok(tui::TuiResult::Continue) => {
             // run_tui() never returns Continue — it is only used internally by
             // run_tui_inner after editor suspend/resume without changes.
@@ -210,28 +248,21 @@ async fn run() -> Result<Option<String>, String> {
         }
         Ok(tui::TuiResult::Accept) => {
             if let Some(ref path) = file_path {
-                std::fs::write(path, &completed_content)
+                std::fs::write(path, completed_content)
                     .map_err(|e| format!("写入文件失败: {e}"))?;
             } else {
                 println!("{completed_content}");
             }
-            let json = serde_json::json!({
-                "status": "success",
-                "completion": completion_result,
-                "completed_content": completed_content,
-                "path": file_path,
-            });
-            Ok(Some(json.to_string()))
+            println!("\u{5df2}\u{4fdd}\u{5b58}: {display_path}");
+            Ok(None)
         }
         Ok(tui::TuiResult::Reject) => {
-            let json = serde_json::json!({"status": "rejected"});
-            eprintln!("{json}");
+            eprintln!("\u{5df2}\u{62d2}\u{7edd}\u{8865}\u{5168}");
             std::process::exit(1);
         }
         Ok(tui::TuiResult::Edit(edited_text)) => {
             if edited_text.trim().is_empty() {
-                let json = serde_json::json!({"status": "rejected"});
-                eprintln!("{json}");
+                eprintln!("\u{5df2}\u{62d2}\u{7edd}\u{8865}\u{5168}");
                 return Ok(None);
             }
             let edited_content = match suffix_opt {
@@ -244,17 +275,10 @@ async fn run() -> Result<Option<String>, String> {
             } else {
                 println!("{edited_content}");
             }
-            let json = serde_json::json!({
-                "status": "success",
-                "completion": edited_text,
-                "completed_content": edited_content,
-                "path": file_path,
-            });
-            Ok(Some(json.to_string()))
+            println!("\u{7f16}\u{8f91}\u{540e}\u{7684}\u{8865}\u{5168}\u{5df2}\u{4fdd}\u{5b58}: {display_path}");
+            Ok(None)
         }
         Ok(tui::TuiResult::Quit) => {
-            let json = serde_json::json!({"status": "quit"});
-            eprintln!("{json}");
             std::process::exit(1);
         }
         Err(e) => Err(format!("TUI 错误: {e}")),
