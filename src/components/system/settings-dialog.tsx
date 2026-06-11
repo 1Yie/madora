@@ -6,6 +6,7 @@ import { CliSettings } from '@/components/system/setting/cli';
 import { EditorSettings } from '@/components/system/setting/editor';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { LicenseSettings } from '@/components/system/setting/license';
+import { SyncSettings } from '@/components/system/setting/sync';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
 import {
@@ -28,6 +29,7 @@ function SettingsContent({
 	if (section === 'cli') return <CliSettings />;
 	if (section === 'license')
 		return <LicenseSettings onRequestActivation={onRequestLicenseActivation} />;
+	if (section === 'sync') return <SyncSettings />;
 	if (section === 'about') return <AboutSettings />;
 	return <AppearanceSettings />;
 }

@@ -117,7 +117,11 @@ export type WorkspaceContextValue = {
 	pasteNode: (destinationPath: string | null) => Promise<void>;
 	clearClipboard: () => void;
 
-	/* ── Git ── */
+	/* ── Sync ── */
+	syncEnabled: boolean;
+	setSyncEnabled: (enabled: boolean) => void;
+	syncMode: 'git' | 'webdav';
+	setSyncMode: (mode: 'git' | 'webdav') => void;
 	gitStatus: GitStatus | null;
 	gitBusy: boolean;
 	refreshGitStatus: (targetRootPath?: string | null) => Promise<void>;
@@ -373,6 +377,15 @@ function syncTabNode(tab: TabEntry, nextRoot: ExplorerNode): TabEntry {
 		if (isOutsideWorkspace(tab.node.path, nextRoot.path)) {
 			return tab;
 		}
+		// If the parent directory is not in the new tree (ancestors not loaded)
+		// or exists but hasn't been loaded yet, we can't conclude the file is
+		// missing — the children haven't been fetched. Leave the tab as-is.
+		const parentPath = getParentPath(tab.node.path);
+		const parentNode = parentPath ? findNodeByPath(nextRoot, parentPath) : null;
+		if (!parentNode || !parentNode.loaded) {
+			return tab;
+		}
+		// Parent directory is loaded but file not found → truly missing.
 		return { ...tab, node: { ...tab.node, isMissing: true } };
 	}
 	return { ...tab, node };
@@ -417,6 +430,8 @@ type WorkspaceState = {
 	} | null;
 	gitStatus: GitStatus | null;
 	gitBusy: boolean;
+	syncEnabled: boolean;
+	syncMode: 'git' | 'webdav';
 	expandedPaths: Set<string>;
 	collapsedPaths: Set<string>;
 	expansionRootPath: string | null;
@@ -447,7 +462,11 @@ type WorkspaceActions = {
 	pasteNode: (destinationPath: string | null) => Promise<void>;
 	clearClipboard: () => void;
 
-	/* ── Git ── */
+	/* ── Sync ── */
+	syncEnabled: boolean;
+	setSyncEnabled: (enabled: boolean) => void;
+	syncMode: 'git' | 'webdav';
+	setSyncMode: (mode: 'git' | 'webdav') => void;
 	refreshGitStatus: (targetRootPath?: string | null) => Promise<void>;
 	updateGitStatus: (status: GitStatus) => void;
 
@@ -567,6 +586,24 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 	clipboard: null,
 	gitStatus: null,
 	gitBusy: false,
+	syncEnabled: (() => {
+		try {
+			const saved = window.localStorage.getItem('madora-sync-enabled');
+			if (saved === 'true') return true;
+		} catch {
+			/* ignore */
+		}
+		return false;
+	})(),
+	syncMode: (() => {
+		try {
+			const saved = window.localStorage.getItem('madora-sync-mode');
+			if (saved === 'git' || saved === 'webdav') return saved;
+		} catch {
+			/* ignore */
+		}
+		return 'git';
+	})(),
 
 	// ── Expansion state (persisted to localStorage) ──
 	expansionRootPath: readExpansionState().rootPath,
@@ -815,9 +852,15 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				set({ activeTabId: next.id });
 				void get().selectNode(next.node);
 			} else {
-				set({ activeTabId: null });
+				set({
+					activeTabId: null,
+					selectedFile: null,
+					selectedNodePath: null,
+					preview: null,
+					previewError: null,
+					previewLoading: false,
+				});
 				void setActiveTabBackend(null).catch(() => {});
-				get(); // ensure latest state
 			}
 		}
 	},
@@ -845,7 +888,14 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				set({ activeTabId: next.id });
 				void get().selectNode(next.node);
 			} else {
-				set({ activeTabId: null });
+				set({
+					activeTabId: null,
+					selectedFile: null,
+					selectedNodePath: null,
+					preview: null,
+					previewError: null,
+					previewLoading: false,
+				});
 				void setActiveTabBackend(null).catch(() => {});
 			}
 		}
@@ -993,6 +1043,27 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 	updateGitStatus: (status) => {
 		set({ gitStatus: status });
+	},
+
+	setSyncEnabled: (enabled) => {
+		set({ syncEnabled: enabled });
+		try {
+			window.localStorage.setItem(
+				'madora-sync-enabled',
+				enabled ? 'true' : 'false'
+			);
+		} catch {
+			/* ignore */
+		}
+	},
+
+	setSyncMode: (mode) => {
+		set({ syncMode: mode });
+		try {
+			window.localStorage.setItem('madora-sync-mode', mode);
+		} catch {
+			/* ignore */
+		}
 	},
 
 	// ── Operations ──

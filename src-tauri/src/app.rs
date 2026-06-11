@@ -1,9 +1,14 @@
 use std::env;
 
 use crate::{
-    commands::{ai, explorer, git, license, project, secure_storage, system, utility, workspace},
+    commands::{
+        ai, explorer, git, license, project, secure_storage, system, utility, webdav, workspace,
+    },
     protocol::MadoraProtocolState,
-    services::{ai::AiCompletionService, license::LicenseService, workspace::WorkspaceStore},
+    services::{
+        ai::AiCompletionService, license::LicenseService, webdav::WebDavStore,
+        workspace::WorkspaceStore,
+    },
 };
 use tauri::Manager;
 #[cfg(not(debug_assertions))]
@@ -60,7 +65,7 @@ pub fn run() {
             .path()
             .app_data_dir()
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let workspace_store = WorkspaceStore::new(app_data_dir);
+        let workspace_store = WorkspaceStore::new(app_data_dir.clone());
 
         // Sync initial workspace root into the protocol state
         if let Ok(state) = workspace_store.get_state() {
@@ -71,6 +76,10 @@ pub fn run() {
         }
 
         app.manage(workspace_store);
+
+        // Initialize WebDAV store
+        let webdav_store = WebDavStore::new(app_data_dir.clone());
+        app.manage(webdav_store);
 
         Ok(())
     });
@@ -145,6 +154,12 @@ pub fn run() {
             license::verify_license,
             license::force_verify_license,
             license::deactivate_license,
+            webdav::webdav_get_config,
+            webdav::webdav_save_config,
+            webdav::webdav_delete_config,
+            webdav::webdav_test_connection,
+            webdav::webdav_sync,
+            webdav::webdav_get_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

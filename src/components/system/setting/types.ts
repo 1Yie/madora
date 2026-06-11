@@ -1,4 +1,5 @@
 import {
+	Cloud,
 	Keyboard,
 	Palette,
 	Settings2,
@@ -11,6 +12,7 @@ export type SettingsSectionId =
 	| 'editor'
 	| 'cli'
 	| 'license'
+	| 'sync'
 	| 'about';
 
 export type SettingsSection = {
@@ -32,6 +34,12 @@ export const settingsSections: SettingsSection[] = [
 		label: '编辑器',
 		description: '输入与编辑',
 		icon: Keyboard,
+	},
+	{
+		id: 'sync',
+		label: '同步',
+		description: '配置与同步',
+		icon: Cloud,
 	},
 	{
 		id: 'cli',

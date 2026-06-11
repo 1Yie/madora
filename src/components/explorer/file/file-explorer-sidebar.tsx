@@ -4,6 +4,7 @@ import {
 	BookmarkX,
 	ChevronRight,
 	Clipboard,
+	CloudOff,
 	Copy,
 	FileImage,
 	FilePenLine,
@@ -18,6 +19,7 @@ import {
 	RotateCcw,
 	Scissors,
 	Trash2,
+	X,
 } from 'lucide-react';
 import {
 	type FormEvent,
@@ -27,6 +29,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	memo,
 } from 'react';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { pathExists } from '@/invoke/system';
@@ -63,6 +66,7 @@ import {
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { webdavGetStatus, type WebDavSyncFileEntry } from '@/invoke/webdav';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 import { cn } from '@/lib/utils';
@@ -71,7 +75,9 @@ import { useWorkspace } from '@/context/workspace-provider';
 
 import type { GitStatus } from '../git/git-types';
 import { GitPanel } from '../git/git-panel';
+import { WebDavPanel } from '../webdav/webdav-panel';
 import {
+	explorerBottomSectionHeightClassName,
 	explorerSidebarStatusBarClassName,
 	explorerTopSectionHeightClassName,
 } from '../layout';
@@ -93,6 +99,7 @@ type PendingAction =
 	  }
 	| { type: 'rename'; node: ExplorerNode }
 	| { type: 'delete'; node: ExplorerNode }
+	| { type: 'batchDelete'; nodes: ExplorerNode[] }
 	| { type: 'restoreDeleted'; node: ExplorerNode }
 	| null;
 
@@ -816,6 +823,53 @@ function DeleteNodeDialog({
 	);
 }
 
+function BatchDeleteNodeDialog({
+	busy,
+	nodes,
+	onClose,
+	onConfirm,
+}: {
+	busy: boolean;
+	nodes: ExplorerNode[];
+	onClose: () => void;
+	onConfirm: () => Promise<void>;
+}) {
+	const fileCount = nodes.filter((n) => n.kind === 'file').length;
+	const dirCount = nodes.filter((n) => n.kind === 'directory').length;
+
+	const description = (() => {
+		const parts: string[] = [];
+		if (fileCount > 0) parts.push(`${fileCount} 个文件`);
+		if (dirCount > 0) parts.push(`${dirCount} 个文件夹`);
+		return `确认删除选中的 ${parts.join('、')}？`;
+	})();
+
+	const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		void onConfirm().catch(() => {});
+	};
+
+	return (
+		<ExplorerDialogForm
+			description={description}
+			footer={
+				<>
+					<Button disabled={busy} onClick={onClose} variant="outline">
+						取消
+					</Button>
+					<Button type="submit" loading={busy} variant="destructive">
+						删除
+					</Button>
+				</>
+			}
+			onOpenChange={(open) => !open && onClose()}
+			onSubmit={handleSubmit}
+			open={nodes.length > 0}
+			title="确认批量删除"
+		/>
+	);
+}
+
 function ExplorerDialogForm({
 	children,
 	description,
@@ -897,11 +951,13 @@ function flattenTree(
 	return items;
 }
 
-function FileTreeNode({
+const FileTreeNode = memo(function FileTreeNode({
 	clipboard,
 	depth,
 	expandedPaths,
 	gitStatusMap,
+	showStatus,
+	isMultiSelected,
 	loadingPaths,
 	node,
 	onContextAction,
@@ -918,6 +974,8 @@ function FileTreeNode({
 	depth: number;
 	expandedPaths: Set<string>;
 	gitStatusMap: Map<string, GitFileEntry>;
+	showStatus: boolean;
+	isMultiSelected: boolean;
 	loadingPaths: Set<string>;
 	node: ExplorerNode;
 	onContextAction: (
@@ -934,7 +992,7 @@ function FileTreeNode({
 	) => void;
 	onExpandDirectory: (node: ExplorerNode) => void;
 	onHoverNode: (node: ExplorerNode | null) => void;
-	onSelectNode: (node: ExplorerNode) => void;
+	onSelectNode: (node: ExplorerNode, e: React.MouseEvent) => void;
 	selectedPath: string | null;
 	toggleDirectory: (path: string) => void;
 }) {
@@ -942,8 +1000,8 @@ function FileTreeNode({
 	const chevronRef = useRef<SVGSVGElement>(null);
 	const userToggledRef = useRef(false);
 	const isDirectory = node.kind === 'directory';
-	const isActuallySelected = selectedPath === node.path;
-	const isSelected = isActuallySelected || contextMenuOpen;
+	const isPrimarySelected = selectedPath === node.path;
+	const isSelected = isPrimarySelected || isMultiSelected || contextMenuOpen;
 	const isExpanded = isDirectory && expandedPaths.has(node.path);
 
 	// Keep chevron rotation in sync — animated on user click, instant otherwise.
@@ -970,9 +1028,11 @@ function FileTreeNode({
 		clipboard?.mode === 'copy' && clipboard.item.path === node.path;
 	const isCut = clipboard?.mode === 'cut' && clipboard.item.path === node.path;
 	const pasteDisabled = !clipboard || clipboard.item.path === node.path;
-	const gitState = isDirectory
-		? getAggregatedDirectoryGitState(node, gitStatusMap)
-		: (gitStatusMap.get(normalizeExplorerPath(node.path)) ?? null);
+	const gitState = showStatus
+		? isDirectory
+			? getAggregatedDirectoryGitState(node, gitStatusMap)
+			: (gitStatusMap.get(normalizeExplorerPath(node.path)) ?? null)
+		: null;
 	const isDeletedGitEntry = !isDirectory && gitState?.status === 'deleted';
 
 	if (isDirectory) {
@@ -1038,11 +1098,11 @@ function FileTreeNode({
 										: `text-sidebar-foreground hover:bg-sidebar-accent
 											hover:text-sidebar-accent-foreground`
 								)}
-								onClick={() => {
+								onClick={(e) => {
 									userToggledRef.current = true;
 									const nextExpanded = !isExpanded;
 									toggleDirectory(node.path);
-									onSelectNode(node);
+									onSelectNode(node, e);
 
 									if (nextExpanded && !node.loaded && !isLoading) {
 										onExpandDirectory(node);
@@ -1110,14 +1170,17 @@ function FileTreeNode({
 						className={cn(
 							`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left
 							text-sm transition-colors relative z-10`,
-							isActuallySelected
+							isPrimarySelected
 								? 'bg-sidebar-primary text-sidebar-primary-foreground'
-								: contextMenuOpen
-									? 'bg-sidebar-accent text-sidebar-accent-foreground'
-									: `text-sidebar-foreground hover:bg-sidebar-accent
-										hover:text-sidebar-accent-foreground`
+								: isMultiSelected
+									? `bg-sidebar-accent/80 text-sidebar-accent-foreground ring-1
+										ring-inset ring-sidebar-border`
+									: contextMenuOpen
+										? 'bg-sidebar-accent text-sidebar-accent-foreground'
+										: `text-sidebar-foreground hover:bg-sidebar-accent
+											hover:text-sidebar-accent-foreground`
 						)}
-						onClick={() => void onSelectNode(node)}
+						onClick={(e) => void onSelectNode(node, e)}
 						style={{ paddingLeft: `${depth * 14 + 32}px` }}
 					>
 						<Icon className="size-4 shrink-0" />
@@ -1149,7 +1212,7 @@ function FileTreeNode({
 			</ContextMenuRoot>
 		</div>
 	);
-}
+});
 
 export function FileExplorerSidebar() {
 	const ctx = useWorkspace();
@@ -1174,9 +1237,12 @@ export function FileExplorerSidebar() {
 		refreshFolder: onRefresh,
 		pasteNode: onPasteNode,
 		importExternalFilesHandler: onImportExternalFiles,
+		initialised,
 		gitRefresh: onGitRefresh,
 		gitRefreshWorkspace: onGitRefreshWorkspace,
 		updateGitStatus: onGitStatusChange,
+		syncEnabled,
+		syncMode,
 		renameNode: onRenameNode,
 		expandDirectory: onExpandDirectory,
 		selectNode: onSelectNode,
@@ -1278,10 +1344,78 @@ export function FileExplorerSidebar() {
 		[onImportExternalFiles, root]
 	);
 	const createTargetNode = resolveCreateTargetNode(root, selectedPath);
+	// ── WebDAV file status (fetched on mount / after sync) ──
+	const [webdavSyncFiles, setWebdavSyncFiles] = useState<
+		WebDavSyncFileEntry[] | null
+	>(null);
+	const fetchWebDavStatus = useCallback(() => {
+		if (!syncEnabled || syncMode !== 'webdav' || !root?.path) {
+			setWebdavSyncFiles(null);
+			return;
+		}
+		webdavGetStatus(root.path)
+			.then((res) => setWebdavSyncFiles(res.files))
+			.catch(() => setWebdavSyncFiles(null));
+	}, [syncEnabled, syncMode, root?.path]);
+
+	useEffect(() => {
+		fetchWebDavStatus();
+	}, [fetchWebDavStatus]);
+
+	useEffect(() => {
+		const handler = () => fetchWebDavStatus();
+		window.addEventListener('webdav-sync-complete', handler);
+		// Refresh WebDAV status after a file is saved, giving the sync
+		// mechanism time to upload before we poll for updated status.
+		const handleFileSave = () => {
+			setTimeout(fetchWebDavStatus, 800);
+		};
+		window.addEventListener('workspace-file-saved', handleFileSave);
+		return () => {
+			window.removeEventListener('webdav-sync-complete', handler);
+			window.removeEventListener('workspace-file-saved', handleFileSave);
+		};
+	}, [fetchWebDavStatus]);
+
+	// ── Git status map ──
 	const gitStatusMap = useMemo(() => buildGitStatusMap(gitStatus), [gitStatus]);
+
+	// When in webdav mode, derive a compatible map from webdav sync status
+	const effectiveGitStatusMap = useMemo(() => {
+		if (
+			!syncEnabled ||
+			syncMode !== 'webdav' ||
+			!webdavSyncFiles ||
+			!root?.path
+		) {
+			return gitStatusMap;
+		}
+		const map = new Map<string, GitFileEntry>();
+		for (const file of webdavSyncFiles) {
+			if (file.status === 'synced') continue;
+			const fullPath = normalizeExplorerPath(
+				`${root.path}/${file.relative_path}`
+			);
+			const gitFileEntry: GitFileEntry = {
+				staged: false,
+				unstaged: true,
+				status:
+					file.status === 'new'
+						? 'untracked'
+						: file.status === 'deleted'
+							? 'deleted'
+							: 'modified',
+				path: fullPath,
+				hasConflictMarkers: false,
+			};
+			map.set(fullPath, gitFileEntry);
+		}
+		return map;
+	}, [syncEnabled, syncMode, webdavSyncFiles, gitStatusMap, root?.path]);
+
 	const mergedRoot = useMemo(
-		() => (root ? mergeDeletedGitNodes(root, gitStatusMap) : null),
-		[gitStatusMap, root]
+		() => (root ? mergeDeletedGitNodes(root, effectiveGitStatusMap) : null),
+		[effectiveGitStatusMap, root]
 	);
 	const bookmarkVisibilityScopeKey = `${root?.path ?? ''}:${gitStatus?.branch?.name ?? ''}`;
 
@@ -1391,18 +1525,99 @@ export function FileExplorerSidebar() {
 		}
 	}, [loadingPaths, mergedRoot, onExpandDirectory, resolvedExpandedPaths]);
 
-	const toggleDirectory = (path: string) => {
-		const isExpanded = resolvedExpandedPaths.has(path);
-		ctx.toggleDirectory(path, expansionRootPath, isExpanded);
-	};
+	const toggleDirectory = useCallback(
+		(path: string) => {
+			const isExpanded = resolvedExpandedPaths.has(path);
+			ctx.toggleDirectory(path, expansionRootPath, isExpanded);
+		},
+		[ctx, expansionRootPath, resolvedExpandedPaths]
+	);
 
 	const hoveredNodeRef = useRef<ExplorerNode | null>(null);
 	const viewportRef = useRef<HTMLDivElement>(null);
+	// Cache the OS viewport once found — avoids DOM queries on every
+	// virtualizer scroll frame, which causes jank with many tree nodes.
+	const scrollElementRef = useRef<HTMLElement | null>(null);
 
 	const flatItems = useMemo(() => {
 		if (!mergedRoot) return [];
 		return flattenTree(mergedRoot, resolvedExpandedPaths, sortEnabled);
 	}, [mergedRoot, resolvedExpandedPaths, sortEnabled]);
+
+	const [selectedPaths, setSelectedPaths] = useState<Set<string>>(
+		() => new Set()
+	);
+	const lastClickedPathRef = useRef<string | null>(null);
+	const handleSelectNodeRef = useRef(onSelectNode);
+	handleSelectNodeRef.current = onSelectNode;
+
+	const handleSelectNode = useCallback(
+		(node: ExplorerNode, e: React.MouseEvent) => {
+			const mod = e.ctrlKey || e.metaKey;
+
+			if (mod) {
+				// Ctrl/Meta+click: toggle multi-selection, no file opening
+				e.preventDefault();
+				e.stopPropagation();
+				setSelectedPaths((prev) => {
+					const next = new Set(prev);
+					if (next.has(node.path)) {
+						next.delete(node.path);
+					} else {
+						next.add(node.path);
+					}
+					return next;
+				});
+				lastClickedPathRef.current = node.path;
+				return;
+			}
+
+			if (e.shiftKey && lastClickedPathRef.current) {
+				// Shift+click: range select within same parent directory
+				e.preventDefault();
+				e.stopPropagation();
+				const parentPath = getParentPath(node.path);
+				const lastParentPath = getParentPath(lastClickedPathRef.current);
+
+				if (parentPath === lastParentPath && parentPath !== null) {
+					const siblingPaths = flatItems
+						.filter(
+							(item) =>
+								item.type === 'node' &&
+								getParentPath(item.node.path) === parentPath
+						)
+						.map(
+							(item) => (item as { type: 'node'; node: ExplorerNode }).node.path
+						);
+
+					const startIdx = siblingPaths.indexOf(lastClickedPathRef.current);
+					const endIdx = siblingPaths.indexOf(node.path);
+
+					if (startIdx >= 0 && endIdx >= 0) {
+						const [from, to] =
+							startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+						const range = siblingPaths.slice(from, to + 1);
+						setSelectedPaths((prev) => {
+							const next = new Set(prev);
+							for (const path of range) {
+								next.add(path);
+							}
+							return next;
+						});
+					}
+				}
+				lastClickedPathRef.current = node.path;
+				return;
+			}
+
+			// Plain click: single select (clear multi, open file as normal)
+			setSelectedPaths(new Set([node.path]));
+			lastClickedPathRef.current = node.path;
+			e.stopPropagation();
+			handleSelectNodeRef.current(node);
+		},
+		[flatItems]
+	);
 
 	const virtualizer = useVirtualizer({
 		count: flatItems.length,
@@ -1411,17 +1626,34 @@ export function FileExplorerSidebar() {
 			return item ? getFlatItemKey(item, index) : index;
 		},
 		getScrollElement: () => {
+			if (scrollElementRef.current) return scrollElementRef.current;
+
 			const el = viewportRef.current;
 			if (!el) return null;
+
 			const osRoot = el.closest('[data-overlayscrollbars]');
 			if (osRoot) {
-				return (osRoot.querySelector('[data-overlayscrollbars-viewport]') ??
-					el) as HTMLElement;
+				scrollElementRef.current = (osRoot.querySelector(
+					'[data-overlayscrollbars-viewport]'
+				) ?? el) as HTMLElement;
+			} else {
+				scrollElementRef.current = el;
 			}
-			return el;
+
+			return scrollElementRef.current;
 		},
 		estimateSize: () => 36,
-		overscan: 20,
+		// Increased overscan to pre-render items outside the viewport,
+		// reducing white flash during fast scrolling. The background on
+		// each virtual item wrapper (bg-background) fills the gap while
+		// the tree row content is being mounted.
+		overscan: 10,
+	});
+
+	// Invalidate the cached scroll element when the OS structure may have
+	// changed (e.g. re-initialization after React reconciliation).
+	useEffect(() => {
+		scrollElementRef.current = null;
 	});
 
 	useEffect(() => {
@@ -1581,14 +1813,48 @@ export function FileExplorerSidebar() {
 						}
 					}
 				})();
-			} else if (e.key === 'Delete' && node) {
+			} else if (e.key === 'Delete' && (node || selectedPaths.size > 1)) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
-				setPendingAction({ node, type: 'delete' });
+				if (selectedPaths.size > 1) {
+					const nodes: ExplorerNode[] = [];
+					for (const path of selectedPaths) {
+						const n = mergedRoot ? findNodeByPath(mergedRoot, path) : null;
+						if (n) nodes.push(n);
+					}
+					if (nodes.length > 0) {
+						setPendingAction({ nodes, type: 'batchDelete' });
+					}
+				} else if (node) {
+					setPendingAction({ node, type: 'delete' });
+				}
 			} else if (e.key === 'F2' && node) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
 				setPendingAction({ node, type: 'rename' });
+			} else if (mod && e.key === 'a') {
+				// Ctrl+A: Select all visible items at the current scope
+				e.preventDefault();
+				if (!mergedRoot) return;
+
+				const anchorPath = selectedPath ?? mergedRoot.path;
+				const scopePath = getParentPath(anchorPath) ?? anchorPath;
+
+				const siblingPaths = flatItems
+					.filter(
+						(item) =>
+							item.type === 'node' &&
+							getParentPath(item.node.path) === scopePath
+					)
+					.map(
+						(item) => (item as { type: 'node'; node: ExplorerNode }).node.path
+					);
+
+				setSelectedPaths(new Set(siblingPaths));
+			} else if (e.key === 'Escape' && selectedPaths.size > 1) {
+				if ((e.target as HTMLElement).isContentEditable) return;
+				e.preventDefault();
+				setSelectedPaths(new Set());
 			} else if (e.key === 'Escape' && clipboard) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
@@ -1600,6 +1866,7 @@ export function FileExplorerSidebar() {
 		return () => document.removeEventListener('keydown', onKeyDown);
 	}, [
 		clipboard,
+		flatItems,
 		mergedRoot,
 		onClearClipboard,
 		onCopyNode,
@@ -1607,6 +1874,7 @@ export function FileExplorerSidebar() {
 		onPasteNode,
 		pendingAction,
 		selectedPath,
+		selectedPaths,
 	]);
 
 	// ── Tauri native drag-drop event (provides real file paths) ──────
@@ -1758,75 +2026,78 @@ export function FileExplorerSidebar() {
 		[clipboard, root]
 	);
 
-	const handleContextAction = async (
-		action:
-			| 'createMarkdown'
-			| 'createDirectory'
-			| 'copy'
-			| 'cut'
-			| 'delete'
-			| 'rename'
-			| 'paste'
-			| 'restoreDeleted',
-		node: ExplorerNode | null
-	) => {
-		if (
-			!node &&
-			action !== 'createMarkdown' &&
-			action !== 'createDirectory' &&
-			action !== 'paste'
-		) {
-			return;
-		}
+	const handleContextAction = useCallback(
+		async (
+			action:
+				| 'createMarkdown'
+				| 'createDirectory'
+				| 'copy'
+				| 'cut'
+				| 'delete'
+				| 'rename'
+				| 'paste'
+				| 'restoreDeleted',
+			node: ExplorerNode | null
+		) => {
+			if (
+				!node &&
+				action !== 'createMarkdown' &&
+				action !== 'createDirectory' &&
+				action !== 'paste'
+			) {
+				return;
+			}
 
-		if (action === 'createMarkdown') {
-			setPendingAction({
-				targetPath: node?.path ?? null,
-				type: 'createMarkdown',
-			});
-			return;
-		}
+			if (action === 'createMarkdown') {
+				setPendingAction({
+					targetPath: node?.path ?? null,
+					type: 'createMarkdown',
+				});
+				return;
+			}
 
-		if (action === 'createDirectory') {
-			setPendingAction({
-				node: node?.kind === 'directory' ? node : null,
-				targetPath: node?.kind === 'directory' ? node.path : null,
-				type: 'createDirectory',
-			});
-			return;
-		}
+			if (action === 'createDirectory') {
+				setPendingAction({
+					node: node?.kind === 'directory' ? node : null,
+					targetPath: node?.kind === 'directory' ? node.path : null,
+					type: 'createDirectory',
+				});
+				return;
+			}
 
-		if (action === 'copy' && node) {
-			onCopyNode(node);
-			return;
-		}
+			if (action === 'copy' && node) {
+				onCopyNode(node);
+				return;
+			}
 
-		if (action === 'cut' && node) {
-			onCutNode(node);
-			return;
-		}
+			if (action === 'cut' && node) {
+				onCutNode(node);
+				return;
+			}
 
-		if (action === 'rename' && node) {
-			setPendingAction({ node, type: 'rename' });
-			return;
-		}
+			if (action === 'rename' && node) {
+				setPendingAction({ node, type: 'rename' });
+				return;
+			}
 
-		if (action === 'delete' && node) {
-			setPendingAction({ node, type: 'delete' });
-			return;
-		}
+			if (action === 'delete' && node) {
+				setPendingAction({ node, type: 'delete' });
+				return;
+			}
 
-		if (action === 'restoreDeleted' && node) {
-			setPendingAction({ node, type: 'restoreDeleted' });
-			return;
-		}
+			if (action === 'restoreDeleted' && node) {
+				setPendingAction({ node, type: 'restoreDeleted' });
+				return;
+			}
 
-		try {
-			await onPasteNode(node?.path ?? null);
-		} catch (error) {
-			void error;
-		}
-	};
+			try {
+				await onPasteNode(node?.path ?? null);
+			} catch (error) {
+				void error;
+			}
+		},
+		[setPendingAction, onCopyNode, onCutNode, onPasteNode]
+	);
 
 	const toggleSort = () => {
 		onSortToggle();
@@ -1916,6 +2187,28 @@ export function FileExplorerSidebar() {
 			onSelectNode(node);
 		}
 	};
+
+	const handleHoverNode = useCallback((node: ExplorerNode | null) => {
+		hoveredNodeRef.current = node;
+	}, []);
+
+	const handleContextActionStable = useCallback(
+		(
+			action:
+				| 'createMarkdown'
+				| 'createDirectory'
+				| 'copy'
+				| 'cut'
+				| 'delete'
+				| 'rename'
+				| 'paste'
+				| 'restoreDeleted',
+			node: ExplorerNode | null
+		) => {
+			void handleContextAction(action, node);
+		},
+		[handleContextAction]
+	);
 
 	return (
 		<>
@@ -2169,6 +2462,13 @@ export function FileExplorerSidebar() {
 								${isDragOver ? 'bg-sidebar-accent/40 ring-2 ring-primary/40 ring-inset' : ''}`}
 							data-os-scroll
 							data-native-dialog-scroll-lock
+							onClick={(e) => {
+								// Only clear multi-select when clicking the viewport itself
+								// (not when a tree node button inside it was clicked)
+								if (e.target === e.currentTarget) {
+									setSelectedPaths(new Set());
+								}
+							}}
 							onDragOver={handleDragOver}
 							onDragLeave={handleDragLeave}
 							onDrop={handleDrop}
@@ -2251,17 +2551,20 @@ export function FileExplorerSidebar() {
 														clipboard={clipboard}
 														depth={item.depth}
 														expandedPaths={resolvedExpandedPaths}
-														gitStatusMap={gitStatusMap}
+														gitStatusMap={effectiveGitStatusMap}
+														showStatus={
+															syncEnabled && !!gitStatus?.branch?.name
+														}
+														isMultiSelected={
+															selectedPaths.has(item.node.path) &&
+															selectedPaths.size > 1
+														}
 														loadingPaths={loadingPaths}
 														node={item.node}
-														onContextAction={(action, node) => {
-															void handleContextAction(action, node);
-														}}
+														onContextAction={handleContextActionStable}
 														onExpandDirectory={onExpandDirectory}
-														onHoverNode={(node) =>
-															(hoveredNodeRef.current = node)
-														}
-														onSelectNode={onSelectNode}
+														onHoverNode={handleHoverNode}
+														onSelectNode={handleSelectNode}
 														selectedPath={selectedPath}
 														toggleDirectory={toggleDirectory}
 													/>
@@ -2297,16 +2600,112 @@ export function FileExplorerSidebar() {
 					/>
 				</ContextMenuRoot>
 
+				{selectedPaths.size > 1 && (
+					<div
+						className={`flex items-center justify-between gap-2 border-t
+						border-sidebar-border bg-sidebar px-3 py-2 text-xs
+						${explorerBottomSectionHeightClassName}`}
+					>
+						<span className="shrink-0 text-muted-foreground">
+							已选择 {selectedPaths.size} 项
+						</span>
+						<div className="flex items-center gap-1">
+							<Button
+								size="icon-sm"
+								variant="ghost"
+								onClick={() => {
+									for (const path of selectedPaths) {
+										const fileNode = mergedRoot
+											? findNodeByPath(mergedRoot, path)
+											: null;
+										if (fileNode) onCopyNode(fileNode);
+									}
+									showSuccessToast(`已复制 ${selectedPaths.size} 项`);
+								}}
+							>
+								<Copy className="size-3.5" />
+							</Button>
+							<Button
+								size="icon-sm"
+								variant="ghost"
+								onClick={() => {
+									for (const path of selectedPaths) {
+										const fileNode = mergedRoot
+											? findNodeByPath(mergedRoot, path)
+											: null;
+										if (fileNode) onCutNode(fileNode);
+									}
+									showSuccessToast(`已剪切 ${selectedPaths.size} 项`);
+								}}
+							>
+								<Scissors className="size-3.5" />
+							</Button>
+							<Button
+								size="icon-sm"
+								variant="ghost"
+								onClick={() => {
+									const nodes: ExplorerNode[] = [];
+									for (const path of selectedPaths) {
+										const node = mergedRoot
+											? findNodeByPath(mergedRoot, path)
+											: null;
+										if (node) nodes.push(node);
+									}
+									if (nodes.length > 0) {
+										setPendingAction({ nodes, type: 'batchDelete' });
+									}
+								}}
+							>
+								<Trash2 className="size-3.5" />
+							</Button>
+							<div className="mx-1 h-4 w-px shrink-0 bg-border" />
+							<Button
+								size="icon-sm"
+								variant="ghost"
+								onClick={() => setSelectedPaths(new Set())}
+							>
+								<X className="size-3.5" />
+							</Button>
+						</div>
+					</div>
+				)}
+
 				<div className={explorerSidebarStatusBarClassName}>
-					<GitPanel
-						busy={gitBusy}
-						disabled={!root || busy || createBusy || operationBusy !== null}
-						onRefresh={onGitRefresh}
-						onRefreshWorkspace={onGitRefreshWorkspace}
-						onStatusChange={onGitStatusChange}
-						rootPath={root?.path ?? null}
-						status={gitStatus}
-					/>
+					{!initialised ? (
+						<div className="flex w-full items-center justify-center gap-1.5">
+							<div
+								className="size-3 animate-pulse rounded-full
+									bg-muted-foreground/30"
+							/>
+							<div
+								className="h-2.5 w-16 animate-pulse rounded
+									bg-muted-foreground/20"
+							/>
+						</div>
+					) : syncEnabled && syncMode === 'git' ? (
+						<GitPanel
+							busy={gitBusy}
+							disabled={!root || busy || createBusy || operationBusy !== null}
+							onRefresh={onGitRefresh}
+							onRefreshWorkspace={onGitRefreshWorkspace}
+							onStatusChange={onGitStatusChange}
+							rootPath={root?.path ?? null}
+							status={gitStatus}
+						/>
+					) : syncEnabled && syncMode === 'webdav' ? (
+						<WebDavPanel
+							disabled={!root || busy || createBusy || operationBusy !== null}
+							workspaceRoot={root?.path ?? null}
+						/>
+					) : (
+						<div
+							className="flex w-full items-center justify-center gap-1.5
+								text-muted-foreground"
+						>
+							<CloudOff className="size-3" />
+							<span>同步未开启</span>
+						</div>
+					)}
 				</div>
 			</aside>
 
@@ -2388,6 +2787,27 @@ export function FileExplorerSidebar() {
 					}
 
 					await onDeleteNode(pendingAction.node.path);
+					setPendingAction(null);
+				}}
+			/>
+
+			<BatchDeleteNodeDialog
+				busy={operationBusy === 'delete'}
+				nodes={pendingAction?.type === 'batchDelete' ? pendingAction.nodes : []}
+				onClose={() => setPendingAction(null)}
+				onConfirm={async () => {
+					if (pendingAction?.type !== 'batchDelete') {
+						return;
+					}
+
+					for (const node of pendingAction.nodes) {
+						try {
+							await onDeleteNode(node.path);
+						} catch {
+							// Continue with remaining nodes
+						}
+					}
+					setSelectedPaths(new Set());
 					setPendingAction(null);
 				}}
 			/>
