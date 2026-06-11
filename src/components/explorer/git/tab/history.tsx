@@ -9,6 +9,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu';
+import { SettingsSectionCard } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
 
 import type { GitLogEntry } from '../git-types';
@@ -34,29 +35,22 @@ export function GitTabHistory({
 }: GitTabHistoryProps) {
 	return (
 		<>
-			<div
-				className="flex shrink-0 items-center justify-between gap-3 border-b
-					border-border p-6 pb-4"
-			>
-				<div>
-					<div className="text-base font-medium text-foreground">提交历史</div>
-					<p className="mt-1 text-xs text-muted-foreground">
-						显示当前工作区的全部提交记录。
-					</p>
-				</div>
-				<div className="flex items-center gap-2">
-					<Button
-						disabled={actionBusy || gitLog.length === 0}
-						onClick={onUndoRequest}
-						variant="outline"
-					>
-						<RotateCcw />
-						撤销最近提交
-					</Button>
-					<Button disabled={actionBusy} onClick={onRefresh} variant="outline">
-						<RefreshCw />
-					</Button>
-				</div>
+			<div className="p-6 pb-2">
+				<SettingsSectionCard title="提交历史">
+					<div className="flex items-center gap-2">
+						<Button
+							disabled={actionBusy || gitLog.length === 0}
+							onClick={onUndoRequest}
+							variant="outline"
+						>
+							<RotateCcw />
+							撤销最近提交
+						</Button>
+						<Button disabled={actionBusy} onClick={onRefresh} variant="outline">
+							<RefreshCw />
+						</Button>
+					</div>
+				</SettingsSectionCard>
 			</div>
 
 			<div className="overflow-auto size-full min-h-0 flex-1 pr-1">

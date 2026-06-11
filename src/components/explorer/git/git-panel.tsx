@@ -1043,75 +1043,131 @@ export function GitPanel({
 								}}
 							/>
 							<section
-								className="flex min-h-0 min-w-0 flex-1 pt-4 flex-col
-									overflow-hidden bg-popover"
+								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
+									bg-popover"
 							>
 								{activeTab === 'history' && (
-									<GitTabHistory
-										actionBusy={actionBusy}
-										branchLabel={branchLabel}
-										gitLog={gitLog}
-										upstreamLabel={upstreamLabel}
-										onRefresh={() => void loadGitLog()}
-										onRevertRequest={(commitId, summary) =>
-											setPendingHistoryAction({
-												type: 'revert-commit',
-												commitId,
-												summary,
-											})
-										}
-										onUndoRequest={() =>
-											setPendingHistoryAction({ type: 'undo-last' })
-										}
-									/>
+									<>
+										<div className="space-y-1 px-6 pt-4 sm:pt-6">
+											<p
+												className="text-xs font-medium uppercase
+													tracking-[0.18em] text-muted-foreground"
+											>
+												历史
+											</p>
+											<h3 className="text-2xl font-semibold text-foreground">
+												提交记录
+											</h3>
+										</div>
+										<GitTabHistory
+											actionBusy={actionBusy}
+											branchLabel={branchLabel}
+											gitLog={gitLog}
+											upstreamLabel={upstreamLabel}
+											onRefresh={() => void loadGitLog()}
+											onRevertRequest={(commitId, summary) =>
+												setPendingHistoryAction({
+													type: 'revert-commit',
+													commitId,
+													summary,
+												})
+											}
+											onUndoRequest={() =>
+												setPendingHistoryAction({ type: 'undo-last' })
+											}
+										/>
+									</>
 								)}
 								{activeTab === 'commit' && (
-									<GitTabCommit
-										actionBusy={actionBusy}
-										canOperate={canOperate}
-										commitMessage={commitMessage}
-										status={status}
-										onCommit={() => void commitStaged()}
-										onCommitAll={() => void commitAll()}
-										onCommitMessageChange={setCommitMessage}
-										onRefresh={() => void refreshStatus()}
-										onStageFile={(path) => void stageFile(path)}
-										onUnstageFile={(path) => void unstageFile(path)}
-									/>
+									<>
+										<div className="space-y-1 px-6 pt-4 sm:pt-6">
+											<p
+												className="text-xs font-medium uppercase
+													tracking-[0.18em] text-muted-foreground"
+											>
+												提交
+											</p>
+											<h3 className="text-2xl font-semibold text-foreground">
+												创建新提交
+											</h3>
+										</div>
+										<GitTabCommit
+											actionBusy={actionBusy}
+											canOperate={canOperate}
+											commitMessage={commitMessage}
+											status={status}
+											onCommit={() => void commitStaged()}
+											onCommitAll={() => void commitAll()}
+											onCommitMessageChange={setCommitMessage}
+											onRefresh={() => void refreshStatus()}
+											onStageFile={(path) => void stageFile(path)}
+											onUnstageFile={(path) => void unstageFile(path)}
+										/>
+									</>
 								)}
 								{activeTab !== 'history' && activeTab !== 'commit' && (
 									<div className="overflow-auto size-full min-h-0 flex-1">
 										<div className="space-y-6 p-4 sm:p-6">
 											{activeTab === 'remote' && (
-												<GitTabRemote
-													key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
-													actionBusy={actionBusy}
-													canOperate={canOperate}
-													initialRemoteName={primaryRemote?.name ?? 'origin'}
-													initialRemoteUrl={primaryRemote?.url ?? ''}
-													onPull={() => void pull()}
-													onPush={() => void push()}
-													onSave={(name, url) => {
-														setRemoteName(name);
-														void saveRemote(name, url);
-													}}
-												/>
+												<div className="space-y-4">
+													<div className="space-y-1">
+														<p
+															className="text-xs font-medium uppercase
+																tracking-[0.18em] text-muted-foreground"
+														>
+															远端
+														</p>
+														<h3
+															className="text-2xl font-semibold text-foreground"
+														>
+															远端同步配置
+														</h3>
+													</div>
+													<GitTabRemote
+														key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
+														actionBusy={actionBusy}
+														canOperate={canOperate}
+														initialRemoteName={primaryRemote?.name ?? 'origin'}
+														initialRemoteUrl={primaryRemote?.url ?? ''}
+														onPull={() => void pull()}
+														onPush={() => void push()}
+														onSave={(name, url) => {
+															setRemoteName(name);
+															void saveRemote(name, url);
+														}}
+													/>
+												</div>
 											)}
 											{activeTab === 'ssh' && (
-												<GitTabSsh
-													actionBusy={actionBusy}
-													authPassword={authPassword}
-													authUsername={authUsername}
-													sshPassphrase={sshPassphrase}
-													sshPrivateKeyPath={sshPrivateKeyPath}
-													sshUsername={sshUsername}
-													onAuthPasswordChange={setAuthPassword}
-													onAuthUsernameChange={setAuthUsername}
-													onPickKeyFile={() => void pickSshPrivateKeyFile()}
-													onSshPassphraseChange={setSshPassphrase}
-													onSshPrivateKeyPathChange={setSshPrivateKeyPath}
-													onSshUsernameChange={setSshUsername}
-												/>
+												<div className="space-y-4">
+													<div className="space-y-1">
+														<p
+															className="text-xs font-medium uppercase
+																tracking-[0.18em] text-muted-foreground"
+														>
+															SSH
+														</p>
+														<h3
+															className="text-2xl font-semibold text-foreground"
+														>
+															认证凭据设置
+														</h3>
+													</div>
+													<GitTabSsh
+														actionBusy={actionBusy}
+														authPassword={authPassword}
+														authUsername={authUsername}
+														sshPassphrase={sshPassphrase}
+														sshPrivateKeyPath={sshPrivateKeyPath}
+														sshUsername={sshUsername}
+														onAuthPasswordChange={setAuthPassword}
+														onAuthUsernameChange={setAuthUsername}
+														onPickKeyFile={() => void pickSshPrivateKeyFile()}
+														onSshPassphraseChange={setSshPassphrase}
+														onSshPrivateKeyPathChange={setSshPrivateKeyPath}
+														onSshUsernameChange={setSshUsername}
+													/>
+												</div>
 											)}
 										</div>
 									</div>

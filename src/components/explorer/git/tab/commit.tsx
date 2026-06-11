@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Info, Minus, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { SettingsSectionCard } from '@/components/system/setting/shared';
 import {
 	Tooltip,
 	TooltipContent,
@@ -122,45 +123,36 @@ export function GitTabCommit({
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="shrink-0 space-y-4 border-b border-border px-6 pt-6 pb-4">
-				<div className="flex items-center justify-between gap-3">
-					<div>
-						<div className="text-base font-medium text-foreground">提交</div>
-						<p className="mt-1 text-xs text-muted-foreground">提交所有更改。</p>
+			<div className="shrink-0 space-y-4 px-6 pt-6 pb-4">
+				<SettingsSectionCard title="提交信息">
+					<div className="space-y-3">
+						<Textarea
+							onChange={(event) => onCommitMessageChange(event.target.value)}
+							placeholder="输入提交信息..."
+							value={commitMessage}
+						/>
+						<div className="flex items-center gap-2">
+							<Button
+								disabled={!canOperate || !hasStaged}
+								loading={actionBusy}
+								onClick={onCommit}
+							>
+								<Check />
+								{getCommitLabel(status)}
+							</Button>
+							<Button
+								disabled={
+									!canOperate || hasConflicts || !status?.totalChangedCount
+								}
+								onClick={onCommitAll}
+								variant="outline"
+							>
+								<Check />
+								提交所有更改
+							</Button>
+						</div>
 					</div>
-					<div className="flex items-center gap-2">
-						<Button
-							disabled={!canOperate || !hasStaged}
-							loading={actionBusy}
-							onClick={onCommit}
-						>
-							<Check />
-							{getCommitLabel(status)}
-						</Button>
-						<Button
-							disabled={
-								!canOperate || hasConflicts || !status?.totalChangedCount
-							}
-							onClick={onCommitAll}
-							variant="outline"
-						>
-							<Check />
-							提交所有更改
-						</Button>
-						{/* <Button
-							disabled={!canOperate}
-							onClick={onRefresh}
-							variant="outline"
-						>
-							<RefreshCw />
-						</Button> */}
-					</div>
-				</div>
-				<Textarea
-					onChange={(event) => onCommitMessageChange(event.target.value)}
-					placeholder="输入提交信息..."
-					value={commitMessage}
-				/>
+				</SettingsSectionCard>
 			</div>
 
 			<div className="min-h-0 flex-1 flex flex-col overflow-hidden pt-2">
