@@ -112,6 +112,45 @@ export function SettingRow({
 	);
 }
 
+export function BrandShard({
+	logoSrc,
+	appName,
+	tagline,
+	children,
+}: {
+	logoSrc: string;
+	appName: string;
+	tagline: ReactNode;
+	children?: ReactNode;
+}) {
+	return (
+		<section
+			className="overflow-hidden rounded-2xl border bg-linear-to-br
+				from-primary/12 via-background to-background shadow-xs"
+		>
+			<div className="flex flex-col gap-6 p-5 sm:p-6">
+				<div className="flex flex-col items-start gap-4 sm:gap-6">
+					<div className="flex items-center gap-3">
+						<img
+							alt={appName}
+							className="size-12 shrink-0 rounded-2xl"
+							src={logoSrc}
+						/>
+						<h1
+							className="text-3xl font-medium tracking-tight
+								text-muted-foreground"
+						>
+							{appName}
+						</h1>
+					</div>
+					{tagline}
+				</div>
+				{children}
+			</div>
+		</section>
+	);
+}
+
 export function FieldBlock({
 	label,
 	hint,

@@ -6,6 +6,8 @@ export const useOverlayScrollbars = () => {
 		let frameId: number | null = null;
 		let disposed = false;
 
+		// Match explicitly opted-in elements AND utility classes used by
+		// UI primitives (sheets, dialogs) that need custom scrollbars.
 		const selector =
 			'[data-os-scroll], .overflow-auto, .overflow-y-auto, .overflow-x-auto';
 
@@ -23,30 +25,30 @@ export const useOverlayScrollbars = () => {
 					continue;
 				}
 
+				// Skip elements nested inside an existing OverlayScrollbars
+				// structure to prevent conflicting instances (e.g. an
+				// .overflow-auto dialog inside a data-os-scroll host).
+				if (el.closest('[data-overlayscrollbars]')) {
+					continue;
+				}
+
 				const existingInstance = OverlayScrollbars(el);
 				if (existingInstance) {
 					existingInstance.update();
 					continue;
 				}
 
-				// Reuse the existing element as the viewport so the library
-				// doesn't generate wrapper nodes that React doesn't own.
-				OverlayScrollbars(
-					{
-						target: el,
-						elements: {
-							viewport: el,
-							padding: false,
-							content: false,
-						},
+				// Let OverlayScrollbars create its own host → padding →
+				// viewport structure so scrollbar elements are placed
+				// OUTSIDE the scrollable viewport. This prevents the
+				// scrollbar from twitching with content during GPU-
+				// accelerated scrolling.
+				OverlayScrollbars(el, {
+					scrollbars: {
+						theme: 'os-theme-madora',
+						autoHide: 'leave',
 					},
-					{
-						scrollbars: {
-							theme: 'os-theme-madora',
-							autoHide: 'leave',
-						},
-					}
-				);
+				});
 				el.setAttribute('data-overlayscrollbars-initialize', 'true');
 			}
 		};

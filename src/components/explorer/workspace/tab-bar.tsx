@@ -378,13 +378,13 @@ export function TabBar() {
 				<>
 					<div
 						className="pointer-events-none absolute left-0 top-0 bottom-0 w-6
-							bg-gradient-to-r from-black/8 to-transparent transition-opacity
+							bg-linear-to-r from-black/8 to-transparent transition-opacity
 							duration-150"
 						style={{ opacity: showLeftShadow ? 1 : 0 }}
 					/>
 					<div
 						className="pointer-events-none absolute right-0 top-0 bottom-0 w-6
-							bg-gradient-to-l from-black/8 to-transparent transition-opacity
+							bg-linear-to-l from-black/8 to-transparent transition-opacity
 							duration-150"
 						style={{ opacity: showRightShadow ? 1 : 0 }}
 					/>

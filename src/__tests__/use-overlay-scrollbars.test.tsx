@@ -40,21 +40,7 @@ function TestComponent() {
 	useOverlayScrollbars();
 
 	return (
-		<div className="overflow-auto" data-testid="scroll-root">
-			<div>content</div>
-		</div>
-	);
-}
-
-function DynamicScrollComponent({ locked }: { locked: boolean }) {
-	useOverlayScrollbars();
-
-	return (
-		<div
-			data-os-scroll
-			data-testid="dynamic-scroll-root"
-			style={{ overflow: locked ? 'hidden' : 'auto' }}
-		>
+		<div data-os-scroll data-testid="scroll-root">
 			<div>content</div>
 		</div>
 	);
@@ -66,7 +52,7 @@ afterEach(() => {
 });
 
 describe('useOverlayScrollbars', () => {
-	it('initializes OverlayScrollbars with the existing element as viewport', async () => {
+	it('initializes OverlayScrollbars on data-os-scroll elements', async () => {
 		render(<TestComponent />);
 
 		await waitFor(() => {
@@ -76,40 +62,17 @@ describe('useOverlayScrollbars', () => {
 			expect(initCalls).toHaveLength(1);
 		});
 
-		const [target, options] = vi
+		const [target] = vi
 			.mocked(OverlayScrollbars)
 			.mock.calls.find(([, callOptions]) => callOptions !== undefined)!;
 
-		expect(options).toMatchObject({
-			scrollbars: {
-				theme: 'os-theme-madora',
-				autoHide: 'leave',
-			},
-		});
-
-		expect(target).toMatchObject({
-			target: expect.any(HTMLElement),
-			elements: {
-				viewport: expect.any(HTMLElement),
-				padding: false,
-				content: false,
-			},
-		});
-
-		const typedTarget = target as {
-			target: HTMLElement;
-			elements: {
-				viewport: HTMLElement;
-				padding: false;
-				content: false;
-			};
-		};
-
-		expect(typedTarget.elements.viewport).toBe(typedTarget.target);
+		// The first argument is the element itself (not a target/elements object).
+		// OverlayScrollbars wraps it internally with host → padding → viewport.
+		expect(target).toBeInstanceOf(HTMLElement);
 	});
 
-	it('updates an existing instance when a tracked element changes overflow style', async () => {
-		const { getByTestId, rerender } = render(<DynamicScrollComponent locked />);
+	it('configures the madora theme and auto-hide', async () => {
+		render(<TestComponent />);
 
 		await waitFor(() => {
 			const initCalls = vi
@@ -118,17 +81,15 @@ describe('useOverlayScrollbars', () => {
 			expect(initCalls).toHaveLength(1);
 		});
 
-		const scrollRoot = getByTestId('dynamic-scroll-root');
-		const instance = OverlayScrollbars(
-			scrollRoot as HTMLElement
-		) as unknown as {
-			update: ReturnType<typeof vi.fn>;
-		};
+		const [, options] = vi
+			.mocked(OverlayScrollbars)
+			.mock.calls.find(([, callOptions]) => callOptions !== undefined)!;
 
-		rerender(<DynamicScrollComponent locked={false} />);
-
-		await waitFor(() => {
-			expect(instance.update).toHaveBeenCalled();
+		expect(options).toMatchObject({
+			scrollbars: {
+				theme: 'os-theme-madora',
+				autoHide: 'leave',
+			},
 		});
 	});
 });

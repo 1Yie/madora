@@ -38,7 +38,7 @@ bun run tauri build
 
 ## Project Structure
 
-```
+```shell
 madora/
 ├── src/                    # React 前端
 │   ├── components/
