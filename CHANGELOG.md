@@ -1,3 +1,9 @@
+## [0.3.7](https://github.com/1Yie/madora/compare/v0.3.6...v0.3.7) (2026-06-11)
+
+### Features
+
+- **webdav:** add WebDAV sync backend, settings, and file explorer integration ([5038047](https://github.com/1Yie/madora/commit/50380476f97e4eeb5143e337541fb28e03aa184f))
+
 ## [0.3.6](https://github.com/1Yie/madora/compare/v0.3.5...v0.3.6) (2026-06-10)
 
 ### Bug Fixes
