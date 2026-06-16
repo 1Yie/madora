@@ -4,7 +4,7 @@ members = [".", "madora-cli"]
 
 [package]
 name = "madora"
-version = "0.3.7"
+version = "0.3.8"
 description = "Markdown editing, powered by AI"
 authors = ["ichiyo"]
 edition = "2021"
@@ -68,3 +68,4 @@ windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"
+

@@ -1,3 +1,10 @@
+## [0.3.8](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.8) (2026-06-16)
+
+### Bug Fixes
+
+- **cli:** rebuild cross-platform install and packaging ([b7b7850](https://github.com/1Yie/madora/commit/b7b7850431f1675318f9f85572ea9d76f20746f8))
+- **workspace:** sync deleted files and ime completions ([f5716d7](https://github.com/1Yie/madora/commit/f5716d79d6678bb0dbf689cb2e89de283b662dc5))
+
 ## [0.3.7](https://github.com/1Yie/madora/compare/v0.3.6...v0.3.7) (2026-06-11)
 
 ### Features
