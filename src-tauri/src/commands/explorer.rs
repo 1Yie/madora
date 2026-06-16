@@ -177,11 +177,7 @@ pub async fn import_external_files(
         for source_path_str in source_paths {
             let source_path = PathBuf::from(source_path_str);
 
-            match explorer::import_external_file(
-                &root_path,
-                &destination_directory,
-                &source_path,
-            ) {
+            match explorer::import_external_file(&root_path, &destination_directory, &source_path) {
                 Ok(node) => imported_nodes.push(node),
                 Err(_) => _skipped_count += 1,
             }

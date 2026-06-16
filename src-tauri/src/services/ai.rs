@@ -119,10 +119,7 @@ fn build_completion_cache_key(
         model: resolve_cache_model(provider, config),
         prefix: truncate_suffix_for_cache(&request.prefix),
         provider,
-        suffix: request
-            .suffix
-            .as_deref()
-            .map(truncate_suffix_for_cache),
+        suffix: request.suffix.as_deref().map(truncate_suffix_for_cache),
     }
 }
 

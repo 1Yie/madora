@@ -224,6 +224,58 @@ function findNodeByPath(node: ExplorerNode, path: string): ExplorerNode | null {
 	return null;
 }
 
+function getDeletedGitPaths(status: GitStatus | null): Set<string> {
+	return new Set(
+		(status?.files ?? [])
+			.filter((file) => file.status === 'deleted')
+			.map((file) => normalizeExplorerPath(file.path))
+	);
+}
+
+function syncNodeWithDeletedGitStatus(
+	node: ExplorerNode,
+	root: ExplorerNode,
+	deletedPaths: Set<string>
+): ExplorerNode {
+	if (deletedPaths.has(normalizeExplorerPath(node.path))) {
+		return node.isMissing ? node : { ...node, isMissing: true };
+	}
+
+	if (!node.isMissing) return node;
+
+	const treeNode = findNodeByPath(root, node.path);
+	return treeNode?.kind === node.kind ? treeNode : node;
+}
+
+function isSelectionSyncedWithNode(
+	state: WorkspaceState,
+	node: ExplorerNode
+): boolean {
+	if (
+		!state.selectedNodePath ||
+		normalizeExplorerPath(state.selectedNodePath) !==
+			normalizeExplorerPath(node.path)
+	) {
+		return false;
+	}
+
+	if (node.kind === 'directory') return state.selectedFile === null;
+
+	if (!state.selectedFile) return false;
+	if (Boolean(state.selectedFile.isMissing) !== Boolean(node.isMissing)) {
+		return false;
+	}
+
+	const matchingTab = state.tabs.find(
+		(tab) =>
+			normalizeExplorerPath(tab.node.path) === normalizeExplorerPath(node.path)
+	);
+	return Boolean(
+		matchingTab &&
+		Boolean(matchingTab.node.isMissing) === Boolean(node.isMissing)
+	);
+}
+
 function replaceDirectoryChildren(
 	node: ExplorerNode,
 	directoryPath: string,
@@ -766,7 +818,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 	selectNode: async (node) => {
 		const state = get();
-		if (state.selectedNodePath === node.path) return;
+		if (isSelectionSyncedWithNode(state, node)) return;
 
 		if (node.kind === 'directory') {
 			set({
@@ -785,7 +837,14 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 		);
 
 		if (existingTab) {
-			set({ activeTabId: existingTab.id });
+			set((s) => ({
+				activeTabId: existingTab.id,
+				tabs: s.tabs.map((tab) =>
+					normalizeExplorerPath(tab.node.path) === normalizedPath
+						? { ...tab, node }
+						: tab
+				),
+			}));
 		} else {
 			const newTab = createTabEntry(node);
 			set((s) => ({
@@ -1882,6 +1941,47 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 				handleWorkspaceFileSaved as EventListener
 			);
 	}, []);
+
+	useEffect(() => {
+		if (!root) return;
+
+		const deletedPaths = getDeletedGitPaths(gitStatus);
+		const prev = useWorkspaceStore.getState();
+		let tabsChanged = false;
+		const nextTabs = prev.tabs.map((tab) => {
+			const nextNode = syncNodeWithDeletedGitStatus(
+				tab.node,
+				root,
+				deletedPaths
+			);
+			if (nextNode === tab.node) return tab;
+			tabsChanged = true;
+			return { ...tab, node: nextNode };
+		});
+
+		const selectedFile = prev.selectedFile;
+		const selectedPath = selectedFile
+			? normalizeExplorerPath(selectedFile.path)
+			: null;
+		const selectedWasDeleted = selectedPath
+			? deletedPaths.has(selectedPath)
+			: false;
+
+		if (selectedFile && selectedWasDeleted && !selectedFile.isMissing) {
+			useWorkspaceStore.setState({
+				tabs: nextTabs,
+				selectedFile: { ...selectedFile, isMissing: true },
+				preview: null,
+				previewError: null,
+				previewLoading: false,
+			});
+			return;
+		}
+
+		if (tabsChanged) {
+			useWorkspaceStore.setState({ tabs: nextTabs });
+		}
+	}, [gitStatus, root]);
 
 	useEffect(() => {
 		if (!selectedFile?.isMissing) return;

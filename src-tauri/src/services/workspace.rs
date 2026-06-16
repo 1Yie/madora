@@ -210,11 +210,7 @@ fn mime_for_extension(ext: &str) -> &str {
 /// The resolved image file is read and returned as a base64-encoded data URL
 /// so the frontend can display it directly without going through Tauri's asset
 /// protocol (which only serves bundled assets).
-pub fn resolve_image_src(
-    src: &str,
-    file_path: &str,
-    root_path: Option<&str>,
-) -> String {
+pub fn resolve_image_src(src: &str, file_path: &str, root_path: Option<&str>) -> String {
     // Leave URLs and data URIs untouched
     if src.starts_with("http://")
         || src.starts_with("https://")
@@ -334,21 +330,13 @@ mod tests {
     #[test]
     fn resolve_absolute_with_root_file_not_found_returns_path() {
         // When the file doesn't exist, it returns the absolute path (fallback)
-        let result = resolve_image_src(
-            "/assets/img.png",
-            "/workspace/doc.md",
-            Some("/workspace"),
-        );
+        let result = resolve_image_src("/assets/img.png", "/workspace/doc.md", Some("/workspace"));
         assert_eq!(result, "/workspace/assets/img.png");
     }
 
     #[test]
     fn resolve_relative_file_not_found_returns_path() {
-        let result = resolve_image_src(
-            "img.png",
-            "/workspace/docs/doc.md",
-            Some("/workspace"),
-        );
+        let result = resolve_image_src("img.png", "/workspace/docs/doc.md", Some("/workspace"));
         assert_eq!(result, "/workspace/docs/img.png");
     }
 
@@ -364,11 +352,7 @@ mod tests {
 
     #[test]
     fn resolve_relative_same_dir_file_not_found_returns_path() {
-        let result = resolve_image_src(
-            "./img.png",
-            "/workspace/doc.md",
-            Some("/workspace"),
-        );
+        let result = resolve_image_src("./img.png", "/workspace/doc.md", Some("/workspace"));
         assert_eq!(result, "/workspace/img.png");
     }
 
@@ -380,25 +364,17 @@ mod tests {
         let img_path = dir.join("test.png");
         // Minimal valid PNG (1x1 pixel)
         let png_bytes: Vec<u8> = vec![
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
-            0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
-            0x00, 0x00, 0x04, 0x00, 0x01, 0x27, 0x34, 0x27,
-            0x19, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
-            0x44, 0xAE, 0x42, 0x60, 0x82,
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
+            0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08,
+            0xD7, 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x27, 0x34, 0x27,
+            0x19, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
         ];
         std::fs::write(&img_path, &png_bytes).unwrap();
 
         let md_path = dir.join("doc.md").to_string_lossy().to_string();
 
-        let result = resolve_image_src(
-            "test.png",
-            &md_path,
-            None,
-        );
+        let result = resolve_image_src("test.png", &md_path, None);
 
         let expected_b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
         assert_eq!(result, format!("data:image/png;base64,{}", expected_b64));

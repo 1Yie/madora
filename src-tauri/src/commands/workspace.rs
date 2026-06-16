@@ -17,24 +17,17 @@ pub async fn set_workspace_root(
     root_path: Option<String>,
 ) -> Result<(), String> {
     // Sync the workspace root into the protocol handler state
-    protocol_state
-        .set_workspace_root(root_path.as_ref().map(std::path::PathBuf::from));
+    protocol_state.set_workspace_root(root_path.as_ref().map(std::path::PathBuf::from));
     store.set_root_path(root_path)
 }
 
 #[tauri::command]
-pub async fn add_tab(
-    store: State<'_, WorkspaceStore>,
-    file_path: String,
-) -> Result<(), String> {
+pub async fn add_tab(store: State<'_, WorkspaceStore>, file_path: String) -> Result<(), String> {
     store.add_tab(&file_path)
 }
 
 #[tauri::command]
-pub async fn close_tab(
-    store: State<'_, WorkspaceStore>,
-    file_path: String,
-) -> Result<(), String> {
+pub async fn close_tab(store: State<'_, WorkspaceStore>, file_path: String) -> Result<(), String> {
     store.close_tab(&file_path)
 }
 
@@ -55,10 +48,7 @@ pub async fn set_active_tab(
 }
 
 #[tauri::command]
-pub async fn set_sidebar_width(
-    store: State<'_, WorkspaceStore>,
-    width: u32,
-) -> Result<(), String> {
+pub async fn set_sidebar_width(store: State<'_, WorkspaceStore>, width: u32) -> Result<(), String> {
     store.set_sidebar_width(width)
 }
 
@@ -79,9 +69,7 @@ pub async fn set_open_tab_paths(
 }
 
 #[tauri::command]
-pub async fn clear_workspace_state(
-    store: State<'_, WorkspaceStore>,
-) -> Result<(), String> {
+pub async fn clear_workspace_state(store: State<'_, WorkspaceStore>) -> Result<(), String> {
     store.clear()
 }
 

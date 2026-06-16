@@ -1,9 +1,8 @@
-
 use tauri::State;
 
 use crate::models::webdav::{
-    WebDavConfig, WebDavConnectionTest, WebDavSyncFileEntry,
-    WebDavSyncResult, WebDavSyncStatusResult,
+    WebDavConfig, WebDavConnectionTest, WebDavSyncFileEntry, WebDavSyncResult,
+    WebDavSyncStatusResult,
 };
 use crate::services::webdav::{SyncOrchestrator, WebDavClient, WebDavStore};
 
@@ -18,9 +17,7 @@ fn ensure_store() -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     let use_secret_service = false;
 
-    keyring::use_native_store(use_secret_service).map_err(|e| {
-        format!("无法访问系统密钥存储: {e}")
-    })
+    keyring::use_native_store(use_secret_service).map_err(|e| format!("无法访问系统密钥存储: {e}"))
 }
 
 fn load_password_sync() -> Result<Option<String>, String> {
@@ -38,7 +35,9 @@ fn store_password_sync(password: String) -> Result<(), String> {
     ensure_store()?;
     let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY)
         .map_err(|e| format!("无法初始化密钥存储条目: {e}"))?;
-    entry.set_password(&password).map_err(|e| format!("保存密码失败: {e}"))
+    entry
+        .set_password(&password)
+        .map_err(|e| format!("保存密码失败: {e}"))
 }
 
 fn delete_password_sync() -> Result<(), String> {
@@ -54,9 +53,7 @@ fn delete_password_sync() -> Result<(), String> {
 // ── Commands ─────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn webdav_get_config(
-    store: State<'_, WebDavStore>,
-) -> Result<WebDavConfig, String> {
+pub async fn webdav_get_config(store: State<'_, WebDavStore>) -> Result<WebDavConfig, String> {
     let mut config = store.get_config()?;
     if let Ok(Some(password)) = load_password_sync() {
         config.password = Some(password);
@@ -81,9 +78,7 @@ pub async fn webdav_save_config(
 }
 
 #[tauri::command]
-pub async fn webdav_delete_config(
-    store: State<'_, WebDavStore>,
-) -> Result<(), String> {
+pub async fn webdav_delete_config(store: State<'_, WebDavStore>) -> Result<(), String> {
     store.set_config(WebDavConfig::default())?;
     tauri::async_runtime::spawn_blocking(delete_password_sync)
         .await
@@ -131,10 +126,8 @@ pub async fn webdav_sync(
         .await?;
 
     // Snapshot current file states as the new baseline
-    let snapshot = orchestrator.snapshot_local_files(
-        std::path::Path::new(&workspace_root),
-        &auth_config,
-    );
+    let snapshot =
+        orchestrator.snapshot_local_files(std::path::Path::new(&workspace_root), &auth_config);
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut updated_config = store.get_config()?;
@@ -155,10 +148,7 @@ pub async fn webdav_get_status(
     let client = reqwest::Client::new();
     let orchestrator = SyncOrchestrator::new(client);
 
-    let raw = orchestrator.compute_sync_status(
-        std::path::Path::new(&workspace_root),
-        &config,
-    );
+    let raw = orchestrator.compute_sync_status(std::path::Path::new(&workspace_root), &config);
 
     let files = raw
         .into_iter()

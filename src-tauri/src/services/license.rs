@@ -388,9 +388,10 @@ impl LicenseService {
             let cache = self.cached_verification.lock().unwrap();
             if let Some((status, time)) = cache.as_ref() {
                 if time.elapsed() < VERIFY_CACHE_TTL
-                    && matches!(status.state, LicenseState::Active | LicenseState::Trial) {
-                        return Ok(status.clone());
-                    }
+                    && matches!(status.state, LicenseState::Active | LicenseState::Trial)
+                {
+                    return Ok(status.clone());
+                }
             }
         }
 

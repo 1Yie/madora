@@ -123,7 +123,7 @@ export function GitTabCommit({
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="shrink-0 space-y-4 px-6 pt-6 pb-4">
+			<div className="shrink-0 space-y-4 px-6 pt-4 pb-4">
 				<SettingsSectionCard title="提交信息">
 					<div className="space-y-3">
 						<Textarea

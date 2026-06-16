@@ -604,12 +604,8 @@ pub fn move_workspace_node(
 
 /// Allowed extensions for external file import (markdown & images only).
 fn is_allowed_import_extension(path: &Path) -> bool {
-    classify_file_kind(path).is_some_and(|kind| {
-        matches!(
-            kind,
-            ExplorerFileKind::Markdown | ExplorerFileKind::Image
-        )
-    })
+    classify_file_kind(path)
+        .is_some_and(|kind| matches!(kind, ExplorerFileKind::Markdown | ExplorerFileKind::Image))
 }
 
 pub fn import_external_file(
@@ -641,8 +637,7 @@ pub fn import_external_file(
     let file_name = path_name(source_path);
     let dest_path = resolve_available_path(&destination_directory.join(&file_name));
 
-    fs::copy(source_path, &dest_path)
-        .map_err(|error| format!("复制文件失败: {}", error))?;
+    fs::copy(source_path, &dest_path).map_err(|error| format!("复制文件失败: {}", error))?;
 
     let file_kind = classify_file_kind(&dest_path).unwrap_or(ExplorerFileKind::Text);
 

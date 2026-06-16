@@ -547,6 +547,10 @@ function shouldInterruptCompletionBeforeInput(event: InputEvent): boolean {
 	);
 }
 
+function shouldAbortCompletionBeforeInput(event: InputEvent): boolean {
+	return event.isComposing || event.inputType === 'insertCompositionText';
+}
+
 function isInternalCompletionUpdate(update: ViewUpdate): boolean {
 	return (
 		update.transactions.length > 0 &&
@@ -658,6 +662,7 @@ export function useEditor({
 	const requestSequenceRef = useRef(0);
 	const scheduledSnapshotRef = useRef<CompletionSnapshot | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
+	const compositionActiveRef = useRef(false);
 	const completionCacheRef = useRef<CompletionCacheEntry | null>(null);
 	const streamingRafPendingRef = useRef(false);
 	const aiSettingsRef = useRef({
@@ -718,6 +723,9 @@ export function useEditor({
 		syncTooltip();
 	});
 
+	const isCompositionActive = (view: EditorView) =>
+		compositionActiveRef.current || view.composing;
+
 	const syncPreview = useEffectEvent(
 		(preview: CompletionPreviewState | null) => {
 			const view = viewRef.current;
@@ -774,6 +782,35 @@ export function useEditor({
 		}, AUTO_COMPLETION_COOLDOWN_MS);
 	});
 
+	const abortCompletionForCompositionInput = useEffectEvent(() => {
+		const view = viewRef.current;
+		const hasPreview = Boolean(view?.state.field(completionPreviewField));
+		const hasPendingRequest = pendingRequestRef.current !== null;
+		const hasScheduledRequest = scheduledSnapshotRef.current !== null;
+		const hasStreamingFrame = streamingRafPendingRef.current;
+		const hasActiveCompletion =
+			hasPreview ||
+			hasPendingRequest ||
+			hasScheduledRequest ||
+			hasStreamingFrame;
+
+		if (!hasActiveCompletion) return false;
+
+		if (hasPreview) syncPreview(null);
+		clearScheduledCompletion('cancel');
+		streamingRafPendingRef.current = false;
+		requestSequenceRef.current += 1;
+		pendingRequestRef.current = null;
+		setCompletionStatus(
+			getDefaultCompletionStatus(
+				aiSettingsRef.current.enabled,
+				aiSettingsRef.current.hasApiKey
+			)
+		);
+		logCompletionDebug('completion-abort:composition-input');
+		return true;
+	});
+
 	const interruptCompletionForInput = useEffectEvent(() => {
 		const hasPendingRequest = pendingRequestRef.current !== null;
 		const hasScheduledRequest = scheduledSnapshotRef.current !== null;
@@ -814,6 +851,8 @@ export function useEditor({
 
 	const tryUseCache = useEffectEvent(
 		(view: EditorView, snapshot: CompletionSnapshot): boolean => {
+			if (isCompositionActive(view)) return false;
+
 			const cache = completionCacheRef.current;
 			if (!cache || !isSameCompletionSnapshot(cache.snapshot, snapshot))
 				return false;
@@ -847,7 +886,7 @@ export function useEditor({
 			const settings = aiSettingsRef.current;
 
 			if (!view.hasFocus) return;
-			if (view.composing) return;
+			if (isCompositionActive(view)) return;
 			if (
 				!shouldTriggerCompletion(
 					view.state,
@@ -941,6 +980,7 @@ export function useEditor({
 
 							const currentView = viewRef.current;
 							if (!currentView) return;
+							if (isCompositionActive(currentView)) return;
 							if (!isSnapshotCurrent(currentView, snapshot)) return;
 
 							currentView.dispatch({
@@ -970,6 +1010,13 @@ export function useEditor({
 
 				const currentView = viewRef.current;
 				if (!currentView) return;
+				if (isCompositionActive(currentView)) {
+					logCompletionDebug('request-drop:composition-active');
+					setCompletionStatus(
+						getDefaultCompletionStatus(settings.enabled, settings.hasApiKey)
+					);
+					return;
+				}
 
 				if (!isSnapshotCurrent(currentView, snapshot)) {
 					logCompletionDebug('request-drop:view-mismatch');
@@ -1058,7 +1105,7 @@ export function useEditor({
 
 		if (
 			!view.hasFocus ||
-			view.composing ||
+			isCompositionActive(view) ||
 			!shouldTriggerCompletion(view.state, settings.enabled, settings.hasApiKey)
 		) {
 			return;
@@ -1187,6 +1234,12 @@ export function useEditor({
 						beforeinput: (event) => {
 							if (
 								event instanceof InputEvent &&
+								shouldAbortCompletionBeforeInput(event)
+							) {
+								compositionActiveRef.current = true;
+								abortCompletionForCompositionInput();
+							} else if (
+								event instanceof InputEvent &&
 								shouldInterruptCompletionBeforeInput(event)
 							) {
 								interruptCompletionForInput();
@@ -1194,13 +1247,15 @@ export function useEditor({
 							return false;
 						},
 						compositionstart: () => {
-							interruptCompletionForInput();
+							compositionActiveRef.current = true;
+							abortCompletionForCompositionInput();
 							return false;
 						},
 						compositionend: () => {
 							window.requestAnimationFrame(() => {
 								const currentView = viewRef.current;
-								if (!currentView) return;
+								compositionActiveRef.current = false;
+								if (!currentView || currentView.composing) return;
 								scheduleCompletionRequest(currentView);
 							});
 						},

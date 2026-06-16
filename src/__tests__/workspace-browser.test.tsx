@@ -136,7 +136,7 @@ vi.mock('@/components/explorer/workspace/tab-bar', async () => {
 			const { tabs, activeTabId, tabBarMode } = useWorkspace();
 			const safeTabs = (tabs ?? []) as Array<{
 				id: string;
-				node: { path: string };
+				node: { isMissing?: boolean; path: string };
 			}>;
 			const activePath =
 				safeTabs.find(
@@ -146,6 +146,9 @@ vi.mock('@/components/explorer/workspace/tab-bar', async () => {
 			return (
 				<div>
 					<div>{`tabs:${safeTabs.map((tab) => tab.node.path).join('|')}`}</div>
+					<div>{`tab-state:${safeTabs
+						.map((tab) => (tab.node.isMissing ? 'missing' : 'present'))
+						.join('|')}`}</div>
 					<div>{`active:${activePath}`}</div>
 					<div>{`mode:${tabBarMode as string}`}</div>
 				</div>
@@ -163,6 +166,24 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
 	return {
 		FileExplorerSidebar: () => {
 			const ctx = useWorkspace();
+			const deletedStatus: GitStatus = {
+				...emptyStatus,
+				branch: { ahead: 0, behind: 0, name: 'main', upstream: null },
+				hasGitDirectory: true,
+				hasRepository: true,
+				hasUnstagedChanges: true,
+				unstagedCount: 1,
+				totalChangedCount: 1,
+				files: [
+					{
+						hasConflictMarkers: false,
+						path: '/workspace/readme.md',
+						staged: false,
+						status: 'deleted',
+						unstaged: true,
+					},
+				],
+			};
 			return (
 				<div>
 					<div>
@@ -170,6 +191,11 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
 							? `clipboard:${ctx.clipboard.mode}`
 							: 'clipboard:empty'}
 					</div>
+					<div>{`selected:${
+						ctx.selectedFile
+							? `${ctx.selectedFile.path}:${ctx.selectedFile.isMissing ? 'missing' : 'present'}`
+							: 'none'
+					}`}</div>
 					<button
 						type="button"
 						onClick={() => ctx.copyNode(rootNode.children[0])}
@@ -181,6 +207,24 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
 						onClick={() => void ctx.pasteNode('/workspace/docs')}
 					>
 						paste-node
+					</button>
+					<button
+						type="button"
+						onClick={() => {
+							ctx.updateGitStatus(deletedStatus);
+							void ctx.selectNode({
+								...rootNode.children[0],
+								isMissing: true,
+							});
+						}}
+					>
+						select-deleted-readme
+					</button>
+					<button
+						type="button"
+						onClick={() => ctx.updateGitStatus(deletedStatus)}
+					>
+						mark-readme-deleted
 					</button>
 				</div>
 			);
@@ -296,6 +340,54 @@ describe('WorkspaceBrowser', () => {
 			).toBeGreaterThan(0);
 			expect(
 				screen.getAllByText('active:/workspace/readme.md').length
+			).toBeGreaterThan(0);
+		});
+	});
+
+	it('syncs the active tab when selecting a deleted tree node at the same path', async () => {
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('tab-state:present').length).toBeGreaterThan(
+				0
+			);
+			expect(
+				screen.getAllByText('selected:/workspace/readme.md:present').length
+			).toBeGreaterThan(0);
+		});
+
+		fireEvent.click(screen.getByText('select-deleted-readme'));
+
+		await waitFor(() => {
+			expect(screen.getAllByText('tab-state:missing').length).toBeGreaterThan(
+				0
+			);
+			expect(
+				screen.getAllByText('selected:/workspace/readme.md:missing').length
+			).toBeGreaterThan(0);
+		});
+	});
+
+	it('marks open tabs and the selected file missing when git reports deletion', async () => {
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(screen.getAllByText('tab-state:present').length).toBeGreaterThan(
+				0
+			);
+			expect(
+				screen.getAllByText('selected:/workspace/readme.md:present').length
+			).toBeGreaterThan(0);
+		});
+
+		fireEvent.click(screen.getByText('mark-readme-deleted'));
+
+		await waitFor(() => {
+			expect(screen.getAllByText('tab-state:missing').length).toBeGreaterThan(
+				0
+			);
+			expect(
+				screen.getAllByText('selected:/workspace/readme.md:missing').length
 			).toBeGreaterThan(0);
 		});
 	});

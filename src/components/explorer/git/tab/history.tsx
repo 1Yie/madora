@@ -2,7 +2,6 @@ import {
 	ClockIcon,
 	CornerDownLeft,
 	Ellipsis,
-	RefreshCw,
 	RotateCcw,
 	UserIcon,
 } from 'lucide-react';
@@ -29,13 +28,12 @@ export function GitTabHistory({
 	branchLabel,
 	gitLog,
 	upstreamLabel,
-	onRefresh,
 	onRevertRequest,
 	onUndoRequest,
 }: GitTabHistoryProps) {
 	return (
 		<>
-			<div className="p-6 pb-2">
+			<div className="shrink-0 space-y-4 px-6 pt-4 pb-2">
 				<SettingsSectionCard title="提交历史">
 					<div className="flex items-center gap-2">
 						<Button
@@ -45,9 +43,6 @@ export function GitTabHistory({
 						>
 							<RotateCcw />
 							撤销最近提交
-						</Button>
-						<Button disabled={actionBusy} onClick={onRefresh} variant="outline">
-							<RefreshCw />
 						</Button>
 					</div>
 				</SettingsSectionCard>

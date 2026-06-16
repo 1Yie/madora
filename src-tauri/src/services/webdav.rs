@@ -5,7 +5,9 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use reqwest::Client;
 
-use crate::models::webdav::{ConflictStrategy, WebDavConfig, WebDavConnectionTest, WebDavFileEntry, WebDavSyncResult};
+use crate::models::webdav::{
+    ConflictStrategy, WebDavConfig, WebDavConnectionTest, WebDavFileEntry, WebDavSyncResult,
+};
 
 /// Recursively scan a directory for .md/.mdx/image files, returning relative paths → ISO-8601 mtime.
 /// Skips `.git`, `node_modules`, `target` directories.
@@ -49,7 +51,9 @@ fn scan_syncable_files(dir: &Path, base: &Path) -> std::collections::HashMap<Str
                 if let Ok(metadata) = path.metadata() {
                     if let Ok(modified) = metadata.modified() {
                         if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-                            if let Some(dt) = chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0) {
+                            if let Some(dt) =
+                                chrono::DateTime::from_timestamp(duration.as_secs() as i64, 0)
+                            {
                                 let rel = path
                                     .strip_prefix(base)
                                     .unwrap_or(&path)
@@ -87,7 +91,9 @@ impl WebDavClient {
         // Join relative path, trimming leading slash from path to avoid
         // replacing the base path
         let clean_path = path.trim_start_matches('/');
-        let joined = url.join(clean_path).map_err(|e| format!("无效的路径: {e}"))?;
+        let joined = url
+            .join(clean_path)
+            .map_err(|e| format!("无效的路径: {e}"))?;
         Ok(joined.to_string())
     }
 
@@ -114,10 +120,7 @@ impl WebDavClient {
 
     /// PROPFIND depth=0 to verify URL + credentials.
     pub async fn test_connection(&self, config: &WebDavConfig) -> WebDavConnectionTest {
-        let url = match self.build_url(
-            config.url.as_deref().unwrap_or(""),
-            "/",
-        ) {
+        let url = match self.build_url(config.url.as_deref().unwrap_or(""), "/") {
             Ok(u) => u,
             Err(e) => {
                 return WebDavConnectionTest {
@@ -196,10 +199,7 @@ impl WebDavClient {
         config: &WebDavConfig,
         remote_path: &str,
     ) -> Result<Vec<WebDavFileEntry>, String> {
-        let url = self.build_url(
-            config.url.as_deref().unwrap_or(""),
-            remote_path,
-        )?;
+        let url = self.build_url(config.url.as_deref().unwrap_or(""), remote_path)?;
         let headers = self.auth_headers(config)?;
 
         let response = self
@@ -216,15 +216,15 @@ impl WebDavClient {
             return Err(format!("PROPFIND 返回 {status}"));
         }
 
-        let body = response.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("读取响应失败: {e}"))?;
         Self::parse_propfind_response(&body, remote_path)
     }
 
     /// Parse a PROPFIND XML response into file entries.
-    fn parse_propfind_response(
-        xml: &str,
-        base_path: &str,
-    ) -> Result<Vec<WebDavFileEntry>, String> {
+    fn parse_propfind_response(xml: &str, base_path: &str) -> Result<Vec<WebDavFileEntry>, String> {
         let mut reader = Reader::from_str(xml);
         reader.config_mut().trim_text(true);
 
@@ -338,7 +338,9 @@ impl WebDavClient {
         let mut visited = HashSet::new();
 
         let strip_base = config.url.as_deref().and_then(|url| {
-            reqwest::Url::parse(url).ok().map(|u| u.path().trim_matches('/').to_string())
+            reqwest::Url::parse(url)
+                .ok()
+                .map(|u| u.path().trim_matches('/').to_string())
         });
 
         while let Some(current_dir) = queue.pop_front() {
@@ -392,10 +394,7 @@ impl WebDavClient {
         config: &WebDavConfig,
         remote_path: &str,
     ) -> Result<Vec<u8>, String> {
-        let url = self.build_url(
-            config.url.as_deref().unwrap_or(""),
-            remote_path,
-        )?;
+        let url = self.build_url(config.url.as_deref().unwrap_or(""), remote_path)?;
         let headers = self.auth_headers(config)?;
 
         let response = self
@@ -427,10 +426,7 @@ impl WebDavClient {
         remote_path: &str,
         content: Vec<u8>,
     ) -> Result<(), String> {
-        let url = self.build_url(
-            config.url.as_deref().unwrap_or(""),
-            remote_path,
-        )?;
+        let url = self.build_url(config.url.as_deref().unwrap_or(""), remote_path)?;
         let headers = self.auth_headers(config)?;
 
         let response = self
@@ -458,10 +454,7 @@ impl WebDavClient {
         config: &WebDavConfig,
         remote_path: &str,
     ) -> Result<(), String> {
-        let url = self.build_url(
-            config.url.as_deref().unwrap_or(""),
-            remote_path,
-        )?;
+        let url = self.build_url(config.url.as_deref().unwrap_or(""), remote_path)?;
         let headers = self.auth_headers(config)?;
 
         let response = self
@@ -499,7 +492,11 @@ impl SyncOrchestrator {
     }
 
     /// Compute a snapshot of current local file mtimes (relative path → ISO-8601).
-    pub fn snapshot_local_files(&self, workspace_root: &Path, config: &WebDavConfig) -> std::collections::HashMap<String, String> {
+    pub fn snapshot_local_files(
+        &self,
+        workspace_root: &Path,
+        config: &WebDavConfig,
+    ) -> std::collections::HashMap<String, String> {
         let local_subdir = config.local_subdir.as_deref().unwrap_or("");
         let local_dir = workspace_root.join(local_subdir);
         scan_syncable_files(&local_dir, &local_dir)
@@ -552,17 +549,17 @@ impl SyncOrchestrator {
 
         let local_dir = workspace_root.join(local_subdir);
         if !local_dir.exists() {
-            std::fs::create_dir_all(&local_dir)
-                .map_err(|e| format!("创建本地目录失败: {e}"))?;
+            std::fs::create_dir_all(&local_dir).map_err(|e| format!("创建本地目录失败: {e}"))?;
         }
 
         // Ensure remote dir exists
-        self.webdav
-            .create_collection(config, remote_subdir)
-            .await?;
+        self.webdav.create_collection(config, remote_subdir).await?;
 
         // Scan remote files (recursive to get all subdirectory entries)
-        let remote_entries = self.webdav.list_files_recursive(config, remote_subdir).await?;
+        let remote_entries = self
+            .webdav
+            .list_files_recursive(config, remote_subdir)
+            .await?;
 
         // Scan local .md files
         let local_files = self.scan_local_md_files(&local_dir);
@@ -614,7 +611,11 @@ impl SyncOrchestrator {
                 // Ensure parent directory exists on remote before uploading
                 if let Some(parent) = std::path::Path::new(&remote_path).parent() {
                     if !parent.as_os_str().is_empty() {
-                        if let Err(e) = self.webdav.create_collection(config, &parent.to_string_lossy()).await {
+                        if let Err(e) = self
+                            .webdav
+                            .create_collection(config, &parent.to_string_lossy())
+                            .await
+                        {
                             result.errors.push(format!("创建目录 {parent:?} 失败: {e}"));
                             continue;
                         }
@@ -623,7 +624,9 @@ impl SyncOrchestrator {
 
                 match self.webdav.put_file(config, &remote_path, content).await {
                     Ok(_) => result.files_uploaded += 1,
-                    Err(e) => result.errors.push(format!("上传 {local_rel_path} 失败: {e}")),
+                    Err(e) => result
+                        .errors
+                        .push(format!("上传 {local_rel_path} 失败: {e}")),
                 }
             }
         }
@@ -730,9 +733,7 @@ impl SyncOrchestrator {
                             result.files_downloaded += 1;
                         }
                     }
-                    Err(e) => result
-                        .errors
-                        .push(format!("下载 {display_name} 失败: {e}")),
+                    Err(e) => result.errors.push(format!("下载 {display_name} 失败: {e}")),
                 }
             }
         }
@@ -743,10 +744,8 @@ impl SyncOrchestrator {
     /// Scan local directory recursively for all files, returning relative paths + mtimes.
     fn scan_local_md_files(&self, dir: &Path) -> Vec<(String, Option<String>)> {
         let map = scan_syncable_files(dir, dir);
-        let mut files: Vec<(String, Option<String>)> = map
-            .into_iter()
-            .map(|(k, v)| (k, Some(v)))
-            .collect();
+        let mut files: Vec<(String, Option<String>)> =
+            map.into_iter().map(|(k, v)| (k, Some(v))).collect();
         files.sort_by(|a, b| a.0.cmp(&b.0));
         files
     }
