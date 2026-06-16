@@ -10,6 +10,7 @@ import {
 	getCliStatus,
 	installCli,
 	uninstallCli,
+	type CliInstallResult,
 	type CliStatus,
 } from '@/invoke/system';
 
@@ -17,52 +18,63 @@ export function CliSettings() {
 	const [status, setStatus] = useState<CliStatus | null>(null);
 	const [loading, setLoading] = useState(false);
 
-	const symlinked = status?.symlink_ok ?? false;
-	const binaryReady = status?.available || status?.binary_path != null;
-
+	const installed = status?.installed ?? false;
 	useEffect(() => {
 		getCliStatus()
 			.then(setStatus)
 			.catch((e) => showErrorToast(`获取 CLI 状态失败: ${e}`));
 	}, []);
 
-	const refreshStatus = () => {
-		getCliStatus()
-			.then(setStatus)
-			.catch((e) => showErrorToast(`获取 CLI 状态失败: ${e}`));
+	const refreshStatus = async () => {
+		try {
+			setStatus(await getCliStatus());
+		} catch (e) {
+			showErrorToast(`获取 CLI 状态失败: ${e}`);
+		}
 	};
 
 	const handleToggle = async (enabled: boolean) => {
 		setLoading(true);
 		try {
 			if (enabled) {
-				await installCli();
-				showSuccessToast('CLI symlink 已安装');
+				const result = await installCli();
+				showSuccessToast(buildInstallMessage(result));
 			} else {
-				await uninstallCli();
-				showSuccessToast('CLI symlink 已移除');
+				const result = await uninstallCli();
+				showSuccessToast(
+					result.path_updated ? 'CLI 已移除，PATH 设置已清理' : 'CLI 已移除'
+				);
 			}
-			refreshStatus();
+			await refreshStatus();
 		} catch (e: unknown) {
-			showErrorToast(
-				enabled ? `安装 symlink 失败: ${e}` : `移除 symlink 失败: ${e}`
-			);
+			showErrorToast(enabled ? `安装 CLI 失败: ${e}` : `移除 CLI 失败: ${e}`);
 		} finally {
 			setLoading(false);
 		}
 	};
+
+	const commandStatus = status?.in_path
+		? `可直接使用 ${status.command_name}`
+		: status?.needs_terminal_restart
+			? '请重新打开终端'
+			: status?.managed_dir_in_path
+				? '安装完成，等待终端刷新'
+				: '尚未进入 PATH';
 
 	return (
 		<div className="space-y-4">
 			<SettingsSectionCard title="CLI">
 				<div className="space-y-2">
 					<SettingRow
-						title="启用 CLI"
-						description="开启后可在终端中使用 mado 命令操作当前项目。"
+						title="安装 CLI"
+						description={
+							status?.path_hint ??
+							'将 Madora 附带的 mado 命令安装到本机，供终端直接调用。'
+						}
 					>
 						<Switch
-							checked={symlinked}
-							disabled={loading || (!symlinked && !binaryReady)}
+							checked={installed}
+							disabled={loading}
 							onCheckedChange={handleToggle}
 						/>
 					</SettingRow>
@@ -72,22 +84,45 @@ export function CliSettings() {
 			<SettingsSectionCard title="运行状态">
 				<div className="grid gap-3 sm:grid-cols-2">
 					<Stat
-						label="CLI 二进制"
+						label="CLI 来源"
 						value={
-							status?.binary_path
-								? status.binary_path
-										.split('/')
-										.filter(Boolean)
-										.slice(-2)
-										.join('/')
-								: binaryReady
+							status?.source_path
+								? formatPathTail(status.source_path)
+								: status?.available
 									? '可用'
 									: '未找到'
 						}
 					/>
-					<Stat label="终端命令" value={symlinked ? 'mado' : '不可用'} />
+					<Stat label="安装路径" value={status?.install_path ?? '未解析'} />
+					<Stat label="终端命令" value={commandStatus ?? '未检测'} />
+					<Stat
+						label="PATH"
+						value={
+							status?.managed_dir_in_path ? '已包含安装目录' : '未包含安装目录'
+						}
+					/>
 				</div>
 			</SettingsSectionCard>
 		</div>
 	);
+}
+
+function buildInstallMessage(result: CliInstallResult) {
+	if (result.path_hint) {
+		return `CLI 已安装到 ${result.dest}；${result.path_hint}`;
+	}
+
+	if (result.needs_terminal_restart) {
+		return 'CLI 已安装，请重新打开终端后使用 mado';
+	}
+
+	if (result.path_updated) {
+		return 'CLI 已安装，PATH 设置已更新';
+	}
+
+	return 'CLI 已安装';
+}
+
+function formatPathTail(path: string) {
+	return path.split(/[\\/]/).filter(Boolean).slice(-2).join('/');
 }

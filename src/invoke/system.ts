@@ -2,11 +2,29 @@ import { invoke } from '@tauri-apps/api/core';
 
 export type CliStatus = {
 	available: boolean;
+	installed: boolean;
 	in_path: boolean;
-	symlink_exists: boolean;
-	symlink_ok: boolean;
-	binary_path: string | null;
-	symlink_path: string;
+	managed_dir_in_path: boolean;
+	needs_terminal_restart: boolean;
+	source_path: string | null;
+	install_path: string;
+	command_name: string;
+	path_hint: string | null;
+};
+
+export type CliInstallResult = {
+	success: boolean;
+	source: string;
+	dest: string;
+	path_updated: boolean;
+	needs_terminal_restart: boolean;
+	path_hint: string | null;
+};
+
+export type CliUninstallResult = {
+	success: boolean;
+	removed: string;
+	path_updated: boolean;
 };
 
 /** Checks whether a file or directory exists on the filesystem. */
@@ -35,13 +53,13 @@ export async function getCliStatus(): Promise<CliStatus> {
 	return invoke<CliStatus>('get_cli_status');
 }
 
-/** Creates a mado symlink in ~/.local/bin/. */
-export async function installCli(): Promise<{ success: boolean }> {
+/** Installs the managed mado binary for the current platform. */
+export async function installCli(): Promise<CliInstallResult> {
 	return invoke('install_cli');
 }
 
-/** Removes the mado symlink from ~/.local/bin/. */
-export async function uninstallCli(): Promise<{ success: boolean }> {
+/** Removes the managed mado binary from the local machine. */
+export async function uninstallCli(): Promise<CliUninstallResult> {
 	return invoke('uninstall_cli');
 }
 
