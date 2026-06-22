@@ -46,6 +46,16 @@ function TestComponent() {
 	);
 }
 
+function NoOsTestComponent() {
+	useOverlayScrollbars();
+
+	return (
+		<div data-no-os className="overflow-auto" data-testid="scroll-root">
+			<div>content</div>
+		</div>
+	);
+}
+
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
@@ -90,6 +100,17 @@ describe('useOverlayScrollbars', () => {
 				theme: 'os-theme-madora',
 				autoHide: 'leave',
 			},
+		});
+	});
+
+	it('skips elements explicitly marked with data-no-os', async () => {
+		render(<NoOsTestComponent />);
+
+		await waitFor(() => {
+			const initCalls = vi
+				.mocked(OverlayScrollbars)
+				.mock.calls.filter(([, options]) => options !== undefined);
+			expect(initCalls).toHaveLength(0);
 		});
 	});
 });

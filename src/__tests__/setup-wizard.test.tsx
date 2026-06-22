@@ -13,11 +13,17 @@ vi.mock('@/components/ui/provider-icons', () => ({
 		anthropic: () => <span data-testid="provider-icon">A</span>,
 		custom: () => <span data-testid="provider-icon">C</span>,
 		deepseek: () => <span data-testid="provider-icon">D</span>,
+		google: () => <span data-testid="provider-icon">G</span>,
 		kimi: () => <span data-testid="provider-icon">K</span>,
 		minimax: () => <span data-testid="provider-icon">M</span>,
+		'minimax-coding': () => <span data-testid="provider-icon">MC</span>,
 		mimo: () => <span data-testid="provider-icon">Mi</span>,
 		'mimo-coding': () => <span data-testid="provider-icon">Mc</span>,
 		openai: () => <span data-testid="provider-icon">O</span>,
+		'opencode-go': () => <span data-testid="provider-icon">OG</span>,
+		'opencode-zen': () => <span data-testid="provider-icon">OZ</span>,
+		zhipu: () => <span data-testid="provider-icon">Z</span>,
+		'zhipu-coding': () => <span data-testid="provider-icon">ZC</span>,
 	},
 }));
 vi.mock('@/context/license-provider', () => {
@@ -38,6 +44,10 @@ vi.mock('@/context/license-provider', () => {
 
 import { AiSettingsProvider } from '@/context/ai-settings-provider';
 import {
+	AppSettingsProvider,
+	useAppSettingsStore,
+} from '@/context/app-settings-provider';
+import {
 	SetupWizard,
 	shouldShowSetupWizard,
 } from '@/components/system/setup-wizard';
@@ -46,15 +56,19 @@ const invokeMock = vi.mocked(invoke);
 
 function renderWizard(onComplete = vi.fn()) {
 	return render(
-		<AiSettingsProvider>
-			<SetupWizard onComplete={onComplete} />
-		</AiSettingsProvider>
+		<AppSettingsProvider>
+			<AiSettingsProvider>
+				<SetupWizard onComplete={onComplete} />
+			</AiSettingsProvider>
+		</AppSettingsProvider>
 	);
 }
 
 describe('SetupWizard', () => {
 	beforeEach(() => {
 		window.localStorage.clear();
+		window.localStorage.setItem('madora-app-locale', 'zh-CN');
+		useAppSettingsStore.setState({ localePreference: 'zh-CN' });
 		invokeMock.mockReset();
 		invokeMock.mockImplementation(async (command, args) => {
 			switch (String(command)) {

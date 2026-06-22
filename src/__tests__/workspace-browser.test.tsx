@@ -108,8 +108,10 @@ vi.mock('@/context/app-settings-provider', () => {
 	const mockState = {
 		showHiddenFiles: false,
 		saveMode: 'auto' as const,
+		editorFontSize: 14,
 		setSaveMode: vi.fn(),
 		setShowHiddenFiles: vi.fn(),
+		setEditorFontSize: vi.fn(),
 	};
 	return {
 		useAppSettings: () => mockState,
