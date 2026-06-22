@@ -1,3 +1,16 @@
+## [0.3.9](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.9) (2026-06-22)
+
+### Bug Fixes
+
+- correct setup, theme, and workspace state ([a2fff58](https://github.com/1Yie/madora/commit/a2fff581a4d97305ad9c974200f0bba4a14476b8))
+- **workspace:** sync deleted files and ime completions ([f5716d7](https://github.com/1Yie/madora/commit/f5716d79d6678bb0dbf689cb2e89de283b662dc5))
+
+### Features
+
+- **ai:** expand provider support and remove CLI flow ([dcaf137](https://github.com/1Yie/madora/commit/dcaf137dd060d5b3fad9b4cbdc2bd27abd1b3057))
+- **i18n:** localize system settings and app chrome ([55dfd1a](https://github.com/1Yie/madora/commit/55dfd1a5d421fa023ca7f16b70ab4741a34e4f97))
+- **workspace:** refresh explorer, git, and webdav flows ([a134a4f](https://github.com/1Yie/madora/commit/a134a4f4bd4343cf0dee2295ef7b8381d48b16ed))
+
 ## [0.3.8](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.8) (2026-06-22)
 
 ### Bug Fixes
