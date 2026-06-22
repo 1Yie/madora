@@ -249,8 +249,14 @@ mod tests {
         let outside = Path::new("/nonexistent/outside.txt");
 
         let result = relative_repo_path(&repo, &outside);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("不在仓库工作区内"));
+        let error = result.unwrap_err().to_string();
+        assert_eq!(
+            error,
+            i18n::tf(
+                "git.path_outside_workdir",
+                &[("path", &outside.display().to_string())],
+            )
+        );
     }
 
     #[test]

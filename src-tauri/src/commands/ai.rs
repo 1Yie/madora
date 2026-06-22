@@ -80,6 +80,29 @@ pub async fn generate_completion_stream(
 mod tests {
     use super::*;
 
+    fn assert_require_api_key_error(provider: AiProvider, msg: &str) {
+        let save_key_message =
+            i18n::tf("ai.save_key_in_settings", &[("provider", provider.display_name())]);
+        let secure_storage_prefixes = [
+            i18n::t("secure_storage.access_failed"),
+            i18n::t("secure_storage.access_failed_linux"),
+            i18n::t("secure_storage.init_entry_failed"),
+            i18n::tf(
+                "secure_storage.read_api_key_failed",
+                &[("provider", provider.display_name()), ("error", "")],
+            ),
+        ];
+
+        assert!(
+            msg == save_key_message
+                || secure_storage_prefixes
+                    .iter()
+                    .map(|value| value.trim_end())
+                    .any(|prefix| msg.starts_with(prefix)),
+            "unexpected require_api_key error: {msg}"
+        );
+    }
+
     #[test]
     fn invalidate_api_key_cache_clears_cache() {
         {
@@ -114,14 +137,13 @@ mod tests {
     fn require_api_key_cache_miss_no_keyring_fallback() {
         invalidate_api_key_cache();
 
-        let result = require_api_key(AiProvider::DeepSeek);
+        let provider = AiProvider::DeepSeek;
+        let result = require_api_key(provider);
         match result {
             Ok(key) => {
                 assert!(!key.is_empty());
             }
-            Err(msg) => {
-                assert!(msg.contains("API Key") || msg.contains("密钥存储"));
-            }
+            Err(msg) => assert_require_api_key_error(provider, &msg),
         }
     }
 }

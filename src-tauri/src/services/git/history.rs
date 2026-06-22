@@ -368,9 +368,16 @@ mod tests {
         std::fs::write(dir.path().join(".hidden"), "secret\n").unwrap();
 
         let result = commit_all(dir.path(), "Stage everything", None, None).unwrap();
-        assert!(result.message.contains("提交成功"));
+        let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(
+            result.message,
+            i18n::tf(
+                "git.commit_success",
+                &[("commit", &head_commit.id().to_string())]
+            )
+        );
 
-        let head_tree = repo.head().unwrap().peel_to_tree().unwrap();
+        let head_tree = head_commit.tree().unwrap();
         assert!(head_tree.get_path(Path::new("tracked.txt")).is_err());
         assert!(head_tree.get_path(Path::new(".hidden")).is_ok());
     }
