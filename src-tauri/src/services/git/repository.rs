@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use git2::{BranchType, ErrorCode, Repository, Signature, StatusOptions};
 
+use crate::i18n;
 use crate::models::git::{GitBranchStatus, GitRemoteInfo, GitRepositoryState, GitStatus};
 
 use super::error::{GitResult, GitServiceError};
@@ -39,9 +40,7 @@ pub(crate) fn ensure_editor_managed_repo(repo: &Repository) -> GitResult<()> {
     if is_editor_managed_repo(repo) {
         Ok(())
     } else {
-        Err(GitServiceError::message(
-            "当前目录不是由编辑器管理的 Git 仓库",
-        ))
+        Err(GitServiceError::message(i18n::t("git.not_editor_managed")))
     }
 }
 
@@ -57,7 +56,7 @@ pub(crate) fn write_editor_managed_marker(repo: &Repository) -> GitResult<()> {
 pub(crate) fn relative_repo_path(repo: &Repository, path: &Path) -> GitResult<PathBuf> {
     let workdir = repo
         .workdir()
-        .ok_or_else(|| GitServiceError::message("当前仓库没有可用的工作区目录"))?;
+        .ok_or_else(|| GitServiceError::message(i18n::t("git.no_workdir")))?;
 
     // Try direct strip first (fast path)
     if let Ok(relative) = path.strip_prefix(workdir) {
@@ -66,16 +65,28 @@ pub(crate) fn relative_repo_path(repo: &Repository, path: &Path) -> GitResult<Pa
 
     // If direct strip fails (e.g. macOS /var → /private/var symlink),
     // canonicalize both paths and retry.
-    let canonical_workdir = std::fs::canonicalize(workdir)
-        .map_err(|error| GitServiceError::message(format!("无法解析仓库工作区目录: {}", error)))?;
+    let canonical_workdir = std::fs::canonicalize(workdir).map_err(|error| {
+        GitServiceError::message(i18n::tf(
+            "git.cannot_resolve_workdir",
+            &[("error", &error.to_string())],
+        ))
+    })?;
     let canonical_path = std::fs::canonicalize(path).map_err(|_| {
-        GitServiceError::message(format!("路径不在仓库工作区内: {}", path.display()))
+        GitServiceError::message(i18n::tf(
+            "git.path_outside_workdir",
+            &[("path", &path.display().to_string())],
+        ))
     })?;
 
     canonical_path
         .strip_prefix(&canonical_workdir)
         .map(Path::to_path_buf)
-        .map_err(|_| GitServiceError::message(format!("路径不在仓库工作区内: {}", path.display())))
+        .map_err(|_| {
+            GitServiceError::message(i18n::tf(
+                "git.path_outside_workdir",
+                &[("path", &path.display().to_string())],
+            ))
+        })
 }
 
 pub(crate) fn normalize_repo_path(path: &Path) -> String {
@@ -173,9 +184,7 @@ pub(crate) fn ensure_clean_for_history_mutation(repo: &Repository) -> GitResult<
         .iter()
         .any(|entry| !entry.status().is_ignored() && !entry.status().is_empty())
     {
-        return Err(GitServiceError::message(
-            "当前工作区有未提交更改，请先提交、暂存或清理后再执行历史管理操作",
-        ));
+        return Err(GitServiceError::message(i18n::t("git.uncommitted_changes")));
     }
 
     Ok(())

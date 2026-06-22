@@ -31,6 +31,7 @@ import {
 	useState,
 	memo,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { pathExists } from '@/invoke/system';
 import { Button } from '@/components/ui/button';
@@ -489,6 +490,7 @@ function ContextMenuContent({
 	pasteDisabled: boolean;
 	target: ExplorerNode | null;
 }) {
+	const { t } = useTranslation();
 	const canCreateDirectory = target === null || target.kind === 'directory';
 	const canCreateDocument = canCreateDirectory;
 
@@ -498,33 +500,33 @@ function ContextMenuContent({
 				isDeletedGitEntry ? (
 					<MenuItem onClick={() => onAction('restoreDeleted')}>
 						<RotateCcw />
-						恢复文件
+						{t('explorerPanel.restore')}
 					</MenuItem>
 				) : (
 					<>
 						{canCreateDocument ? (
 							<MenuItem onClick={() => onAction('createMarkdown')}>
 								<FileText />
-								新建文档
+								{t('explorerPanel.newDocument')}
 							</MenuItem>
 						) : null}
 						{canCreateDirectory ? (
 							<MenuItem onClick={() => onAction('createDirectory')}>
 								<FolderPlus />
-								新建文件夹
+								{t('explorerPanel.newFolder')}
 							</MenuItem>
 						) : null}
 						<MenuItem onClick={() => onAction('rename')}>
 							<FilePenLine />
-							重命名
+							{t('explorerPanel.rename')}
 						</MenuItem>
 						<MenuItem onClick={() => onAction('copy')}>
 							<Copy />
-							复制
+							{t('explorerPanel.copy')}
 						</MenuItem>
 						<MenuItem onClick={() => onAction('cut')}>
 							<Scissors />
-							剪切
+							{t('explorerPanel.cut')}
 						</MenuItem>
 						{clipboard ? (
 							<MenuItem
@@ -532,13 +534,13 @@ function ContextMenuContent({
 								onClick={() => onAction('paste')}
 							>
 								<Clipboard />
-								粘贴到此处
+								{t('explorerPanel.pasteHere')}
 							</MenuItem>
 						) : null}
 						<MenuSeparator />
 						<MenuItem onClick={() => onAction('delete')} variant="destructive">
 							<Trash2 />
-							删除
+							{t('explorerPanel.delete')}
 						</MenuItem>
 					</>
 				)
@@ -546,11 +548,11 @@ function ContextMenuContent({
 				<>
 					<MenuItem onClick={() => onAction('createMarkdown')}>
 						<FileText />
-						新建文档
+						{t('explorerPanel.newDocument')}
 					</MenuItem>
 					<MenuItem onClick={() => onAction('createDirectory')}>
 						<FolderPlus />
-						新建文件夹
+						{t('explorerPanel.newFolder')}
 					</MenuItem>
 					{clipboard ? (
 						<MenuItem
@@ -558,15 +560,17 @@ function ContextMenuContent({
 							onClick={() => onAction('paste')}
 						>
 							<Clipboard />
-							粘贴到当前目录
+							{t('explorerPanel.pasteToDir')}
 						</MenuItem>
 					) : null}
 				</>
 			)}
 			{clipboard ? (
 				<div className="px-2 py-1.5 text-muted-foreground text-xs">
-					{clipboard.mode === 'copy' ? '已复制' : '已剪切'}:{' '}
-					{clipboard.item.name}
+					{clipboard.mode === 'copy'
+						? t('explorerPanel.copy')
+						: t('explorerPanel.cut')}
+					: {clipboard.item.name}
 				</div>
 			) : null}
 		</ContextMenuPopup>
@@ -584,6 +588,7 @@ function CreateMarkdownDialog({
 	onCreateMarkdown: (fileName: string) => Promise<void>;
 	open: boolean;
 }) {
+	const { t } = useTranslation();
 	const [fileName, setFileName] = useState('');
 
 	const reset = () => {
@@ -603,7 +608,10 @@ function CreateMarkdownDialog({
 		const trimmedFileName = fileName.trim();
 
 		if (!trimmedFileName) {
-			showErrorToast('创建失败', '请输入文件名');
+			showErrorToast(
+				t('explorerPanel.createFailed'),
+				t('explorerPanel.enterFileName')
+			);
 			return;
 		}
 
@@ -613,7 +621,10 @@ function CreateMarkdownDialog({
 			!lowerName.endsWith('.md') &&
 			!lowerName.endsWith('.mdx')
 		) {
-			showErrorToast('创建失败', '文件名只能以 .md 或 .mdx 结尾');
+			showErrorToast(
+				t('explorerPanel.createFailed'),
+				t('explorerPanel.invalidFileExtension')
+			);
 			return;
 		}
 
@@ -627,7 +638,7 @@ function CreateMarkdownDialog({
 
 	return (
 		<ExplorerDialogForm
-			description="默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。"
+			description={t('explorerPanel.createDescription')}
 			footer={
 				<>
 					<Button
@@ -635,17 +646,17 @@ function CreateMarkdownDialog({
 						onClick={() => handleOpenChange(false)}
 						variant="outline"
 					>
-						取消
+						{t('common.actions.cancel')}
 					</Button>
 					<Button loading={busy} type="submit">
-						创建
+						{t('common.actions.create')}
 					</Button>
 				</>
 			}
 			onOpenChange={handleOpenChange}
 			onSubmit={handleSubmit}
 			open={open}
-			title="新建文档"
+			title={t('explorerPanel.newDocument')}
 		>
 			<Input
 				autoFocus
@@ -669,6 +680,7 @@ function CreateDirectoryDialog({
 	onClose: () => void;
 	onConfirm: (directoryName: string) => Promise<void>;
 }) {
+	const { t } = useTranslation();
 	const open = node !== undefined;
 
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -680,7 +692,10 @@ function CreateDirectoryDialog({
 		).trim();
 
 		if (!trimmedDirectoryName) {
-			showErrorToast('创建失败', '请输入文件夹名称');
+			showErrorToast(
+				t('explorerPanel.createFailed'),
+				t('explorerPanel.enterFolderName')
+			);
 			return;
 		}
 
@@ -693,21 +708,21 @@ function CreateDirectoryDialog({
 	};
 	return (
 		<ExplorerDialogForm
-			description="默认创建在目标目录内；如果目标是文件，则创建在它的同级目录；如果没有目标节点，则创建到工作区根目录。"
+			description={t('explorerPanel.createDescription')}
 			footer={
 				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
-						取消
+						{t('common.actions.cancel')}
 					</Button>
 					<Button loading={busy} type="submit">
-						创建
+						{t('common.actions.create')}
 					</Button>
 				</>
 			}
 			onOpenChange={(open) => !open && onClose()}
 			onSubmit={handleSubmit}
 			open={open}
-			title="新建文件夹"
+			title={t('explorerPanel.newFolder')}
 		>
 			<Input
 				autoFocus
@@ -730,6 +745,7 @@ function RenameNodeDialog({
 	onClose: () => void;
 	onConfirm: (newName: string) => Promise<void>;
 }) {
+	const { t } = useTranslation();
 	const open = Boolean(node);
 
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -739,7 +755,10 @@ function RenameNodeDialog({
 		const trimmedName = String(formData.get('name') ?? '').trim();
 
 		if (!trimmedName) {
-			showErrorToast('重命名失败', '请输入名称');
+			showErrorToast(
+				t('explorerPanel.renameFailed'),
+				t('explorerPanel.enterName')
+			);
 			return;
 		}
 
@@ -754,23 +773,23 @@ function RenameNodeDialog({
 		<ExplorerDialogForm
 			description={
 				node?.kind === 'directory'
-					? '输入新的文件夹名称。'
-					: '输入新的文件名称。'
+					? t('explorerPanel.renameFolderDescription')
+					: t('explorerPanel.renameFileDescription')
 			}
 			footer={
 				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
-						取消
+						{t('common.actions.cancel')}
 					</Button>
 					<Button loading={busy} type="submit">
-						保存
+						{t('common.actions.save')}
 					</Button>
 				</>
 			}
 			onOpenChange={(open) => !open && onClose()}
 			onSubmit={handleSubmit}
 			open={open}
-			title="重命名"
+			title={t('explorerPanel.rename')}
 		>
 			<Input
 				autoFocus
@@ -793,6 +812,7 @@ function DeleteNodeDialog({
 	onClose: () => void;
 	onConfirm: () => Promise<void>;
 }) {
+	const { t } = useTranslation();
 	const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		void onConfirm().catch(() => {});
@@ -802,23 +822,23 @@ function DeleteNodeDialog({
 		<ExplorerDialogForm
 			description={
 				node?.kind === 'directory'
-					? `删除文件夹 “${node?.name ?? ''}” 以及其中的所有内容？`
-					: `删除文件 “${node?.name ?? ''}”？`
+					? t('explorerPanel.confirmDeleteFolder', { name: node?.name ?? '' })
+					: t('explorerPanel.confirmDeleteFile', { name: node?.name ?? '' })
 			}
 			footer={
 				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
-						取消
+						{t('common.actions.cancel')}
 					</Button>
 					<Button type="submit" loading={busy} variant="destructive">
-						删除
+						{t('common.actions.delete')}
 					</Button>
 				</>
 			}
 			onOpenChange={(open) => !open && onClose()}
 			onSubmit={handleSubmit}
 			open={Boolean(node)}
-			title="确认删除"
+			title={t('explorerPanel.confirmDeleteTitle')}
 		/>
 	);
 }
@@ -834,14 +854,19 @@ function BatchDeleteNodeDialog({
 	onClose: () => void;
 	onConfirm: () => Promise<void>;
 }) {
+	const { t } = useTranslation();
 	const fileCount = nodes.filter((n) => n.kind === 'file').length;
 	const dirCount = nodes.filter((n) => n.kind === 'directory').length;
 
 	const description = (() => {
 		const parts: string[] = [];
-		if (fileCount > 0) parts.push(`${fileCount} 个文件`);
-		if (dirCount > 0) parts.push(`${dirCount} 个文件夹`);
-		return `确认删除选中的 ${parts.join('、')}？`;
+		if (fileCount > 0)
+			parts.push(t('explorerPanel.fileCount', { count: fileCount }));
+		if (dirCount > 0)
+			parts.push(t('explorerPanel.dirCount', { count: dirCount }));
+		return t('explorerPanel.confirmBatchDelete', {
+			items: parts.join(', '),
+		});
 	})();
 
 	const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -855,17 +880,17 @@ function BatchDeleteNodeDialog({
 			footer={
 				<>
 					<Button disabled={busy} onClick={onClose} variant="outline">
-						取消
+						{t('common.actions.cancel')}
 					</Button>
 					<Button type="submit" loading={busy} variant="destructive">
-						删除
+						{t('common.actions.delete')}
 					</Button>
 				</>
 			}
 			onOpenChange={(open) => !open && onClose()}
 			onSubmit={handleSubmit}
 			open={nodes.length > 0}
-			title="确认批量删除"
+			title={t('explorerPanel.confirmBatchDeleteTitle')}
 		/>
 	);
 }
@@ -996,6 +1021,7 @@ const FileTreeNode = memo(function FileTreeNode({
 	selectedPath: string | null;
 	toggleDirectory: (path: string) => void;
 }) {
+	const { t } = useTranslation();
 	const [contextMenuOpen, setContextMenuOpen] = useState(false);
 	const chevronRef = useRef<SVGSVGElement>(null);
 	const userToggledRef = useRef(false);
@@ -1063,7 +1089,9 @@ const FileTreeNode = memo(function FileTreeNode({
 						>
 							<button
 								aria-label={
-									isExpanded ? `收起 ${node.name}` : `展开 ${node.name}`
+									isExpanded
+										? t('explorerPanel.collapseWithName', { name: node.name })
+										: t('explorerPanel.expandWithName', { name: node.name })
 								}
 								type="button"
 								className={cn(
@@ -1215,6 +1243,7 @@ const FileTreeNode = memo(function FileTreeNode({
 });
 
 export function FileExplorerSidebar() {
+	const { t } = useTranslation();
 	const ctx = useWorkspace();
 	const {
 		root,
@@ -1326,7 +1355,7 @@ export function FileExplorerSidebar() {
 			}
 
 			if (sourcePaths.length === 0) {
-				showErrorToast('无法读取拖放的文件路径');
+				showErrorToast(t('explorerPanel.dropFailed'));
 				return;
 			}
 
@@ -1689,7 +1718,7 @@ export function FileExplorerSidebar() {
 		// Short text (file name for quick creation)
 		if (trimmed.length < 200 && !trimmed.includes('\n') && doCreateMarkdown) {
 			void doCreateMarkdown(trimmed, destPath);
-			showSuccessToast(`已创建文件 "${trimmed}"`);
+			showSuccessToast(t('explorerPanel.createSuccess', { name: trimmed }));
 		}
 	}
 
@@ -1717,17 +1746,19 @@ export function FileExplorerSidebar() {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
 				onCopyNode(node);
-				showSuccessToast(`已复制 "${node.name}"`);
+				showSuccessToast(t('explorerPanel.copySuccess', { name: node.name }));
 			} else if (mod && e.key === 'x' && node) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
 				onCutNode(node);
-				showSuccessToast(`已剪切 "${node.name}"`);
+				showSuccessToast(t('explorerPanel.cutSuccess', { name: node.name }));
 			} else if (mod && e.key === 'v' && clipboard) {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
 				void onPasteNode(node?.path ?? null);
-				showSuccessToast(`已粘贴 "${clipboard.item.name}"`);
+				showSuccessToast(
+					t('explorerPanel.pasteSuccess', { name: clipboard.item.name })
+				);
 			} else if (mod && e.key === 'v' && !clipboard) {
 				// System clipboard: read proactively via navigator.clipboard
 				// (paste event may not fire when no editable element is focused)
@@ -1859,7 +1890,7 @@ export function FileExplorerSidebar() {
 				if ((e.target as HTMLElement).isContentEditable) return;
 				e.preventDefault();
 				onClearClipboard();
-				showSuccessToast('已取消剪贴板操作');
+				showSuccessToast(t('explorerPanel.clearClipboard'));
 			}
 		}
 		document.addEventListener('keydown', onKeyDown);
@@ -2229,7 +2260,7 @@ export function FileExplorerSidebar() {
 										text-left leading-normal"
 									render={<span />}
 								>
-									{root ? root.path : '选择一个文件夹开始浏览'}
+									{root ? root.path : t('explorerPanel.startBrowsing')}
 								</TooltipTrigger>
 								{root && (
 									<TooltipContent side="bottom">{root.path}</TooltipContent>
@@ -2252,7 +2283,7 @@ export function FileExplorerSidebar() {
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="新建文件夹"
+									aria-label={t('explorerPanel.newFolder')}
 									disabled={
 										!root || busy || createBusy || operationBusy !== null
 									}
@@ -2269,12 +2300,14 @@ export function FileExplorerSidebar() {
 									<FolderPlus className="size-4" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="bottom">新建文件夹</TooltipContent>
+							<TooltipContent side="bottom">
+								{t('explorerPanel.newFolder')}
+							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="新建文档"
+									aria-label={t('explorerPanel.newDocument')}
 									disabled={
 										!root || busy || createBusy || operationBusy !== null
 									}
@@ -2290,7 +2323,9 @@ export function FileExplorerSidebar() {
 									<FilePlus className="size-4" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="bottom">新建文档</TooltipContent>
+							<TooltipContent side="bottom">
+								{t('explorerPanel.newDocument')}
+							</TooltipContent>
 						</Tooltip>
 
 						<div className="mx-1 h-4 w-px shrink-0 bg-border" />
@@ -2298,7 +2333,7 @@ export function FileExplorerSidebar() {
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="排序切换"
+									aria-label={t('explorerPanel.sortToggle')}
 									onClick={toggleSort}
 									size="icon-sm"
 									variant={sortEnabled ? 'default' : 'ghost'}
@@ -2307,13 +2342,15 @@ export function FileExplorerSidebar() {
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
-								{sortEnabled ? '排序中' : '未排序'}
+								{sortEnabled
+									? t('explorerPanel.sorted')
+									: t('explorerPanel.unsorted')}
 							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="全部展开或折叠"
+									aria-label={t('explorerPanel.toggleExpand')}
 									onClick={handleExpandCollapseToggle}
 									size="icon-sm"
 									variant="ghost"
@@ -2321,12 +2358,14 @@ export function FileExplorerSidebar() {
 									<ListCollapse className="size-4" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="bottom">全部展开或折叠</TooltipContent>
+							<TooltipContent side="bottom">
+								{t('explorerPanel.toggleExpand')}
+							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="在树中显示当前文件"
+									aria-label={t('explorerPanel.showInTree')}
 									disabled={!selectedPath}
 									onClick={showCurrentFileInTree}
 									size="icon-sm"
@@ -2335,15 +2374,17 @@ export function FileExplorerSidebar() {
 									<FileUp className="size-4" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="bottom">在树中显示当前文件</TooltipContent>
+							<TooltipContent side="bottom">
+								{t('explorerPanel.showInTree')}
+							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
 									aria-label={
 										selectedPath && isBookmarked(selectedPath)
-											? '取消书签'
-											: '添加书签'
+											? t('explorerPanel.removeBookmark')
+											: t('explorerPanel.addBookmark')
 									}
 									disabled={!selectedPath}
 									onClick={() => {
@@ -2369,14 +2410,14 @@ export function FileExplorerSidebar() {
 							</TooltipTrigger>
 							<TooltipContent side="bottom">
 								{selectedPath && isBookmarked(selectedPath)
-									? '取消书签'
-									: '添加书签'}
+									? t('explorerPanel.removeBookmark')
+									: t('explorerPanel.addBookmark')}
 							</TooltipContent>
 						</Tooltip>
 						<Tooltip>
 							<TooltipTrigger render={<span />}>
 								<Button
-									aria-label="刷新文件树"
+									aria-label={t('explorerPanel.refreshTree')}
 									disabled={!root || busy || operationBusy !== null}
 									onClick={onRefresh}
 									size="icon-sm"
@@ -2385,7 +2426,9 @@ export function FileExplorerSidebar() {
 									<RotateCcw className="size-3.5" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent side="bottom">刷新文件树</TooltipContent>
+							<TooltipContent side="bottom">
+								{t('explorerPanel.refreshTree')}
+							</TooltipContent>
 						</Tooltip>
 					</div>
 
@@ -2398,7 +2441,9 @@ export function FileExplorerSidebar() {
 								type="button"
 							>
 								<Bookmark className="size-3.5 shrink-0" />
-								<span className="font-medium">书签</span>
+								<span className="font-medium">
+									{t('explorerPanel.bookmarks')}
+								</span>
 								<ChevronRight
 									className={`size-3 transition-transform ${
 										bookmarksExpanded ? 'rotate-90' : ''
@@ -2433,7 +2478,10 @@ export function FileExplorerSidebar() {
 												<span className="truncate">{name}</span>
 
 												<button
-													aria-label={`删除书签 ${name}`}
+													aria-label={t(
+														'explorerPanel.deleteBookmarkWithName',
+														{ name }
+													)}
 													className="ml-auto shrink-0 rounded p-0.5 opacity-0
 														transition-opacity hover:bg-sidebar-accent/50
 														group-hover:opacity-100"
@@ -2543,7 +2591,7 @@ export function FileExplorerSidebar() {
 																paddingLeft: `${item.depth * 14 + 44}px`,
 															}}
 														>
-															未找到文件
+															{t('explorerPanel.noFilesFound')}
 														</div>
 													</div>
 												) : (
@@ -2580,10 +2628,10 @@ export function FileExplorerSidebar() {
 											<Folder className="size-4" />
 										</EmptyMedia>
 										<EmptyTitle className="text-base">
-											打开一个本地文件夹
+											{t('explorerPanel.selectFolder')}
 										</EmptyTitle>
 										<EmptyDescription>
-											左侧导航会按目录结构展示可预览文件。
+											{t('explorerPanel.selectFolderDescription')}
 										</EmptyDescription>
 									</EmptyHeader>
 								</Empty>
@@ -2607,7 +2655,7 @@ export function FileExplorerSidebar() {
 						${explorerBottomSectionHeightClassName}`}
 					>
 						<span className="shrink-0 text-muted-foreground">
-							已选择 {selectedPaths.size} 项
+							{t('explorerPanel.itemsSelected', { count: selectedPaths.size })}
 						</span>
 						<div className="flex items-center gap-1">
 							<Button
@@ -2620,7 +2668,11 @@ export function FileExplorerSidebar() {
 											: null;
 										if (fileNode) onCopyNode(fileNode);
 									}
-									showSuccessToast(`已复制 ${selectedPaths.size} 项`);
+									showSuccessToast(
+										t('explorerPanel.itemsCopied', {
+											count: selectedPaths.size,
+										})
+									);
 								}}
 							>
 								<Copy className="size-3.5" />
@@ -2635,7 +2687,9 @@ export function FileExplorerSidebar() {
 											: null;
 										if (fileNode) onCutNode(fileNode);
 									}
-									showSuccessToast(`已剪切 ${selectedPaths.size} 项`);
+									showSuccessToast(
+										t('explorerPanel.itemsCut', { count: selectedPaths.size })
+									);
 								}}
 							>
 								<Scissors className="size-3.5" />
@@ -2703,7 +2757,7 @@ export function FileExplorerSidebar() {
 								text-muted-foreground"
 						>
 							<CloudOff className="size-3" />
-							<span>同步未开启</span>
+							<span>{t('explorerPanel.syncNotEnabled')}</span>
 						</div>
 					)}
 				</div>
@@ -2813,15 +2867,12 @@ export function FileExplorerSidebar() {
 			/>
 
 			<ExplorerDialogForm
-				description={
-					<>
-						确认从 Git 恢复文件 “
-						{pendingAction?.type === 'restoreDeleted'
+				description={t('explorerPanel.confirmRestoreFromGit', {
+					name:
+						pendingAction?.type === 'restoreDeleted'
 							? pendingAction.node.name
-							: ''}
-						”？
-					</>
-				}
+							: '',
+				})}
 				footer={
 					<>
 						<Button
@@ -2833,10 +2884,10 @@ export function FileExplorerSidebar() {
 							onClick={() => setPendingAction(null)}
 							variant="outline"
 						>
-							取消
+							{t('common.actions.cancel')}
 						</Button>
 						<Button disabled={operationBusy !== null} type="submit">
-							恢复
+							{t('explorerPanel.restore')}
 						</Button>
 					</>
 				}
@@ -2853,7 +2904,7 @@ export function FileExplorerSidebar() {
 						.catch(() => {});
 				}}
 				open={pendingAction?.type === 'restoreDeleted'}
-				title="恢复已删除文件"
+				title={t('explorerPanel.confirmRestoreTitle')}
 			/>
 		</>
 	);

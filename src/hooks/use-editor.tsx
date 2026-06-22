@@ -32,12 +32,14 @@ import {
 	type MutableRefObject,
 } from 'react';
 
+import i18n from '@/i18n';
 import { useAiSettings } from '@/context/ai-settings-provider';
 import { useTheme } from '@/context/theme-provider';
 import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { showErrorToast } from '@/components/ui/toast';
 
 type UseEditorOptions = {
+	fontSize?: number;
 	onChange?: (value: string) => void;
 	onCursorChange?: (line: number, col: number) => void;
 	onSave?: () => void;
@@ -84,7 +86,7 @@ const AUTO_COMPLETION_DEBOUNCE_MS = 80;
 const AUTO_COMPLETION_COOLDOWN_MS = 250;
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
-const DEFAULT_READY_MESSAGE = 'AI 自动补全已就绪';
+const DEFAULT_READY_MESSAGE = i18n.t('ai.ready');
 const COMPLETION_TOOLTIP_EDGE_MARGIN = 12;
 const COMPLETION_DEBUG = import.meta.env.DEV;
 
@@ -369,7 +371,7 @@ const completionPreviewField = StateField.define<CompletionPreviewState | null>(
 
 const themeCompartment = new Compartment();
 
-function createEditorTheme(dark: boolean) {
+function createEditorTheme(dark: boolean, fontSize: number = 14) {
 	return EditorView.theme(
 		{
 			'&': {
@@ -377,19 +379,21 @@ function createEditorTheme(dark: boolean) {
 				accentColor: 'var(--color-primary)',
 				backgroundColor: 'transparent',
 				color: 'var(--color-foreground)',
-				fontSize: '0.875rem',
+				fontSize: `${fontSize}px`,
 			},
 			'.cm-scroller': {
 				fontFamily:
 					'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 				lineHeight: '1.7',
+				boxSizing: 'border-box',
+				paddingBlock: '2px',
 				overflow: 'hidden',
 				maxHeight: 'none',
 			},
 			'.cm-content': {
 				caretColor: 'var(--color-primary)',
 				minHeight: '100%',
-				padding: '1rem 1.25rem',
+				padding: 'calc(1rem - 2px) 1.25rem',
 			},
 			'.cm-line': { padding: '0' },
 			'.cm-gutters': {
@@ -499,15 +503,16 @@ const markdownHighlightStyle = HighlightStyle.define([
 function getErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	if (typeof error === 'string') return error;
-	return 'AI 补全失败';
+	return i18n.t('ai.completionFailed');
 }
 
 function getDefaultCompletionStatus(
 	enabled: boolean,
 	hasApiKey: boolean
 ): CompletionStatus {
-	if (!enabled) return { message: 'AI 补全已关闭', tone: 'muted' };
-	if (!hasApiKey) return { message: '保存 API Key 后可用', tone: 'muted' };
+	if (!enabled) return { message: i18n.t('ai.disabled'), tone: 'muted' };
+	if (!hasApiKey)
+		return { message: i18n.t('ai.saveApiKeyToUse'), tone: 'muted' };
 	return { message: DEFAULT_READY_MESSAGE, tone: 'muted' };
 }
 
@@ -645,6 +650,7 @@ function createCompletionTooltipView(): TooltipView {
 	};
 }
 export function useEditor({
+	fontSize = 14,
 	onChange,
 	onCursorChange,
 	onSave,
@@ -667,7 +673,7 @@ export function useEditor({
 	const streamingRafPendingRef = useRef(false);
 	const aiSettingsRef = useRef({
 		apiUrl: '',
-		customProtocol: 'openai' as 'anthropic' | 'openai',
+		customProtocol: 'openai' as 'anthropic' | 'google' | 'openai',
 		enabled: true,
 		hasApiKey: false,
 		model: '',
@@ -675,7 +681,7 @@ export function useEditor({
 		useSsl: true,
 	});
 	const completionStatusRef = useRef<CompletionStatus>({
-		message: '保存 API Key 后可用',
+		message: i18n.t('ai.saveApiKeyToUse'),
 		tone: 'muted',
 	});
 
@@ -946,7 +952,10 @@ export function useEditor({
 			clearScheduledCompletion('cancel');
 			scheduledSnapshotRef.current = null;
 			syncTooltip();
-			setCompletionStatus({ message: '正在生成 AI 建议...', tone: 'loading' });
+			setCompletionStatus({
+				message: i18n.t('ai.generating'),
+				tone: 'loading',
+			});
 			let completion = '';
 
 			try {
@@ -1068,7 +1077,7 @@ export function useEditor({
 				if (completion.length === 0) {
 					clearCompletionPreview();
 				}
-				showErrorToast('AI 补全失败', errorMessage, {
+				showErrorToast(i18n.t('ai.completionFailed'), errorMessage, {
 					descriptionStyle: 'code',
 				});
 				setCompletionStatus({ message: errorMessage, tone: 'error' });
@@ -1201,10 +1210,10 @@ export function useEditor({
 		if (!view) return;
 		view.dispatch({
 			effects: themeCompartment.reconfigure(
-				createEditorTheme(resolvedTheme === 'dark')
+				createEditorTheme(resolvedTheme === 'dark', fontSize)
 			),
 		});
-	}, [resolvedTheme]);
+	}, [fontSize, resolvedTheme]);
 
 	// 初始化编辑器
 	/* eslint-disable react-hooks/exhaustive-deps */
@@ -1260,7 +1269,9 @@ export function useEditor({
 							});
 						},
 					}),
-					themeCompartment.of(createEditorTheme(resolvedTheme === 'dark')),
+					themeCompartment.of(
+						createEditorTheme(resolvedTheme === 'dark', fontSize)
+					),
 					completionPreviewField,
 					completionTooltipField,
 					Prec.high(

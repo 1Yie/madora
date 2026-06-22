@@ -1,4 +1,5 @@
 import { useCallback, useState, type ComponentProps } from 'react';
+import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -385,6 +386,8 @@ export function MarkdownPreview({
 	filePath,
 	rootPath,
 }: MarkdownPreviewProps) {
+	const { t } = useTranslation();
+
 	// Normalize leading whitespace: each indent unit (tab or 4 consecutive
 	// spaces) produces the same visual width — 4 em-spaces (\u2003).
 	// Leftover 1-3 spaces become NBSP (\u00A0) so they aren't collapsed.
@@ -411,9 +414,12 @@ export function MarkdownPreview({
 		null
 	);
 
-	const handleMissingFile = useCallback((path: string) => {
-		showErrorToast('文件不存在', path);
-	}, []);
+	const handleMissingFile = useCallback(
+		(path: string) => {
+			showErrorToast(t('markdownPreview.fileNotFound'), path);
+		},
+		[t]
+	);
 
 	const handleExternalFile = useCallback((path: string) => {
 		setDisplayExternalPath(path);
@@ -426,7 +432,7 @@ export function MarkdownPreview({
 		try {
 			const exists = await absolutePathExists(pendingExternalPath);
 			if (!exists) {
-				showErrorToast('文件不存在', pendingExternalPath);
+				showErrorToast(t('markdownPreview.fileNotFound'), pendingExternalPath);
 				setPendingExternalPath(null);
 				return;
 			}
@@ -441,7 +447,7 @@ export function MarkdownPreview({
 		);
 
 		setPendingExternalPath(null);
-	}, [pendingExternalPath, rootPath]);
+	}, [pendingExternalPath, rootPath, t]);
 
 	return (
 		<div
@@ -476,9 +482,9 @@ export function MarkdownPreview({
 			>
 				<DialogPopup showCloseButton={false}>
 					<DialogHeader>
-						<DialogTitle>允许打开外部文件？</DialogTitle>
+						<DialogTitle>{t('markdownPreview.externalTitle')}</DialogTitle>
 						<DialogDescription>
-							此链接指向当前工作区以外的位置，打开后将允许读取该目录下的文件。
+							{t('markdownPreview.externalDescription')}
 							<code
 								className="mt-2 block break-all rounded bg-muted px-2 py-1.5
 									text-base text-muted-foreground"
@@ -492,9 +498,11 @@ export function MarkdownPreview({
 							variant="outline"
 							onClick={() => setPendingExternalPath(null)}
 						>
-							取消
+							{t('common.actions.cancel')}
 						</Button>
-						<Button onClick={handleConfirmTrust}>允许访问</Button>
+						<Button onClick={handleConfirmTrust}>
+							{t('markdownPreview.allowAccess')}
+						</Button>
 					</DialogFooter>
 				</DialogPopup>
 			</Dialog>

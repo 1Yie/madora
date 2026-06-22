@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,12 +14,6 @@ import {
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import type { WebDavConfig, WebDavSyncResult } from '@/invoke/webdav';
-
-const CONFLICT_STRATEGY_LABELS: Record<string, string> = {
-	local_first: '本地优先',
-	remote_first: '远端优先',
-	keep_both: '保留两份（远端文件自动重命名）',
-};
 
 type WebDavTabSyncProps = {
 	config: WebDavConfig | null;
@@ -37,6 +32,13 @@ export function WebDavTabSync({
 	onConfigChange,
 	onSync,
 }: WebDavTabSyncProps) {
+	const { t } = useTranslation();
+	const conflictStrategyLabels: Record<string, string> = {
+		local_first: t('webdav.syncPanel.strategies.localFirst'),
+		remote_first: t('webdav.syncPanel.strategies.remoteFirst'),
+		keep_both: t('webdav.syncPanel.strategies.keepBoth'),
+	};
+
 	return (
 		<div className="size-full min-h-0 flex-1 overflow-auto">
 			<div className="space-y-6 p-4 sm:p-6">
@@ -45,16 +47,19 @@ export function WebDavTabSync({
 						className="text-xs font-medium uppercase tracking-[0.18em]
 							text-muted-foreground"
 					>
-						同步
+						{t('webdav.syncPanel.sectionLabel')}
 					</p>
 					<h3 className="text-2xl font-semibold text-foreground">
-						同步操作与策略
+						{t('webdav.syncPanel.sectionTitle')}
 					</h3>
 				</div>
 
-				<SettingsSectionCard title="同步选项">
+				<SettingsSectionCard title={t('webdav.syncPanel.optionsTitle')}>
 					<div className="space-y-3">
-						<FieldBlock label="远程子目录" hint="WebDAV 服务器上的子目录">
+						<FieldBlock
+							label={t('webdav.syncPanel.remoteSubdir')}
+							hint={t('webdav.syncPanel.remoteSubdirHint')}
+						>
 							<Input
 								placeholder="madora-backup"
 								value={config?.remote_subdir ?? ''}
@@ -70,7 +75,7 @@ export function WebDavTabSync({
 								}
 							/>
 						</FieldBlock>
-						<FieldBlock label="冲突策略">
+						<FieldBlock label={t('webdav.syncPanel.conflictStrategy')}>
 							<Select
 								value={config?.conflict_strategy ?? 'local_first'}
 								onValueChange={(val) =>
@@ -88,17 +93,21 @@ export function WebDavTabSync({
 								<SelectTrigger className="w-full">
 									<SelectValue>
 										{
-											CONFLICT_STRATEGY_LABELS[
+											conflictStrategyLabels[
 												config?.conflict_strategy ?? 'local_first'
 											]
 										}
 									</SelectValue>
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="local_first">本地优先</SelectItem>
-									<SelectItem value="remote_first">远端优先</SelectItem>
+									<SelectItem value="local_first">
+										{t('webdav.syncPanel.strategies.localFirst')}
+									</SelectItem>
+									<SelectItem value="remote_first">
+										{t('webdav.syncPanel.strategies.remoteFirst')}
+									</SelectItem>
 									<SelectItem value="keep_both">
-										保留两份（远端文件自动重命名）
+										{t('webdav.syncPanel.strategies.keepBoth')}
 									</SelectItem>
 								</SelectContent>
 							</Select>
@@ -106,7 +115,7 @@ export function WebDavTabSync({
 					</div>
 				</SettingsSectionCard>
 
-				<SettingsSectionCard title="手动同步">
+				<SettingsSectionCard title={t('webdav.syncPanel.manualTitle')}>
 					<div className="space-y-3">
 						<Button
 							variant="default"
@@ -116,7 +125,9 @@ export function WebDavTabSync({
 							disabled={!canSync || syncing}
 						>
 							<RefreshCw className="size-3.5" />
-							{syncing ? '同步中…' : '立即同步'}
+							{syncing
+								? t('webdav.syncPanel.syncing')
+								: t('webdav.syncPanel.syncNow')}
 						</Button>
 
 						{syncResult && (
@@ -124,17 +135,33 @@ export function WebDavTabSync({
 								className="rounded-lg border border-border bg-background p-3
 									text-sm"
 							>
-								<div className="font-medium text-foreground">同步结果</div>
+								<div className="font-medium text-foreground">
+									{t('webdav.syncPanel.resultsTitle')}
+								</div>
 								<div className="mt-2 space-y-1 text-xs text-muted-foreground">
-									<p>上传: {syncResult.files_uploaded}</p>
-									<p>下载: {syncResult.files_downloaded}</p>
+									<p>
+										{t('webdav.syncPanel.uploaded', {
+											count: syncResult.files_uploaded,
+										})}
+									</p>
+									<p>
+										{t('webdav.syncPanel.downloaded', {
+											count: syncResult.files_downloaded,
+										})}
+									</p>
 									{syncResult.conflicts_resolved > 0 && (
-										<p>冲突: {syncResult.conflicts_resolved}</p>
+										<p>
+											{t('webdav.syncPanel.conflicts', {
+												count: syncResult.conflicts_resolved,
+											})}
+										</p>
 									)}
 									{syncResult.errors.length > 0 && (
 										<div className="mt-2">
 											<p className="font-medium text-destructive">
-												错误 ({syncResult.errors.length}):
+												{t('webdav.syncPanel.errors', {
+													count: syncResult.errors.length,
+												})}
 											</p>
 											<ul className="mt-1 list-inside list-disc">
 												{syncResult.errors.map((err, i) => (

@@ -1,5 +1,6 @@
 import { EyeOff, FileImage, FileX, FolderOpen, Info } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -82,7 +83,8 @@ function renderPreviewBody(
 	isConflicted: boolean,
 	markdownMode: EditorMode,
 	onToggleMode: () => void,
-	rootPath: string | null
+	rootPath: string | null,
+	t: (key: string) => string
 ) {
 	if (preview.fileKind === 'image' && preview.imageDataUrl) {
 		return (
@@ -170,11 +172,9 @@ function renderPreviewBody(
 		<div className="flex h-full flex-col">
 			<Alert className="rounded-none border-x-0 border-t-0" variant="warning">
 				<Info />
-				<AlertTitle>这个冲突没有内联冲突标记</AlertTitle>
+				<AlertTitle>{t('filePreview.conflictNoMarkersTitle')}</AlertTitle>
 				<AlertDescription>
-					这通常是修改/删除、删除/修改这类索引冲突。请先检查当前工作区版本；
-					<br />
-					如果要保留当前内容，可直接在提交面板暂存来标记冲突已解决。
+					{t('filePreview.conflictNoMarkersDescription')}
 				</AlertDescription>
 			</Alert>
 			<div className="min-h-0 flex-1">{body}</div>
@@ -190,6 +190,7 @@ function PreviewState({
 	preview,
 	rootPath,
 	selectedFile,
+	t,
 }: {
 	isConflicted: boolean;
 	loading: boolean;
@@ -198,6 +199,7 @@ function PreviewState({
 	preview: FilePreviewData | null;
 	rootPath: string | null;
 	selectedFile: ExplorerNode;
+	t: (key: string) => string;
 }) {
 	if (loading && !preview) {
 		return (
@@ -219,9 +221,9 @@ function PreviewState({
 					<EmptyIcon>
 						<FileX className="size-4" />
 					</EmptyIcon>
-					<EmptyTitle>该文件已从工作区删除</EmptyTitle>
+					<EmptyTitle>{t('filePreview.deletedTitle')}</EmptyTitle>
 					<EmptyDescription className="">
-						文件仍保留在 Git 变更列表中。可在左侧右键菜单选择「恢复文件」。
+						{t('filePreview.deletedDescription')}
 					</EmptyDescription>
 				</EmptyHeader>
 			</Empty>
@@ -235,7 +237,8 @@ function PreviewState({
 			isConflicted,
 			markdownMode,
 			onToggleMode,
-			rootPath
+			rootPath,
+			t
 		);
 		if (preview.truncated) {
 			return (
@@ -245,8 +248,10 @@ function PreviewState({
 						variant="warning"
 					>
 						<Info className="size-4" />
-						<AlertTitle>预览已截断</AlertTitle>
-						<AlertDescription>文件内容较大，仅显示前部分。</AlertDescription>
+						<AlertTitle>{t('filePreview.truncatedTitle')}</AlertTitle>
+						<AlertDescription>
+							{t('filePreview.truncatedDescription')}
+						</AlertDescription>
 					</Alert>
 					<div className="min-h-0 flex-1">{body}</div>
 				</div>
@@ -265,16 +270,15 @@ function PreviewState({
 						<EyeOff className="size-4" />
 					)}
 				</EmptyIcon>
-				<EmptyTitle>暂无可用预览</EmptyTitle>
-				<EmptyDescription>
-					该文件类型暂不支持预览，或文件内容为空。
-				</EmptyDescription>
+				<EmptyTitle>{t('filePreview.emptyTitle')}</EmptyTitle>
+				<EmptyDescription>{t('filePreview.emptyDescription')}</EmptyDescription>
 			</EmptyHeader>
 		</Empty>
 	);
 }
 
 export function FilePreview() {
+	const { t } = useTranslation();
 	const {
 		selectedFile,
 		preview,
@@ -311,19 +315,21 @@ export function FilePreview() {
 						<FolderOpen className="size-4" />
 					</EmptyIcon>
 					<EmptyTitle>
-						{workspaceOpen ? '从左侧选择一个文件' : '还没有打开任何文件夹'}
+						{workspaceOpen
+							? t('filePreview.selectFileTitle')
+							: t('filePreview.openFolderTitle')}
 					</EmptyTitle>
 					<EmptyDescription>
 						{workspaceOpen
-							? '展开文件夹后点击任意文件，内容会在这里预览。'
-							: '选择本地目录后，Markdown、图片和文本文件会自动列出并可在此预览。'}
+							? t('filePreview.selectFileDescription')
+							: t('filePreview.openFolderDescription')}
 					</EmptyDescription>
 				</EmptyHeader>
 				{!workspaceOpen && (
 					<EmptyContent>
 						<Button onClick={onOpenFolder} variant="outline">
 							<FolderOpen className="mr-1.5 size-4" />
-							打开文件夹
+							{t('explorerPanel.selectFolder')}
 						</Button>
 					</EmptyContent>
 				)}
@@ -342,6 +348,7 @@ export function FilePreview() {
 					rootPath={rootPath}
 					onToggleMode={toggleMode}
 					selectedFile={selectedFile}
+					t={t}
 				/>
 			</div>
 		</div>

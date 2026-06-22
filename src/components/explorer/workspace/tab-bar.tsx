@@ -9,6 +9,7 @@ import {
 	X,
 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
 	ContextMenuPopup,
@@ -32,6 +33,7 @@ export type TabEntry = {
 };
 
 export function TabBar() {
+	const { t } = useTranslation();
 	const {
 		root,
 		tabs,
@@ -308,7 +310,9 @@ export function TabBar() {
 												}}
 												role="button"
 												tabIndex={-1}
-												aria-label={`关闭 ${fileName}`}
+												aria-label={t('tabBar.closeTabWithName', {
+													name: fileName,
+												})}
 											>
 												{tab.unsaved ? (
 													<>
@@ -331,14 +335,14 @@ export function TabBar() {
 											{tab.node.path}
 											{root &&
 												!isSameOrDescendantPath(tab.node.path, root.path) &&
-												' - 非工作区'}
+												` - ${t('tabBar.outsideWorkspace')}`}
 										</TooltipPopup>
 									</Tooltip>
 								</ContextMenuTrigger>
 								<ContextMenuPopup align="start" sideOffset={4}>
 									<MenuItem onClick={() => closeTabAction(tab.id)}>
 										<X className="size-3.5" />
-										关闭当前标签页
+										{t('tabBar.closeCurrent')}
 									</MenuItem>
 									<MenuSeparator />
 									<MenuItem
@@ -346,14 +350,14 @@ export function TabBar() {
 										disabled={leftTabIds.length === 0}
 									>
 										<ChevronLeft className="size-3.5" />
-										关闭左侧标签页
+										{t('tabBar.closeLeft')}
 									</MenuItem>
 									<MenuItem
 										onClick={() => closeTabsAction(rightTabIds)}
 										disabled={rightTabIds.length === 0}
 									>
 										<ChevronRight className="size-3.5" />
-										关闭右侧标签页
+										{t('tabBar.closeRight')}
 									</MenuItem>
 									<MenuSeparator />
 									<MenuItem
@@ -361,11 +365,11 @@ export function TabBar() {
 										disabled={otherTabIds.length === 0}
 									>
 										<Focus className="size-3.5" />
-										仅保留当前标签页
+										{t('tabBar.keepCurrentOnly')}
 									</MenuItem>
 									<MenuItem onClick={() => closeTabsAction(allTabIds)}>
 										<SquareX className="size-3.5" />
-										关闭所有标签页
+										{t('tabBar.closeAll')}
 									</MenuItem>
 								</ContextMenuPopup>
 							</ContextMenuRoot>

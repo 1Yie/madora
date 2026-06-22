@@ -4,6 +4,7 @@ use git2::{Cred, Error, RemoteCallbacks, Repository};
 use keyring_core::{Entry, Error as KeyringError};
 use tauri::{AppHandle, Manager};
 
+use crate::i18n;
 use crate::models::git::{GitAuth, GitCredentials};
 
 use super::error::{GitResult, GitServiceError};
@@ -85,9 +86,7 @@ pub(crate) fn build_remote_callbacks<'a>(
             }
         }
 
-        Err(Error::from_str(
-            "认证失败：请在工作区底部的 SSH 设置中填写 SSH 私钥路径或用户名密码",
-        ))
+        Err(Error::from_str(&i18n::t("git.auth_failed_str")))
     });
 
     callbacks
@@ -106,9 +105,12 @@ pub(crate) fn store_credentials(
     }
 
     let json = serde_json::to_string(credentials)?;
-    entry
-        .set_password(&json)
-        .map_err(|error| GitServiceError::message(format!("保存 Git 凭证失败: {error}")))?;
+    entry.set_password(&json).map_err(|error| {
+        GitServiceError::message(i18n::tf(
+            "git.save_credentials_failed",
+            &[("error", &error.to_string())],
+        ))
+    })?;
     delete_legacy_credentials_file(app_handle)?;
     Ok(())
 }
@@ -119,8 +121,9 @@ pub(crate) fn load_credentials(app_handle: &AppHandle) -> GitResult<GitCredentia
     match entry.get_password() {
         Ok(json) => deserialize_credentials(&json),
         Err(KeyringError::NoEntry) => migrate_legacy_credentials(app_handle, &entry),
-        Err(error) => Err(GitServiceError::message(format!(
-            "读取 Git 凭证失败: {error}"
+        Err(error) => Err(GitServiceError::message(i18n::tf(
+            "git.read_credentials_failed",
+            &[("error", &error.to_string())],
         ))),
     }
 }
@@ -136,11 +139,17 @@ fn ensure_secure_store() -> GitResult<()> {
             keyring::use_native_store(use_secret_service).map_err(|error| {
                 #[cfg(target_os = "linux")]
                 {
-                    format!("无法访问系统密钥存储，请确认 Secret Service / libsecret 可用: {error}")
+                    i18n::tf(
+                        "git.keyring_access_failed",
+                        &[("error", &error.to_string())],
+                    )
                 }
                 #[cfg(not(target_os = "linux"))]
                 {
-                    format!("无法访问系统密钥存储: {error}")
+                    i18n::tf(
+                        "git.keyring_access_failed",
+                        &[("error", &error.to_string())],
+                    )
                 }
             })
         })
@@ -150,8 +159,12 @@ fn ensure_secure_store() -> GitResult<()> {
 
 fn credentials_entry() -> GitResult<Entry> {
     ensure_secure_store()?;
-    Entry::new(GIT_CREDENTIALS_SERVICE, GIT_CREDENTIALS_ACCOUNT)
-        .map_err(|error| GitServiceError::message(format!("无法初始化系统密钥存储条目: {error}")))
+    Entry::new(GIT_CREDENTIALS_SERVICE, GIT_CREDENTIALS_ACCOUNT).map_err(|error| {
+        GitServiceError::message(i18n::tf(
+            "git.keyring_entry_init_failed",
+            &[("error", &error.to_string())],
+        ))
+    })
 }
 
 fn migrate_legacy_credentials(app_handle: &AppHandle, entry: &Entry) -> GitResult<GitCredentials> {
@@ -161,9 +174,12 @@ fn migrate_legacy_credentials(app_handle: &AppHandle, entry: &Entry) -> GitResul
 
     if !credentials_are_empty(&credentials) {
         let json = serde_json::to_string(&credentials)?;
-        entry
-            .set_password(&json)
-            .map_err(|error| GitServiceError::message(format!("迁移 Git 凭证失败: {error}")))?;
+        entry.set_password(&json).map_err(|error| {
+            GitServiceError::message(i18n::tf(
+                "git.migrate_credentials_failed",
+                &[("error", &error.to_string())],
+            ))
+        })?;
     }
 
     delete_legacy_credentials_file(app_handle)?;
@@ -171,15 +187,20 @@ fn migrate_legacy_credentials(app_handle: &AppHandle, entry: &Entry) -> GitResul
 }
 
 fn deserialize_credentials(json: &str) -> GitResult<GitCredentials> {
-    serde_json::from_str(json)
-        .map_err(|error| GitServiceError::message(format!("解析 Git 凭证失败: {error}")))
+    serde_json::from_str(json).map_err(|error| {
+        GitServiceError::message(i18n::tf(
+            "git.parse_credentials_failed",
+            &[("error", &error.to_string())],
+        ))
+    })
 }
 
 fn delete_credentials_entry(entry: &Entry) -> GitResult<()> {
     match entry.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
-        Err(error) => Err(GitServiceError::message(format!(
-            "删除 Git 凭证失败: {error}"
+        Err(error) => Err(GitServiceError::message(i18n::tf(
+            "git.delete_credentials_failed",
+            &[("error", &error.to_string())],
         ))),
     }
 }
@@ -197,8 +218,9 @@ fn read_legacy_credentials(app_handle: &AppHandle) -> GitResult<Option<GitCreden
     match std::fs::read_to_string(&path) {
         Ok(json) => deserialize_credentials(&json).map(Some),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(GitServiceError::message(format!(
-            "读取旧版 Git 凭证文件失败: {error}"
+        Err(error) => Err(GitServiceError::message(i18n::tf(
+            "git.read_legacy_credentials_failed",
+            &[("error", &error.to_string())],
         ))),
     }
 }
@@ -208,17 +230,20 @@ fn delete_legacy_credentials_file(app_handle: &AppHandle) -> GitResult<()> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(GitServiceError::message(format!(
-            "删除旧版 Git 凭证文件失败: {error}"
+        Err(error) => Err(GitServiceError::message(i18n::tf(
+            "git.delete_legacy_credentials_failed",
+            &[("error", &error.to_string())],
         ))),
     }
 }
 
 fn legacy_credentials_path(app_handle: &AppHandle) -> GitResult<PathBuf> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|error| GitServiceError::message(format!("无法获取应用数据目录: {error}")))?;
+    let data_dir = app_handle.path().app_data_dir().map_err(|error| {
+        GitServiceError::message(i18n::tf(
+            "git.cannot_get_app_data_dir",
+            &[("error", &error.to_string())],
+        ))
+    })?;
     std::fs::create_dir_all(&data_dir)?;
     Ok(data_dir.join(LEGACY_CREDENTIALS_FILENAME))
 }

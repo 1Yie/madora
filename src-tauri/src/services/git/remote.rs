@@ -2,6 +2,7 @@ use std::path::Path;
 
 use git2::{BranchType, FetchOptions, PushOptions, Repository};
 
+use crate::i18n;
 use crate::models::git::{GitAuth, GitStatus, GitSyncResult};
 
 use super::{
@@ -59,7 +60,7 @@ pub(crate) fn pull(
         return Ok(GitSyncResult {
             branch: Some(branch),
             conflicts: Vec::new(),
-            message: "已经是最新版本".to_string(),
+            message: i18n::t("git.already_up_to_date"),
         });
     }
 
@@ -68,7 +69,7 @@ pub(crate) fn pull(
         return Ok(GitSyncResult {
             branch: repository::head_branch_name(&repo),
             conflicts: Vec::new(),
-            message: "拉取成功，已快进更新".to_string(),
+            message: i18n::t("git.pull_ff_success"),
         });
     }
 
@@ -76,7 +77,7 @@ pub(crate) fn pull(
         return normal_merge(&repo, &fetch_commit, author_name, author_email);
     }
 
-    Err(GitServiceError::message("当前仓库状态不支持自动拉取"))
+    Err(GitServiceError::message(i18n::t("git.cannot_auto_pull")))
 }
 
 pub(crate) fn push(
@@ -104,7 +105,7 @@ pub(crate) fn push(
     Ok(GitSyncResult {
         branch: Some(branch),
         conflicts: Vec::new(),
-        message: "推送成功".to_string(),
+        message: i18n::t("git.push_success"),
     })
 }
 
@@ -126,7 +127,7 @@ fn resolve_branch_name(repo: &Repository, branch_name: Option<&str>) -> GitResul
         Some(branch_name) => Ok(branch_name.to_string()),
         None => repository::current_branch_status(repo)?
             .and_then(|value| value.name)
-            .ok_or_else(|| GitServiceError::message("当前没有可用的本地分支，无法继续远程操作")),
+            .ok_or_else(|| GitServiceError::message(i18n::t("git.no_local_branch"))),
     }
 }
 
@@ -138,7 +139,7 @@ fn fast_forward(
     let refname = match repo.head() {
         Ok(head) => head
             .name()
-            .ok_or_else(|| GitServiceError::message("无法解析当前分支引用"))?
+            .ok_or_else(|| GitServiceError::message(i18n::t("git.cannot_resolve_branch_ref")))?
             .to_string(),
         Err(error) if error.code() == git2::ErrorCode::UnbornBranch => {
             format!("refs/heads/{branch_name}")
@@ -185,7 +186,7 @@ fn normal_merge(
         return Ok(GitSyncResult {
             branch: repository::head_branch_name(repo),
             conflicts: unresolved_conflicts,
-            message: "拉取完成，但存在冲突，请先解决冲突后再提交".to_string(),
+            message: i18n::t("git.pull_conflicts"),
         });
     }
 
@@ -212,6 +213,6 @@ fn normal_merge(
     Ok(GitSyncResult {
         branch: repository::head_branch_name(repo),
         conflicts: Vec::new(),
-        message: "拉取并合并成功".to_string(),
+        message: i18n::t("git.pull_merge_success"),
     })
 }

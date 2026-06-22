@@ -2,6 +2,7 @@ use std::path::Path;
 
 use git2::{ErrorCode, IndexAddOption, Repository, ResetType};
 
+use crate::i18n;
 use crate::models::git::{GitLogEntry, GitSyncResult};
 
 use super::{
@@ -69,11 +70,14 @@ pub(crate) fn read_log(root_path: &Path, limit: usize) -> GitResult<Vec<GitLogEn
                         .format("%Y-%m-%d %H:%M")
                         .to_string()
                 })
-                .unwrap_or_else(|| "未知时间".to_string());
+                .unwrap_or_else(|| i18n::t("git.unknown_time"));
 
         entries.push(GitLogEntry {
             id: oid.to_string(),
-            summary: commit.summary().unwrap_or("无提交说明").to_string(),
+            summary: {
+                let no_msg = i18n::t("git.no_commit_message");
+                commit.summary().unwrap_or(&no_msg).to_string()
+            },
             author_name: commit.author().name().unwrap_or("Unknown").to_string(),
             committed_at,
         });
@@ -89,11 +93,11 @@ pub(crate) fn undo_last_commit(root_path: &Path) -> GitResult<GitSyncResult> {
     let head = repo.head()?;
     let head_target = head
         .target()
-        .ok_or_else(|| GitServiceError::message("当前 HEAD 没有指向有效提交"))?;
+        .ok_or_else(|| GitServiceError::message(i18n::t("git.head_not_commit")))?;
     let head_commit = repo.find_commit(head_target)?;
     let parent = head_commit
         .parent(0)
-        .map_err(|_| GitServiceError::message("当前提交没有父提交，无法撤销最近一次提交"))?;
+        .map_err(|_| GitServiceError::message(i18n::t("git.no_parent_commit")))?;
     let parent_object = repo.find_object(parent.id(), None)?;
 
     repo.reset(&parent_object, ResetType::Mixed, None)?;
@@ -101,7 +105,10 @@ pub(crate) fn undo_last_commit(root_path: &Path) -> GitResult<GitSyncResult> {
     Ok(GitSyncResult {
         branch: repository::head_branch_name(&repo),
         conflicts: Vec::new(),
-        message: format!("已撤销最近提交 {}，改动保留在工作区", head_commit.id()),
+        message: {
+            let commit_id = head_commit.id().to_string();
+            i18n::tf("git.undo_commit_success", &[("commit", &commit_id)])
+        },
     })
 }
 
@@ -132,16 +139,17 @@ pub(crate) fn revert_commit(
         return Ok(GitSyncResult {
             branch: repository::head_branch_name(&repo),
             conflicts: unresolved_conflicts,
-            message: "回滚时产生冲突，请解决后提交".to_string(),
+            message: i18n::t("git.revert_conflict"),
         });
     }
 
     let mut index = repo.index()?;
     let head_commit = repo.head()?.peel_to_commit()?;
     let revert_tree = repo.find_tree(index.write_tree_to(&repo)?)?;
+    let no_msg = i18n::t("git.no_commit_message");
     let message = format!(
         "Revert \"{}\"\n\nThis reverts commit {}.",
-        commit_to_revert.summary().unwrap_or("无提交说明"),
+        commit_to_revert.summary().unwrap_or(&no_msg),
         commit_to_revert.id()
     );
 
@@ -165,7 +173,13 @@ pub(crate) fn revert_commit(
     Ok(GitSyncResult {
         branch: repository::head_branch_name(&repo),
         conflicts: Vec::new(),
-        message: format!("已回滚提交 {commit_id}，新提交为 {new_commit_id}"),
+        message: i18n::tf(
+            "git.revert_success",
+            &[
+                ("commit_id", commit_id),
+                ("new_commit_id", &new_commit_id.to_string()),
+            ],
+        ),
     })
 }
 
@@ -175,10 +189,10 @@ enum CommitMode {
 }
 
 impl CommitMode {
-    fn empty_index_message(&self) -> &'static str {
+    fn empty_index_message(&self) -> String {
         match self {
-            Self::StagedOnly => "暂存区为空，请先暂存文件",
-            Self::AllChanges => "没有可提交的更改",
+            Self::StagedOnly => i18n::t("git.empty_staging"),
+            Self::AllChanges => i18n::t("git.no_changes_to_commit"),
         }
     }
 
@@ -212,10 +226,12 @@ fn create_commit(
         } else {
             unresolved_conflicts
         };
-        return Err(GitServiceError::message(format!(
-            "仍有 {} 个冲突文件未解决。请在提交面板中逐个暂存以标记已解决: {}",
-            conflicts.len(),
-            conflicts.join(", ")
+        return Err(GitServiceError::message(i18n::tf(
+            "git.unresolved_conflicts",
+            &[
+                ("count", &conflicts.len().to_string()),
+                ("files", &conflicts.join(", ")),
+            ],
         )));
     }
 
@@ -226,7 +242,9 @@ fn create_commit(
 
     if let Some(parent_commit) = parent_commit.as_ref() {
         if parent_commit.tree_id() == tree_id {
-            return Err(GitServiceError::message("没有可提交的更改"));
+            return Err(GitServiceError::message(i18n::t(
+                "git.no_changes_to_commit",
+            )));
         }
     }
 
@@ -249,11 +267,7 @@ fn create_commit(
             &[parent_commit],
         )?,
         (None, None) => repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?,
-        (None, Some(_)) => {
-            return Err(GitServiceError::message(
-                "当前合并状态缺少有效的本地父提交，无法创建合并提交",
-            ))
-        }
+        (None, Some(_)) => return Err(GitServiceError::message(i18n::t("git.no_merge_parent"))),
     };
 
     if repo.state() == git2::RepositoryState::Merge {
@@ -263,7 +277,7 @@ fn create_commit(
     Ok(GitSyncResult {
         branch: repository::head_branch_name(repo),
         conflicts: Vec::new(),
-        message: format!("提交成功: {commit_id}"),
+        message: i18n::tf("git.commit_success", &[("commit", &commit_id.to_string())]),
     })
 }
 
@@ -290,10 +304,10 @@ fn merge_parent_commit(repo: &Repository) -> GitResult<Option<git2::Commit<'_>>>
 
     let merge_head = repo
         .find_reference("MERGE_HEAD")
-        .map_err(|_| GitServiceError::message("检测到合并状态，但缺少 MERGE_HEAD 引用"))?;
+        .map_err(|_| GitServiceError::message(i18n::t("git.no_merge_head")))?;
     let merge_parent_id = merge_head
         .target()
-        .ok_or_else(|| GitServiceError::message("MERGE_HEAD 没有指向有效提交"))?;
+        .ok_or_else(|| GitServiceError::message(i18n::t("git.merge_head_invalid")))?;
     repo.find_commit(merge_parent_id)
         .map(Some)
         .map_err(Into::into)

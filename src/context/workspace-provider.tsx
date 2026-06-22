@@ -26,6 +26,7 @@ import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
 import create from 'zustand';
 import { useEffect, type ReactNode } from 'react';
 
+import i18n from '@/i18n';
 import { useAppSettingsStore } from '@/context/app-settings-provider';
 import { isEditorDirty } from '@/lib/unsaved-registry';
 import type { TabEntry } from '@/components/explorer/workspace/tab-bar';
@@ -211,7 +212,7 @@ function findFirstFile(node: ExplorerNode): ExplorerNode | null {
 function getErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	if (typeof error === 'string') return error;
-	return '发生了未知错误';
+	return i18n.t('common.status.unknownError');
 }
 
 function findNodeByPath(node: ExplorerNode, path: string): ExplorerNode | null {
@@ -1095,7 +1096,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 			set({ gitStatus: nextStatus });
 		} catch (error) {
 			set({ gitStatus: null });
-			showErrorToast('Git 状态读取失败', getErrorMessage(error));
+			showErrorToast(i18n.t('git.fetchStatusFailed'), getErrorMessage(error));
 		} finally {
 			set({ gitBusy: false });
 		}
@@ -1429,7 +1430,8 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 		const skippedCount = sourcePaths.length - validPaths.length;
 
 		if (validPaths.length === 0) {
-			if (skippedCount > 0) showErrorToast('仅支持导入 .md/.mdx 文件和图片');
+			if (skippedCount > 0)
+				showErrorToast(i18n.t('explorerPanel.importUnsupported'));
 			return;
 		}
 
@@ -1468,10 +1470,17 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			if (skippedCount > 0) {
 				showSuccessToast(
-					`已导入 ${importedNodes.length} 个文件，${skippedCount} 个跳过（仅支持 .md/.mdx 和图片）`
+					i18n.t('explorerPanel.importSummaryWithSkipped', {
+						imported: importedNodes.length,
+						skipped: skippedCount,
+					})
 				);
 			} else {
-				showSuccessToast(`已导入 ${importedNodes.length} 个文件`);
+				showSuccessToast(
+					i18n.t('explorerPanel.importSummary', {
+						count: importedNodes.length,
+					})
+				);
 			}
 		} catch (error) {
 			set({ sidebarError: getErrorMessage(error) });
@@ -1793,12 +1802,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		if (!sidebarError) return;
-		showErrorToast('工作区操作失败', sidebarError);
+		showErrorToast(
+			i18n.t('explorerPanel.workspaceOperationFailed'),
+			sidebarError
+		);
 	}, [sidebarError]);
 
 	useEffect(() => {
 		if (!previewError) return;
-		showErrorToast('文件读取失败', previewError);
+		showErrorToast(i18n.t('explorerPanel.fileReadFailed'), previewError);
 	}, [previewError]);
 
 	/* ── re-scan on showHiddenFiles change ── */

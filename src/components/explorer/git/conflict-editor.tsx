@@ -2,6 +2,7 @@ import { writeWorkspaceFile } from '@/invoke/explorer';
 import { gitStageFile } from '@/invoke/git';
 import { Check, ChevronsLeftRight } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { explorerBottomSectionHeightClassName } from '../layout';
@@ -66,6 +67,7 @@ export function ConflictEditor({
 	filePath: string;
 	rootPath: string;
 }) {
+	const { t } = useTranslation();
 	const [blocks] = useState<Block[]>(() => parseConflictMarkers(content));
 	const [choices, setChoices] = useState<Record<number, SideChoice>>({});
 	const [resolving, setResolving] = useState(false);
@@ -141,7 +143,10 @@ export function ConflictEditor({
 								>
 									<div className="flex items-center gap-2">
 										<span className="text-xs font-medium text-muted-foreground">
-											冲突 {conflictNumber} / {conflictIndices.length}
+											{t('conflictEditor.conflictCount', {
+												current: conflictNumber,
+												total: conflictIndices.length,
+											})}
 										</span>
 										{choice && (
 											<span
@@ -149,7 +154,7 @@ export function ConflictEditor({
 													text-green-600 dark:text-green-400"
 											>
 												<Check className="size-3" />
-												已选择
+												{t('conflictEditor.selected')}
 											</span>
 										)}
 									</div>
@@ -173,7 +178,7 @@ export function ConflictEditor({
 										>
 											{choice === 'both' && <Check className="size-3" />}
 											<ChevronsLeftRight className="size-3" />
-											两者都保留
+											{t('conflictEditor.keepBoth')}
 										</button>
 									</div>
 								</div>
@@ -189,7 +194,7 @@ export function ConflictEditor({
 												className="truncate text-xs font-medium text-green-700
 													dark:text-green-400"
 											>
-												当前分支 HEAD
+												{t('conflictEditor.currentBranch')}
 											</span>
 											<button
 												type="button"
@@ -209,7 +214,7 @@ export function ConflictEditor({
 												}}
 											>
 												{choice === 'ours' && <Check className="size-3" />}
-												采用
+												{t('conflictEditor.useChoice')}
 											</button>
 										</div>
 										<pre
@@ -218,7 +223,7 @@ export function ConflictEditor({
 										>
 											{conflictBlock.ours || (
 												<span className="italic text-muted-foreground">
-													（空）
+													{t('conflictEditor.empty')}
 												</span>
 											)}
 										</pre>
@@ -234,7 +239,8 @@ export function ConflictEditor({
 												className="truncate text-xs font-medium text-blue-700
 													dark:text-blue-400"
 											>
-												{conflictBlock.label || '传入更改'}
+												{conflictBlock.label ||
+													t('conflictEditor.incomingChanges')}
 											</span>
 											<button
 												type="button"
@@ -254,7 +260,7 @@ export function ConflictEditor({
 												}}
 											>
 												{choice === 'theirs' && <Check className="size-3" />}
-												采用
+												{t('conflictEditor.useChoice')}
 											</button>
 										</div>
 										<pre
@@ -263,7 +269,7 @@ export function ConflictEditor({
 										>
 											{conflictBlock.theirs || (
 												<span className="italic text-muted-foreground">
-													（空）
+													{t('conflictEditor.empty')}
 												</span>
 											)}
 										</pre>
@@ -290,10 +296,10 @@ export function ConflictEditor({
 					variant="default"
 				>
 					{resolving
-						? '正在解决...'
+						? t('conflictEditor.resolving')
 						: allResolved
-							? '完成解决冲突'
-							: `还有 ${unresolvedCount} 处冲突未选择`}
+							? t('conflictEditor.complete')
+							: t('conflictEditor.remaining', { count: unresolvedCount })}
 				</Button>
 			</div>
 		</div>

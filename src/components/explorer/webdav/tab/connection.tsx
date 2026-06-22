@@ -1,4 +1,5 @@
 import { Cloud, Loader2, Save, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -30,6 +31,8 @@ export function WebDavTabConnection({
 	onSaveConfig,
 	onDeleteConfig,
 }: WebDavTabConnectionProps) {
+	const { t } = useTranslation();
+
 	return (
 		<div className="size-full min-h-0 flex-1 overflow-auto">
 			<div className="space-y-6 p-4 sm:p-6">
@@ -38,16 +41,16 @@ export function WebDavTabConnection({
 						className="text-xs font-medium uppercase tracking-[0.18em]
 							text-muted-foreground"
 					>
-						连接
+						{t('webdav.connection.sectionLabel')}
 					</p>
 					<h3 className="text-2xl font-semibold text-foreground">
-						服务器与认证
+						{t('webdav.connection.sectionTitle')}
 					</h3>
 				</div>
 
-				<SettingsSectionCard title="服务器连接">
+				<SettingsSectionCard title={t('webdav.connection.cardTitle')}>
 					<div className="space-y-3">
-						<FieldBlock label="服务器地址">
+						<FieldBlock label={t('webdav.connection.serverUrl')}>
 							<Input
 								placeholder="https://dav.example.com/remote.php/dav/files/user/"
 								value={config?.url ?? ''}
@@ -58,7 +61,7 @@ export function WebDavTabConnection({
 								}
 							/>
 						</FieldBlock>
-						<FieldBlock label="用户名">
+						<FieldBlock label={t('webdav.connection.username')}>
 							<Input
 								placeholder="username"
 								value={config?.username ?? ''}
@@ -71,7 +74,7 @@ export function WebDavTabConnection({
 								}
 							/>
 						</FieldBlock>
-						<FieldBlock label="密码">
+						<FieldBlock label={t('webdav.connection.password')}>
 							<Input
 								type="password"
 								placeholder="••••••••"
@@ -91,7 +94,9 @@ export function WebDavTabConnection({
 								) : (
 									<Cloud className="size-3.5" />
 								)}
-								{testing ? '测试中…' : '测试连接'}
+								{testing
+									? t('webdav.connection.testing')
+									: t('webdav.connection.testAction')}
 							</Button>
 							<Button
 								variant="default"
@@ -101,7 +106,7 @@ export function WebDavTabConnection({
 								disabled={!config}
 							>
 								<Save className="size-3.5" />
-								保存配置
+								{t('webdav.connection.saveAction')}
 							</Button>
 							<Button
 								variant="destructive"
@@ -110,7 +115,7 @@ export function WebDavTabConnection({
 								disabled={!config?.url && !config?.username}
 							>
 								<Trash2 className="size-3.5" />
-								清除
+								{t('webdav.connection.clearAction')}
 							</Button>
 						</div>
 					</div>

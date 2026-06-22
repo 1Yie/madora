@@ -48,6 +48,7 @@ import { Input } from '@/components/ui/input';
 import { DialogSidebar } from '@/components/ui/dialog-sidebar';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { useTranslation } from 'react-i18next';
 import {
 	Tooltip,
 	TooltipContent,
@@ -87,81 +88,69 @@ type GitHistoryAction =
 
 const CREDENTIALS_DEBOUNCE_MS = 2000;
 
-const workbenchSections = [
-	{
-		id: 'commit' as GitWorkbenchTab,
-		label: '提交',
-		description: '创建新提交',
-		icon: Check,
-	},
-	{
-		id: 'history' as GitWorkbenchTab,
-		label: '历史',
-		description: '提交记录',
-		icon: History,
-	},
-	{
-		id: 'remote' as GitWorkbenchTab,
-		label: '远端',
-		description: '远端同步配置',
-		icon: Settings2,
-	},
-	{
-		id: 'ssh' as GitWorkbenchTab,
-		label: 'SSH',
-		description: '认证凭据设置',
-		icon: KeyRound,
-	},
-];
-
 type GitSummaryPart = {
 	key: string;
 	text: string;
 	icon?: LucideIcon;
 };
 
-function getBranchLabel(status: GitStatus | null): string {
+function getBranchLabel(
+	status: GitStatus | null,
+	t: (k: string) => string
+): string {
 	if (!status?.branch?.name) {
-		return '未初始化 Git';
+		return t('git.status.notInitialized');
 	}
 
 	return status.branch.name;
 }
 
-function getConflictSummary(status: GitStatus): string | null {
+function getConflictSummary(
+	status: GitStatus,
+	t: (k: string, opts?: Record<string, unknown>) => string
+): string | null {
 	if (status.conflictedFiles.length === 0) {
 		return null;
 	}
 
 	switch (status.repositoryState) {
 		case 'revert':
-			return `正在回滚，${status.conflictedFiles.length} 个冲突待解决`;
+			return t('git.status.reverting', {
+				count: status.conflictedFiles.length,
+			});
 		case 'merge':
-			return `正在合并，${status.conflictedFiles.length} 个冲突待解决`;
+			return t('git.status.merging', { count: status.conflictedFiles.length });
 		case 'cherryPick':
-			return `正在拣选，${status.conflictedFiles.length} 个冲突待解决`;
+			return t('git.status.cherryPicking', {
+				count: status.conflictedFiles.length,
+			});
 		case 'rebase':
-			return `正在变基，${status.conflictedFiles.length} 个冲突待解决`;
+			return t('git.status.rebasing', { count: status.conflictedFiles.length });
 		default:
-			return `${status.conflictedFiles.length} 个冲突待解决`;
+			return t('git.status.conflicts', {
+				count: status.conflictedFiles.length,
+			});
 	}
 }
 
-function getSummaryParts(status: GitStatus): GitSummaryPart[] {
+function getSummaryParts(
+	status: GitStatus,
+	t: (k: string, opts?: Record<string, unknown>) => string
+): GitSummaryPart[] {
 	const parts: GitSummaryPart[] = [];
 
 	if (status.totalChangedCount === 0) {
-		parts.push({ key: 'clean', text: '工作区干净' });
+		parts.push({ key: 'clean', text: t('git.status.clean') });
 	} else {
 		parts.push({
 			icon: Check,
 			key: 'staged',
-			text: `${status.stagedCount} 已暂存`,
+			text: t('git.status.staged', { count: status.stagedCount }),
 		});
 		parts.push({
 			icon: Plus,
 			key: 'unstaged',
-			text: `${status.unstagedCount} 未暂存`,
+			text: t('git.status.unstaged', { count: status.unstagedCount }),
 		});
 	}
 
@@ -169,7 +158,7 @@ function getSummaryParts(status: GitStatus): GitSummaryPart[] {
 		parts.push({
 			icon: ArrowUpFromLine,
 			key: 'ahead',
-			text: `领先 ${status.branch.ahead}`,
+			text: t('git.status.ahead', { count: status.branch.ahead }),
 		});
 	}
 
@@ -177,29 +166,32 @@ function getSummaryParts(status: GitStatus): GitSummaryPart[] {
 		parts.push({
 			icon: ArrowDownToLine,
 			key: 'behind',
-			text: `落后 ${status.branch.behind}`,
+			text: t('git.status.behind', { count: status.branch.behind }),
 		});
 	}
 
 	return parts;
 }
 
-function getSummary(status: GitStatus | null): string {
+function getSummary(
+	status: GitStatus | null,
+	t: (k: string, opts?: Record<string, unknown>) => string
+): string {
 	if (!status) {
-		return '正在读取仓库状态';
+		return t('git.status.loading');
 	}
 
 	if (!status.hasRepository) {
-		return '当前工作区还不是 Git 仓库';
+		return t('git.status.notARepo');
 	}
 
-	const conflictSummary = getConflictSummary(status);
+	const conflictSummary = getConflictSummary(status, t);
 
 	if (conflictSummary) {
 		return conflictSummary;
 	}
 
-	return getSummaryParts(status)
+	return getSummaryParts(status, t)
 		.map((part) => part.text)
 		.join(' · ');
 }
@@ -211,37 +203,48 @@ function GitSummaryIcons({
 	className?: string;
 	status: GitStatus | null;
 }) {
+	const { t } = useTranslation();
+
 	if (!status) {
-		return '正在读取仓库状态';
+		return t('git.status.loading');
 	}
 	if (!status.hasRepository) {
-		return '当前工作区还不是 Git 仓库';
+		return t('git.status.notARepo');
 	}
 
-	const conflictSummary = getConflictSummary(status);
+	const conflictSummary = getConflictSummary(status, t);
 
 	if (conflictSummary) {
 		return conflictSummary;
 	}
 
 	return (
-		<span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
-			{getSummaryParts(status).map((part, index) => {
+		<span
+			className={cn(
+				'flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 leading-4',
+				className
+			)}
+		>
+			{getSummaryParts(status, t).map((part, index) => {
 				const Icon = part.icon;
 
 				return (
 					<Fragment key={part.key}>
 						{index > 0 ? (
-							<span className="text-muted-foreground">·</span>
+							<span className="shrink-0 leading-4 text-muted-foreground">
+								·
+							</span>
 						) : null}
-						<span className="inline-flex items-center gap-1 align-middle">
+						<span className="flex min-w-0 items-center gap-1 leading-4">
 							{Icon ? (
-								<span className="inline-flex size-3.5 items-center
-									justify-center">
+								<span
+									className="inline-flex size-3.5 shrink-0 items-center
+										justify-center"
+								>
 									<Icon className="size-3 shrink-0" />
 								</span>
 							) : null}
-							<span>{part.text}</span>
+							<span className="min-w-0 leading-4">{part.text}</span>
 						</span>
 					</Fragment>
 				);
@@ -259,6 +262,35 @@ export function GitPanel({
 	onRefreshWorkspace,
 	onStatusChange,
 }: GitPanelProps) {
+	const { t } = useTranslation();
+
+	const workbenchSections = [
+		{
+			id: 'commit' as GitWorkbenchTab,
+			label: t('git.tab.commit'),
+			description: t('git.tab.commitDesc'),
+			icon: Check,
+		},
+		{
+			id: 'history' as GitWorkbenchTab,
+			label: t('git.tab.history'),
+			description: t('git.tab.historyDesc'),
+			icon: History,
+		},
+		{
+			id: 'remote' as GitWorkbenchTab,
+			label: t('git.tab.remote'),
+			description: t('git.tab.remoteDesc'),
+			icon: Settings2,
+		},
+		{
+			id: 'ssh' as GitWorkbenchTab,
+			label: 'SSH',
+			description: t('git.tab.authDesc'),
+			icon: KeyRound,
+		},
+	];
+
 	const [workbenchOpen, setWorkbenchOpen] = useState(false);
 	const [activeTab, setActiveTab] = useState<GitWorkbenchTab>('commit');
 	const [actionBusy, setActionBusy] = useState(false);
@@ -380,7 +412,7 @@ export function GitPanel({
 			return result;
 		} catch (error) {
 			showErrorToast(
-				'Git 操作失败',
+				t('git.gitOperationFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 			return null;
@@ -417,7 +449,7 @@ export function GitPanel({
 			setBranches(list);
 		} catch (error) {
 			showErrorToast(
-				'获取分支列表失败',
+				t('git.fetchBranchListFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 		} finally {
@@ -458,7 +490,7 @@ export function GitPanel({
 			await refreshStatus();
 		} catch (error) {
 			showErrorToast(
-				'创建分支失败',
+				t('git.createBranchFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 		} finally {
@@ -482,7 +514,7 @@ export function GitPanel({
 
 		const nextStatus = await runAction(
 			() => gitInit({ rootPath }),
-			'已初始化 Git 仓库'
+			t('git.initSuccess')
 		);
 
 		if (nextStatus) {
@@ -500,7 +532,7 @@ export function GitPanel({
 		const trimmedUrl = remoteUrl.trim();
 
 		if (!trimmedName || !trimmedUrl) {
-			showErrorToast('远端保存失败', '请填写远端名称和仓库地址');
+			showErrorToast(t('git.remoteSaveFailed'), t('git.remoteSaveFailedHint'));
 			return;
 		}
 
@@ -511,7 +543,7 @@ export function GitPanel({
 					remoteUrl: trimmedUrl,
 					rootPath,
 				}),
-			'远端已保存'
+			t('git.remoteSaved')
 		);
 
 		if (nextStatus) {
@@ -528,7 +560,7 @@ export function GitPanel({
 		const trimmedMessage = commitMessage.trim();
 
 		if (!trimmedMessage) {
-			showErrorToast('提交失败', '请输入提交说明');
+			showErrorToast(t('git.commitFailed'), t('git.commitMessageRequired'));
 			return;
 		}
 
@@ -540,7 +572,7 @@ export function GitPanel({
 					message: trimmedMessage,
 					rootPath,
 				}),
-			'提交成功'
+			t('git.commitSuccess')
 		);
 
 		if (result) {
@@ -559,7 +591,7 @@ export function GitPanel({
 		const trimmedMessage = commitMessage.trim();
 
 		if (!trimmedMessage) {
-			showErrorToast('提交失败', '请输入提交说明');
+			showErrorToast(t('git.commitFailed'), t('git.commitMessageRequired'));
 			return;
 		}
 
@@ -571,7 +603,7 @@ export function GitPanel({
 					message: trimmedMessage,
 					rootPath,
 				}),
-			'提交成功'
+			t('git.commitSuccess')
 		);
 
 		if (result) {
@@ -623,7 +655,7 @@ export function GitPanel({
 					remoteName: remoteName.trim() || primaryRemote?.name || 'origin',
 					rootPath,
 				}),
-			'推送成功'
+			t('git.pushSuccess')
 		);
 
 		if (result) {
@@ -648,12 +680,12 @@ export function GitPanel({
 					remoteName: remoteName.trim() || primaryRemote?.name || 'origin',
 					rootPath,
 				}),
-			'拉取完成'
+			t('git.pullComplete')
 		);
 
 		if (result) {
 			if (result.conflicts.length > 0) {
-				showErrorToast('存在合并冲突', result.conflicts.join('\n'));
+				showErrorToast(t('git.mergeConflicts'), result.conflicts.join('\n'));
 			}
 
 			await refreshStatus();
@@ -674,7 +706,7 @@ export function GitPanel({
 					remoteName: remoteName.trim() || primaryRemote?.name || 'origin',
 					rootPath,
 				}),
-			'已获取远端更新'
+			t('git.fetchComplete')
 		);
 
 		if (result) {
@@ -691,11 +723,11 @@ export function GitPanel({
 
 			if (selectedPath) {
 				setSshPrivateKeyPath(selectedPath);
-				showSuccessToast('已选择 SSH 私钥文件');
+				showSuccessToast(t('git.sshKeySelected'));
 			}
 		} catch (error) {
 			showErrorToast(
-				'选择文件失败',
+				t('git.selectFileFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 		} finally {
@@ -710,7 +742,7 @@ export function GitPanel({
 
 		const result = await runAction(
 			() => gitUndoLastCommit({ rootPath }),
-			'已撤销最近提交'
+			t('git.undoSuccess')
 		);
 
 		if (result) {
@@ -732,12 +764,12 @@ export function GitPanel({
 					commitId,
 					rootPath,
 				}),
-			'已生成回滚提交'
+			t('git.revertSuccess')
 		);
 
 		if (result) {
 			if (result.conflicts.length > 0) {
-				showErrorToast('回滚提交出现冲突', result.conflicts.join('\n'));
+				showErrorToast(t('git.revertConflicts'), result.conflicts.join('\n'));
 			}
 
 			await refreshStatus();
@@ -754,8 +786,8 @@ export function GitPanel({
 		}
 	};
 
-	const branchLabel = getBranchLabel(status);
-	const summary = getSummary(status);
+	const branchLabel = getBranchLabel(status, t);
+	const summary = getSummary(status, t);
 	const statusTooltip = `${branchLabel} · ${summary}`;
 	const upstreamLabel = status?.branch?.upstream ?? null;
 
@@ -772,14 +804,14 @@ export function GitPanel({
 						<Tooltip>
 							<TooltipTrigger
 								className="flex min-w-0 flex-1 items-center gap-2
-									overflow-hidden rounded-md px-2 py-1 text-left leading-none
+									overflow-hidden rounded-md px-2 py-1 text-left leading-4
 									text-muted-foreground outline-none hover:bg-sidebar-accent/60"
 								render={
 									<PopoverTrigger
 										aria-label={statusTooltip}
 										className="flex min-w-0 flex-1 items-center gap-2
-											overflow-hidden rounded-md px-2 py-1 text-left
-											leading-none text-muted-foreground outline-none
+											overflow-hidden rounded-md px-2 py-1 text-left leading-4
+											text-muted-foreground outline-none
 											hover:bg-sidebar-accent/60"
 									>
 										{busy || actionBusy || branchActionBusy ? (
@@ -845,7 +877,7 @@ export function GitPanel({
 											className="px-3 py-4 text-center text-xs
 												text-muted-foreground"
 										>
-											{branchesLoaded ? '暂无分支' : '加载中...'}
+											{branchesLoaded ? t('git.noBranches') : t('git.loading')}
 										</p>
 									) : (
 										branches.map((branch) => (
@@ -867,7 +899,7 @@ export function GitPanel({
 														className="ml-auto shrink-0 text-[10px] font-medium
 															text-muted-foreground"
 													>
-														当前
+														{t('common.status.current')}
 													</span>
 												) : null}
 											</Button>
@@ -907,13 +939,13 @@ export function GitPanel({
 					<Tooltip>
 						<TooltipTrigger
 							className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden
-								rounded-md px-2 py-1 text-left leading-none
-								text-muted-foreground outline-none"
+								rounded-md px-2 py-1 text-left leading-4 text-muted-foreground
+								outline-none"
 							render={
 								<button
 									aria-label={statusTooltip}
 									className="flex min-w-0 flex-1 items-center gap-2
-										overflow-hidden rounded-md px-2 py-1 text-left leading-none
+										overflow-hidden rounded-md px-2 py-1 text-left leading-4
 										text-muted-foreground outline-none
 										hover:bg-sidebar-accent/60"
 									type="button"
@@ -956,7 +988,7 @@ export function GitPanel({
 				>
 					{!status?.hasRepository && status?.hasGitDirectory ? (
 						<span className="text-xs text-muted-foreground whitespace-nowrap">
-							该仓库不是由 Madora 创建的
+							{t('git.notMadoraRepo')}
 						</span>
 					) : !status?.hasRepository ? (
 						<Button
@@ -966,7 +998,7 @@ export function GitPanel({
 							variant="outline"
 						>
 							<Plus />
-							初始化
+							{t('git.init')}
 						</Button>
 					) : (
 						<>
@@ -1053,10 +1085,10 @@ export function GitPanel({
 												className="text-xs font-medium uppercase
 													tracking-[0.18em] text-muted-foreground"
 											>
-												历史
+												{t('git.tab.history')}
 											</p>
 											<h3 className="text-2xl font-semibold text-foreground">
-												提交记录
+												{t('git.tab.historyDesc')}
 											</h3>
 										</div>
 										<GitTabHistory
@@ -1064,7 +1096,6 @@ export function GitPanel({
 											branchLabel={branchLabel}
 											gitLog={gitLog}
 											upstreamLabel={upstreamLabel}
-											onRefresh={() => void loadGitLog()}
 											onRevertRequest={(commitId, summary) =>
 												setPendingHistoryAction({
 													type: 'revert-commit',
@@ -1085,10 +1116,10 @@ export function GitPanel({
 												className="text-xs font-medium uppercase
 													tracking-[0.18em] text-muted-foreground"
 											>
-												提交
+												{t('git.tab.commit')}
 											</p>
 											<h3 className="text-2xl font-semibold text-foreground">
-												创建新提交
+												{t('git.tab.commitDesc')}
 											</h3>
 										</div>
 										<GitTabCommit
@@ -1115,12 +1146,12 @@ export function GitPanel({
 															className="text-xs font-medium uppercase
 																tracking-[0.18em] text-muted-foreground"
 														>
-															远端
+															{t('git.tab.remote')}
 														</p>
 														<h3
 															className="text-2xl font-semibold text-foreground"
 														>
-															远端同步配置
+															{t('git.tab.remoteDesc')}
 														</h3>
 													</div>
 													<GitTabRemote
@@ -1150,7 +1181,7 @@ export function GitPanel({
 														<h3
 															className="text-2xl font-semibold text-foreground"
 														>
-															认证凭据设置
+															{t('git.tab.authDesc')}
 														</h3>
 													</div>
 													<GitTabSsh
@@ -1178,7 +1209,7 @@ export function GitPanel({
 						<DialogFooter className="justify-between sm:justify-between">
 							<div
 								className="flex min-w-0 flex-1 items-center gap-2 text-xs
-									text-muted-foreground"
+									leading-4 text-muted-foreground"
 							>
 								{busy || actionBusy ? (
 									<LoaderCircle className="size-3.5 animate-spin" />
@@ -1187,12 +1218,12 @@ export function GitPanel({
 								)}
 								<div
 									className="flex min-w-0 flex-1 items-center gap-1.5
-										overflow-hidden"
+										overflow-x-hidden"
 								>
 									<span className="shrink truncate">{branchLabel}</span>
 									<span className="shrink-0 text-muted-foreground">·</span>
 									<GitSummaryIcons
-										className="min-w-0 flex-1 overflow-hidden"
+										className="min-w-0 flex-1 overflow-x-hidden"
 										status={status}
 									/>
 								</div>
@@ -1215,7 +1246,7 @@ export function GitPanel({
 									variant="outline"
 								>
 									<ArrowDownToLine />
-									拉取
+									{t('git.pull')}
 								</Button>
 								<Button
 									disabled={!canOperate}
@@ -1224,7 +1255,7 @@ export function GitPanel({
 									variant="outline"
 								>
 									<ArrowUpFromLine />
-									推送
+									{t('git.push')}
 								</Button>
 							</div>
 						</DialogFooter>
@@ -1243,13 +1274,15 @@ export function GitPanel({
 					<DialogHeader>
 						<DialogTitle>
 							{pendingHistoryAction?.type === 'undo-last'
-								? '撤销最近提交'
-								: '回滚指定提交'}
+								? t('git.undoLastCommit')
+								: t('git.revertSelectedCommit')}
 						</DialogTitle>
 						<DialogDescription>
 							{pendingHistoryAction?.type === 'undo-last'
-								? '会把最近一次提交从历史中移除，但保留改动到工作区。该操作只建议在还未推送时使用。'
-								: `会创建一个新的回滚提交，用来撤销这次提交的效果：${pendingHistoryAction?.summary ?? ''}`}
+								? t('git.undoDescription')
+								: t('git.revertDescriptionWithSummary', {
+										summary: pendingHistoryAction?.summary ?? '',
+									})}
 						</DialogDescription>
 					</DialogHeader>
 
@@ -1259,7 +1292,7 @@ export function GitPanel({
 								onClick={() => setPendingHistoryAction(null)}
 								variant="outline"
 							>
-								取消
+								{t('common.actions.cancel')}
 							</Button>
 							<Button
 								loading={actionBusy}
@@ -1283,8 +1316,8 @@ export function GitPanel({
 								}
 							>
 								{pendingHistoryAction?.type === 'undo-last'
-									? '确认撤销'
-									: '确认回滚'}
+									? t('git.confirmUndo')
+									: t('git.confirmRevert')}
 							</Button>
 						</div>
 					</DialogFooter>

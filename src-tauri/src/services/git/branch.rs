@@ -2,6 +2,7 @@ use std::path::Path;
 
 use git2::{BranchType, ErrorCode, Repository, StatusOptions};
 
+use crate::i18n;
 use crate::models::git::{GitBranchInfo, GitStatus};
 
 use super::{
@@ -14,7 +15,7 @@ pub(crate) fn stage_file(root_path: &Path, path: &Path) -> GitResult<GitStatus> 
     let relative_path = repository::relative_repo_path(&repo, path)?;
     let worktree_path = repo
         .workdir()
-        .ok_or_else(|| GitServiceError::message("当前仓库没有可用的工作区目录"))?
+        .ok_or_else(|| GitServiceError::message(i18n::t("git.no_workdir")))?
         .join(&relative_path);
     let mut index = repo.index()?;
     if worktree_path.exists() {
@@ -59,7 +60,7 @@ pub(crate) fn restore_file(root_path: &Path, path: &Path) -> GitResult<GitStatus
     let relative_path = repository::relative_repo_path(&repo, path)?;
     let head = repo.head().map_err(|error| {
         if error.code() == ErrorCode::UnbornBranch {
-            GitServiceError::message("当前仓库还没有提交，无法恢复文件")
+            GitServiceError::message(i18n::t("git.no_commits_to_restore"))
         } else {
             error.into()
         }
@@ -109,9 +110,9 @@ pub(crate) fn create_branch(root_path: &Path, branch_name: &str) -> GitResult<Gi
     let head = match repo.head() {
         Ok(head) => head,
         Err(error) if error.code() == ErrorCode::UnbornBranch => {
-            return Err(GitServiceError::message(
-                "当前仓库还没有提交，请先提交后再创建分支",
-            ))
+            return Err(GitServiceError::message(i18n::t(
+                "git.no_commits_to_branch",
+            )))
         }
         Err(error) => return Err(error.into()),
     };
@@ -125,8 +126,9 @@ pub(crate) fn switch_branch(root_path: &Path, branch_name: &str) -> GitResult<Gi
     ensure_clean_for_branch_switch(&repo)?;
 
     let refname = format!("refs/heads/{branch_name}");
-    repo.find_reference(&refname)
-        .map_err(|_| GitServiceError::message(format!("未找到分支: {branch_name}")))?;
+    repo.find_reference(&refname).map_err(|_| {
+        GitServiceError::message(i18n::tf("git.branch_not_found", &[("branch", branch_name)]))
+    })?;
 
     repo.set_head(&refname)?;
     let mut checkout = git2::build::CheckoutBuilder::new();
@@ -144,9 +146,7 @@ fn ensure_clean_for_branch_switch(repo: &Repository) -> GitResult<()> {
         .include_unmodified(false);
 
     if !repo.statuses(Some(&mut status_options))?.is_empty() {
-        return Err(GitServiceError::message(
-            "工作区有未提交的更改，请先提交或撤销更改后再切换分支",
-        ));
+        return Err(GitServiceError::message(i18n::t("git.uncommitted_switch")));
     }
 
     Ok(())

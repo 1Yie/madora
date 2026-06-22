@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::i18n;
+
 use git2::{ErrorCode, Index, Repository, Status, StatusEntry, StatusOptions};
 
 use crate::models::git::{GitFileState, GitFileStatus, GitRepositoryState, GitStatus};
@@ -241,7 +243,7 @@ fn extract_entry_path(entry: &StatusEntry<'_>) -> Option<PathBuf> {
 fn worktree_has_conflict_markers(repo: &Repository, relative_path: &Path) -> GitResult<bool> {
     let workdir = repo
         .workdir()
-        .ok_or_else(|| GitServiceError::message("当前仓库没有可用的工作区目录"))?;
+        .ok_or_else(|| GitServiceError::message(i18n::t("git.no_workdir")))?;
     let full_path = workdir.join(relative_path);
     let metadata = match std::fs::metadata(&full_path) {
         Ok(metadata) => metadata,

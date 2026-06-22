@@ -26,25 +26,11 @@ import {
 	TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { useTranslation } from 'react-i18next';
 import { WebDavTabConnection } from './tab/connection';
 import { WebDavTabSync } from './tab/sync';
 
 type WebDavWorkbenchTab = 'connection' | 'sync';
-
-const workbenchSections = [
-	{
-		id: 'connection' as WebDavWorkbenchTab,
-		label: '连接',
-		description: '服务器与认证配置',
-		icon: Globe,
-	},
-	{
-		id: 'sync' as WebDavWorkbenchTab,
-		label: '同步',
-		description: '同步操作与策略',
-		icon: RefreshCw,
-	},
-];
 
 type WebDavPanelProps = {
 	disabled?: boolean;
@@ -55,6 +41,23 @@ export function WebDavPanel({
 	disabled = false,
 	workspaceRoot,
 }: WebDavPanelProps) {
+	const { t } = useTranslation();
+
+	const workbenchSections = [
+		{
+			id: 'connection' as WebDavWorkbenchTab,
+			label: t('webdav.tab.connection'),
+			description: t('webdav.tab.connectionDesc'),
+			icon: Globe,
+		},
+		{
+			id: 'sync' as WebDavWorkbenchTab,
+			label: t('webdav.tab.sync'),
+			description: t('webdav.tab.syncDesc'),
+			icon: RefreshCw,
+		},
+	];
+
 	const [config, setConfig] = useState<WebDavConfig | null>(null);
 	const [password, setPassword] = useState('');
 	const [workbenchOpen, setWorkbenchOpen] = useState(false);
@@ -92,13 +95,18 @@ export function WebDavPanel({
 			});
 			if (result.success) {
 				showSuccessToast(
-					result.server_name ? `连接成功 — ${result.server_name}` : '连接成功'
+					result.server_name
+						? t('webdav.connectSuccessWithName', { name: result.server_name })
+						: t('webdav.connectSuccess')
 				);
 			} else {
-				showErrorToast('连接失败', result.error ?? '未知错误');
+				showErrorToast(
+					t('webdav.connectFailed'),
+					result.error ?? t('common.unknown')
+				);
 			}
 		} catch (err) {
-			showErrorToast('测试连接出错', String(err));
+			showErrorToast(t('webdav.testConnectionError'), String(err));
 		} finally {
 			setTesting(false);
 		}
@@ -109,9 +117,9 @@ export function WebDavPanel({
 		setSaving(true);
 		try {
 			await webdavSaveConfig(config, password || undefined);
-			showSuccessToast('配置已保存');
+			showSuccessToast(t('webdav.configSaved'));
 		} catch (err) {
-			showErrorToast('保存配置失败', String(err));
+			showErrorToast(t('webdav.saveConfigFailed'), String(err));
 		} finally {
 			setSaving(false);
 		}
@@ -122,9 +130,9 @@ export function WebDavPanel({
 			await webdavDeleteConfig();
 			setConfig(null);
 			setPassword('');
-			showSuccessToast('配置已清除');
+			showSuccessToast(t('webdav.configCleared'));
 		} catch (err) {
-			showErrorToast('清除配置失败', String(err));
+			showErrorToast(t('webdav.deleteConfigFailed'), String(err));
 		}
 	}, []);
 
@@ -146,14 +154,20 @@ export function WebDavPanel({
 				.catch(() => {});
 			window.dispatchEvent(new CustomEvent('webdav-sync-complete'));
 			if (result.errors.length > 0) {
-				showErrorToast('同步完成，有错误', `${result.errors.length} 个错误`);
+				showErrorToast(
+					t('webdav.syncCompletedWithErrors'),
+					t('webdav.errorCount', { count: result.errors.length })
+				);
 			} else {
 				showSuccessToast(
-					`同步完成 — 上传 ${result.files_uploaded}，下载 ${result.files_downloaded}`
+					t('webdav.syncComplete', {
+						uploaded: result.files_uploaded,
+						downloaded: result.files_downloaded,
+					})
 				);
 			}
 		} catch (err) {
-			showErrorToast('同步失败', String(err));
+			showErrorToast(t('webdav.syncFailed'), String(err));
 		} finally {
 			setSyncing(false);
 		}
@@ -162,22 +176,22 @@ export function WebDavPanel({
 	// ── Status bar ──
 
 	const statusBar = !config?.url ? (
-		<div className="flex w-full items-center gap-2 px-2 py-1">
+		<div className="flex w-full items-center gap-2 px-2 py-1 leading-4">
 			<CloudOff className="size-3.5 shrink-0 text-muted-foreground" />
 			<span className="flex-1 truncate text-muted-foreground">
-				WebDAV 未配置
+				{t('webdav.notConfigured')}
 			</span>
 			<Button
 				size="icon-xs"
 				variant="ghost"
 				onClick={handleOpenWorkbench}
-				aria-label="配置 WebDAV"
+				aria-label={t('webdav.configureLabel')}
 			>
 				<Settings2 className="size-3.5" />
 			</Button>
 		</div>
 	) : (
-		<div className="flex w-full items-center gap-2 px-2 py-1">
+		<div className="flex w-full items-center gap-2 px-2 py-1 leading-4">
 			{syncing ? (
 				<Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
 			) : (
@@ -191,12 +205,15 @@ export function WebDavPanel({
 				</span>
 				<Tooltip>
 					<TooltipTrigger
-						className="min-w-0 flex-1 truncate text-left text-muted-foreground"
+						className="min-w-0 flex-1 truncate text-left leading-4
+							text-muted-foreground"
 						render={<span />}
 					>
 						{config.last_sync_at
-							? `上次同步: ${new Date(config.last_sync_at).toLocaleString()}`
-							: '未同步'}
+							? t('webdav.lastSyncAt', {
+									time: new Date(config.last_sync_at).toLocaleString(),
+								})
+							: t('webdav.notSyncedYet')}
 					</TooltipTrigger>
 					{config.last_sync_at && (
 						<TooltipContent side="top">
@@ -214,7 +231,7 @@ export function WebDavPanel({
 					onClick={handleSync}
 					size="icon-xs"
 					variant="ghost"
-					aria-label="同步"
+					aria-label={t('webdav.syncLabel')}
 				>
 					{syncing ? (
 						<Loader2 className="size-3.5 animate-spin" />
@@ -226,7 +243,7 @@ export function WebDavPanel({
 					onClick={handleOpenWorkbench}
 					size="icon-xs"
 					variant="ghost"
-					aria-label="WebDAV 设置"
+					aria-label={t('webdav.settingsLabel')}
 				>
 					<Settings2 className="size-3.5" />
 				</Button>

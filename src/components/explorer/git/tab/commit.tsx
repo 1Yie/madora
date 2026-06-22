@@ -10,6 +10,7 @@ import {
 	TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 import type { GitFileStatus, GitStatus } from '../git-types';
 
@@ -60,40 +61,49 @@ function FileBadge({ status }: { status: string }) {
 	);
 }
 
-function getCommitLabel(status: GitStatus | null): string {
+function getCommitLabel(
+	status: GitStatus | null,
+	t: (k: string, opts?: Record<string, string>) => string
+): string {
 	if (status?.conflictedFiles.length) {
 		switch (status.repositoryState) {
 			case 'revert':
-				return '正在回滚 · 提交解决结果';
+				return t('git.commitLabel.reverting');
 			case 'merge':
-				return '正在合并 · 提交解决结果';
+				return t('git.commitLabel.merging');
 			case 'cherryPick':
-				return '正在拣选 · 提交解决结果';
+				return t('git.commitLabel.cherryPicking');
 			case 'rebase':
-				return '正在变基 · 提交解决结果';
+				return t('git.commitLabel.rebasing');
 			default:
-				return '提交解决冲突';
+				return t('git.commitLabel.resolve');
 		}
 	}
 
-	return '提交已暂存更改';
+	return t('git.commitLabel.commitStaged');
 }
 
-function getConflictHintText(conflictedFiles: GitFileStatus[]): string {
+function getConflictHintText(
+	conflictedFiles: GitFileStatus[],
+	t: (k: string, opts?: Record<string, string | number>) => string
+): string {
 	const filesWithMarkers = conflictedFiles.filter(
 		(file) => file.hasConflictMarkers
 	).length;
 	const filesWithoutMarkers = conflictedFiles.length - filesWithMarkers;
 
 	if (filesWithMarkers > 0 && filesWithoutMarkers > 0) {
-		return `${filesWithMarkers} 个文件仍有冲突标记，需先在编辑器中处理；其余 ${filesWithoutMarkers} 个文件没有内联标记，确认当前内容后可直接暂存。`;
+		return t('git.commitConflict.mixed', {
+			with: String(filesWithMarkers),
+			without: String(filesWithoutMarkers),
+		});
 	}
 
 	if (filesWithMarkers > 0) {
-		return '请先在编辑器中解决冲突标记再暂存';
+		return t('git.commitConflict.resolveFirst');
 	}
 
-	return '这些冲突没有内联标记；确认当前工作区版本后可直接暂存。';
+	return t('git.commitConflict.noMarkers');
 }
 
 export function GitTabCommit({
@@ -109,6 +119,7 @@ export function GitTabCommit({
 	onUnstageFile,
 }: GitTabCommitProps) {
 	const hasConflicts = (status?.conflictedFiles.length ?? 0) > 0;
+	const { t } = useTranslation();
 	const files = status?.files ?? [];
 	const stagedFiles = files.filter(
 		(f) => f.staged && f.status !== 'conflicted'
@@ -119,16 +130,16 @@ export function GitTabCommit({
 	const conflictedFiles = files.filter((f) => f.status === 'conflicted');
 	const hasFiles = files.length > 0;
 	const hasStaged = stagedFiles.length > 0;
-	const conflictHintText = getConflictHintText(conflictedFiles);
+	const conflictHintText = getConflictHintText(conflictedFiles, t);
 
 	return (
 		<div className="flex h-full flex-col">
 			<div className="shrink-0 space-y-4 px-6 pt-4 pb-4">
-				<SettingsSectionCard title="提交信息">
+				<SettingsSectionCard title={t('git.commitMessage')}>
 					<div className="space-y-3">
 						<Textarea
 							onChange={(event) => onCommitMessageChange(event.target.value)}
-							placeholder="输入提交信息..."
+							placeholder={t('git.commitPlaceholder')}
 							value={commitMessage}
 						/>
 						<div className="flex items-center gap-2">
@@ -138,7 +149,7 @@ export function GitTabCommit({
 								onClick={onCommit}
 							>
 								<Check />
-								{getCommitLabel(status)}
+								{getCommitLabel(status, t)}
 							</Button>
 							<Button
 								disabled={
@@ -148,7 +159,7 @@ export function GitTabCommit({
 								variant="outline"
 							>
 								<Check />
-								提交所有更改
+								{t('git.commitAll')}
 							</Button>
 						</div>
 					</div>
@@ -170,7 +181,7 @@ export function GitTabCommit({
 												className="text-sm font-medium text-red-600
 													dark:text-red-400"
 											>
-												冲突
+												{t('git.conflict')}
 											</span>
 											<Badge variant="destructive">
 												{conflictedFiles.length}
@@ -203,7 +214,7 @@ export function GitTabCommit({
 									>
 										<div className="flex items-center gap-2">
 											<span className="text-sm font-medium text-foreground">
-												更改
+												{t('git.changes')}
 											</span>
 											<Badge variant="secondary">{unstagedFiles.length}</Badge>
 										</div>
@@ -216,7 +227,7 @@ export function GitTabCommit({
 											variant="outline"
 										>
 											<Plus />
-											全部暂存
+											{t('git.stageAll')}
 										</Button>
 									</div>
 									<div
@@ -229,7 +240,7 @@ export function GitTabCommit({
 												file={file}
 												canOperate={canOperate}
 												actionIcon={<Plus className="size-3.5" />}
-												actionLabel="暂存"
+												actionLabel={t('git.stage')}
 												onAction={() => onStageFile(file.path)}
 											/>
 										))}
@@ -245,7 +256,7 @@ export function GitTabCommit({
 									>
 										<div className="flex items-center gap-2">
 											<span className="text-sm font-medium text-foreground">
-												已暂存
+												{t('git.staged')}
 											</span>
 											<Badge variant="secondary">{stagedFiles.length}</Badge>
 										</div>
@@ -258,7 +269,7 @@ export function GitTabCommit({
 											variant="outline"
 										>
 											<Minus />
-											全部取消暂存
+											{t('git.unstageAll')}
 										</Button>
 									</div>
 									<div
@@ -271,7 +282,7 @@ export function GitTabCommit({
 												file={file}
 												canOperate={canOperate}
 												actionIcon={<Minus className="size-3.5" />}
-												actionLabel="取消暂存"
+												actionLabel={t('git.unstage')}
 												onAction={() => onUnstageFile(file.path)}
 											/>
 										))}
@@ -286,7 +297,7 @@ export function GitTabCommit({
 							px-6 text-center"
 					>
 						<div className="text-sm text-muted-foreground">
-							没有更改需要提交。
+							{t('git.noChanges')}
 						</div>
 					</div>
 				)}
@@ -358,6 +369,7 @@ function ConflictFileRow({
 	canOperate: boolean;
 	onStage: () => void;
 }) {
+	const { t } = useTranslation();
 	const hasMarkers = file.hasConflictMarkers;
 	return (
 		<div
@@ -377,8 +389,8 @@ function ConflictFileRow({
 					</TooltipTrigger>
 					<TooltipContent>
 						{hasMarkers
-							? '文件仍包含冲突标记 <<<<<<<，请先在编辑器中手动解决'
-							: '这个冲突没有 <<<<<<< 标记。通常是修改/删除、删除/修改这类索引冲突；检查当前工作区内容后，可直接暂存为解决结果。'}
+							? t('git.commitConflict.markerTooltip')
+							: t('git.commitConflict.noMarkerTooltip')}
 					</TooltipContent>
 				</Tooltip>
 			</div>
@@ -387,13 +399,13 @@ function ConflictFileRow({
 					<span
 						className="inline-flex items-center justify-center size-6 rounded-sm
 							text-muted-foreground/40 cursor-not-allowed"
-						title="请先解决冲突标记再暂存"
+						title={t('git.commitConflict.markerWarning')}
 					>
 						<Plus className="size-3.5" />
 					</span>
 				) : (
 					<Button
-						aria-label="暂存并标记冲突已解决"
+						aria-label={t('git.commitConflict.stageAndResolve')}
 						disabled={!canOperate}
 						onClick={onStage}
 						size="icon-xs"

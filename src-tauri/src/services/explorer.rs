@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chardetng::EncodingDetector;
+
+use crate::i18n;
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 
 use crate::models::explorer::{ExplorerFileKind, ExplorerNode, ExplorerNodeKind, FilePreview};
@@ -163,9 +165,10 @@ fn encode_text_content(
     let (encoded, _, had_errors) = detected.encoding.encode(content);
 
     if had_errors {
-        return Err(format!(
-            "当前内容无法按 {} 编码保存",
-            detected.encoding.name()
+        let enc_name = detected.encoding.name().to_string();
+        return Err(i18n::tf(
+            "explorer.cannot_save_encoding",
+            &[("encoding", &enc_name)],
         ));
     }
 
@@ -215,11 +218,11 @@ fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
     let trimmed_file_name = file_name.trim();
 
     if trimmed_file_name.is_empty() {
-        return Err("请输入文件名".to_string());
+        return Err(i18n::t("explorer.enter_file_name"));
     }
 
     if trimmed_file_name.contains('/') || trimmed_file_name.contains('\\') {
-        return Err("文件名不能包含路径分隔符".to_string());
+        return Err(i18n::t("explorer.file_name_no_separator"));
     }
     if trimmed_file_name.to_ascii_lowercase().ends_with(".md")
         || trimmed_file_name.to_ascii_lowercase().ends_with(".mdx")
@@ -234,11 +237,11 @@ fn normalize_directory_name(directory_name: &str) -> Result<String, String> {
     let trimmed_directory_name = directory_name.trim();
 
     if trimmed_directory_name.is_empty() {
-        return Err("请输入文件夹名称".to_string());
+        return Err(i18n::t("explorer.enter_directory_name"));
     }
 
     if trimmed_directory_name.contains('/') || trimmed_directory_name.contains('\\') {
-        return Err("文件夹名称不能包含路径分隔符".to_string());
+        return Err(i18n::t("explorer.dir_name_no_separator"));
     }
 
     Ok(trimmed_directory_name.to_string())
@@ -250,12 +253,12 @@ fn resolve_create_directory(root: &Path, selected_path: Option<&Path>) -> Result
         Some(path) => path
             .parent()
             .map(Path::to_path_buf)
-            .ok_or_else(|| "无法确定新文档的目标目录".to_string())?,
+            .ok_or_else(|| i18n::t("explorer.cannot_determine_target_dir"))?,
         None => root.to_path_buf(),
     };
 
     if !candidate_directory.is_dir() {
-        return Err("目标目录不存在".to_string());
+        return Err(i18n::t("explorer.target_dir_not_exist"));
     }
 
     Ok(candidate_directory)
@@ -414,7 +417,10 @@ fn ensure_existing_path(path: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    Err(format!("路径不存在: {}", path.display()))
+    Err(i18n::tf(
+        "explorer.path_not_exist",
+        &[("path", &path.display().to_string())],
+    ))
 }
 
 pub(crate) fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
@@ -422,19 +428,19 @@ pub(crate) fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), St
         return Ok(());
     }
 
-    Err("不能操作工作区之外的文件或文件夹".to_string())
+    Err(i18n::t("explorer.outside_workspace"))
 }
 
 fn ensure_parent_exists(path: &Path) -> Result<(), String> {
     let Some(parent) = path.parent() else {
-        return Err("无法确定目标目录".to_string());
+        return Err(i18n::t("explorer.cannot_determine_target_dir"));
     };
 
     if parent.is_dir() {
         return Ok(());
     }
 
-    Err("目标目录不存在".to_string())
+    Err(i18n::t("explorer.target_dir_not_exist"))
 }
 
 fn ensure_target_available(target_path: &Path) -> Result<(), String> {
@@ -442,7 +448,10 @@ fn ensure_target_available(target_path: &Path) -> Result<(), String> {
         return Ok(());
     }
 
-    Err(format!("目标已存在: {}", target_path.display()))
+    Err(i18n::tf(
+        "explorer.target_exists",
+        &[("path", &target_path.display().to_string())],
+    ))
 }
 
 /// If the target path already exists, resolve an available path by appending
@@ -513,15 +522,15 @@ pub fn rename_workspace_node(
     let trimmed_name = new_name.trim();
 
     if trimmed_name.is_empty() {
-        return Err("请输入名称".to_string());
+        return Err(i18n::t("explorer.enter_name"));
     }
 
     if trimmed_name.contains('/') || trimmed_name.contains('\\') {
-        return Err("名称不能包含路径分隔符".to_string());
+        return Err(i18n::t("explorer.name_no_separator"));
     }
 
     let Some(parent) = target_path.parent() else {
-        return Err("无法重命名工作区根目录".to_string());
+        return Err(i18n::t("explorer.cannot_rename_root"));
     };
 
     let next_path = parent.join(trimmed_name);
@@ -539,7 +548,7 @@ pub fn delete_workspace_node(root_path: &Path, target_path: &Path) -> Result<(),
     ensure_existing_path(target_path)?;
 
     if target_path == root_path {
-        return Err("不能删除工作区根目录".to_string());
+        return Err(i18n::t("explorer.cannot_delete_root"));
     }
 
     let metadata = fs::metadata(target_path).map_err(|error| error.to_string())?;
@@ -562,15 +571,15 @@ pub fn move_workspace_node(
     ensure_existing_path(destination_directory)?;
 
     if !destination_directory.is_dir() {
-        return Err("粘贴目标必须是文件夹".to_string());
+        return Err(i18n::t("explorer.paste_target_must_be_dir"));
     }
 
     if source_path == root_path {
-        return Err("不能移动工作区根目录".to_string());
+        return Err(i18n::t("explorer.cannot_move_root"));
     }
 
     if destination_directory == source_path {
-        return Err("不能移动到自身".to_string());
+        return Err(i18n::t("explorer.cannot_move_to_self"));
     }
 
     if source_path.starts_with(destination_directory) {
@@ -584,12 +593,12 @@ pub fn move_workspace_node(
     let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
 
     if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
-        return Err("不能将文件夹移动到它自己的子目录中".to_string());
+        return Err(i18n::t("explorer.cannot_move_to_child"));
     }
 
     let file_name = source_path
         .file_name()
-        .ok_or_else(|| "无法确定源文件名".to_string())?;
+        .ok_or_else(|| i18n::t("explorer.cannot_determine_source_name"))?;
     let destination_path = destination_directory.join(file_name);
 
     if destination_path == source_path {
@@ -614,30 +623,41 @@ pub fn import_external_file(
     source_path: &Path,
 ) -> Result<ExplorerNode, String> {
     if !source_path.exists() {
-        return Err(format!("源文件不存在: {}", source_path.display()));
+        return Err(i18n::tf(
+            "explorer.source_not_exist",
+            &[("path", &source_path.display().to_string())],
+        ));
     }
 
     if !source_path.is_file() {
-        return Err(format!("只能导入文件: {}", source_path.display()));
+        return Err(i18n::tf(
+            "explorer.only_import_files",
+            &[("path", &source_path.display().to_string())],
+        ));
     }
 
     if !is_allowed_import_extension(source_path) {
-        return Err(format!(
-            "不支持的文件类型: {}（仅支持 .md/.mdx 和图片格式）",
-            source_path.display()
+        return Err(i18n::tf(
+            "explorer.unsupported_file_type",
+            &[("path", &source_path.display().to_string())],
         ));
     }
 
     ensure_within_root(root_path, destination_directory)?;
 
     if !destination_directory.is_dir() {
-        return Err("目标目录不存在".to_string());
+        return Err(i18n::t("explorer.target_dir_not_exist"));
     }
 
     let file_name = path_name(source_path);
     let dest_path = resolve_available_path(&destination_directory.join(&file_name));
 
-    fs::copy(source_path, &dest_path).map_err(|error| format!("复制文件失败: {}", error))?;
+    fs::copy(source_path, &dest_path).map_err(|error| {
+        i18n::tf(
+            "explorer.copy_file_failed",
+            &[("error", &error.to_string())],
+        )
+    })?;
 
     let file_kind = classify_file_kind(&dest_path).unwrap_or(ExplorerFileKind::Text);
 
@@ -655,22 +675,22 @@ pub fn copy_workspace_node(
     ensure_existing_path(destination_directory)?;
 
     if !destination_directory.is_dir() {
-        return Err("粘贴目标必须是文件夹".to_string());
+        return Err(i18n::t("explorer.paste_target_must_be_dir"));
     }
 
     if source_path == root_path {
-        return Err("不能复制工作区根目录".to_string());
+        return Err(i18n::t("explorer.cannot_copy_root"));
     }
 
     let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
 
     if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
-        return Err("不能将文件夹复制到它自己的子目录中".to_string());
+        return Err(i18n::t("explorer.cannot_copy_to_child"));
     }
 
     let file_name = source_path
         .file_name()
-        .ok_or_else(|| "无法确定源文件名".to_string())?;
+        .ok_or_else(|| i18n::t("explorer.cannot_determine_source_name"))?;
     let destination_path = destination_directory.join(file_name);
 
     ensure_parent_exists(&destination_path)?;

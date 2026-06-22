@@ -1,5 +1,6 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAppSettings } from '@/context/app-settings-provider';
 import { showErrorToast } from '@/components/ui/toast';
@@ -45,7 +46,7 @@ function getFileTitle(filePath: string): string {
 	return fileName.replace(/\.(md|markdown|mdx)$/i, '');
 }
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(error: unknown, t: (key: string) => string): string {
 	if (error instanceof Error) {
 		return error.message;
 	}
@@ -54,7 +55,7 @@ function getErrorMessage(error: unknown): string {
 		return error;
 	}
 
-	return '保存失败';
+	return t('errors.saveFailed');
 }
 
 export function MarkdownWorkspace({
@@ -65,7 +66,8 @@ export function MarkdownWorkspace({
 	mode,
 	onToggleMode,
 }: MarkdownWorkspaceProps) {
-	const { saveMode } = useAppSettings();
+	const { t } = useTranslation();
+	const { saveMode, editorFontSize } = useAppSettings();
 	const [value, setValue] = useState(() => getInitialValue(filePath, content));
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
@@ -145,10 +147,10 @@ export function MarkdownWorkspace({
 				}
 
 				setSaveStatus('error');
-				setSaveError(getErrorMessage(error));
+				setSaveError(getErrorMessage(error, t));
 			}
 		},
-		[filePath]
+		[filePath, t]
 	);
 
 	const requestSave = useCallback(
@@ -261,7 +263,7 @@ export function MarkdownWorkspace({
 			return;
 		}
 
-		showErrorToast('保存失败', saveError);
+		showErrorToast(t('errors.saveFailed'), saveError);
 		queueMicrotask(() => {
 			setSaveError(null);
 			setSaveStatus(
@@ -272,7 +274,7 @@ export function MarkdownWorkspace({
 						: 'idle'
 			);
 		});
-	}, [saveError, saveMode, value]);
+	}, [saveError, saveMode, t, value]);
 
 	return (
 		<MarkdownEditor
@@ -286,6 +288,7 @@ export function MarkdownWorkspace({
 			rootPath={rootPath}
 			saveStatus={saveStatus}
 			title={getFileTitle(filePath)}
+			fontSize={editorFontSize}
 			value={value}
 		/>
 	);

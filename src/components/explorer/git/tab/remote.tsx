@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 
 import { ArrowDownToLine, ArrowUpFromLine, Settings2 } from 'lucide-react';
@@ -28,14 +29,15 @@ export function GitTabRemote({
 	onPush,
 	onSave,
 }: GitTabRemoteProps) {
+	const { t } = useTranslation();
 	const [remoteName, setRemoteName] = useState(initialRemoteName);
 	const [remoteUrl, setRemoteUrl] = useState(initialRemoteUrl);
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard title="远端仓库">
+			<SettingsSectionCard title={t('git.tab.remote')}>
 				<div className="space-y-3">
-					<FieldBlock label="远端名称">
+					<FieldBlock label={t('git.remoteName')}>
 						<Input
 							nativeInput
 							onChange={(event) => setRemoteName(event.target.value)}
@@ -43,7 +45,7 @@ export function GitTabRemote({
 							value={remoteName}
 						/>
 					</FieldBlock>
-					<FieldBlock label="远端地址">
+					<FieldBlock label={t('git.remoteUrl')}>
 						<Input
 							nativeInput
 							onChange={(event) => setRemoteUrl(event.target.value)}
@@ -57,7 +59,7 @@ export function GitTabRemote({
 							onClick={() => void onSave(remoteName, remoteUrl)}
 						>
 							<Settings2 />
-							保存远端
+							{t('git.saveRemote')}
 						</Button>
 						<Button
 							disabled={!canOperate}
@@ -66,7 +68,7 @@ export function GitTabRemote({
 							variant="outline"
 						>
 							<ArrowDownToLine />
-							拉取
+							{t('git.pullAction')}
 						</Button>
 						<Button
 							disabled={!canOperate}
@@ -75,7 +77,7 @@ export function GitTabRemote({
 							variant="outline"
 						>
 							<ArrowUpFromLine />
-							推送
+							{t('git.pushAction')}
 						</Button>
 					</div>
 				</div>

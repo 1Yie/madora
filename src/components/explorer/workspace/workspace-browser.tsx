@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { WorkspaceProvider, useWorkspace } from '@/context/workspace-provider';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
@@ -21,6 +22,7 @@ export function WorkspaceBrowser() {
 }
 
 function WorkspaceBrowserContent() {
+	const { t } = useTranslation();
 	const { sidebarWidth, setSidebarWidth, root, initialised } = useWorkspace();
 
 	const dragStartWidthRef = useRef(sidebarWidth);
@@ -81,7 +83,7 @@ function WorkspaceBrowserContent() {
 			>
 				<FileExplorerSidebar key={root?.path ?? 'empty'} />
 				<div
-					aria-label="调整侧边栏宽度"
+					aria-label={t('workspace.resizeSidebar')}
 					className="group absolute inset-y-0 right-0 z-10 w-3 translate-x-1/2
 						cursor-col-resize bg-transparent"
 					onPointerDown={handleSidebarResizeStart}

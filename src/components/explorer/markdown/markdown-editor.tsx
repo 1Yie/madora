@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SaveMode } from '@/context/app-settings-provider';
 import { useEditor } from '@/hooks/use-editor';
 import { Spinner } from '@/components/ui/spinner';
@@ -45,6 +46,7 @@ type MarkdownEditorProps = {
 	title?: string;
 	filePath: string;
 	rootPath: string | null;
+	fontSize: number;
 
 	value: string;
 };
@@ -74,45 +76,47 @@ function SaveShortcutHint(): ReactNode {
 
 function getSaveStatusNode(
 	saveStatus: SaveStatus,
-	saveMode: SaveMode
+	saveMode: SaveMode,
+	t: (key: string) => string
 ): ReactNode {
 	switch (saveStatus) {
 		case 'dirty':
 			return (
 				<span className="inline-flex items-center gap-1.5">
 					<PenLine className="size-3.5 shrink-0" />
-					未保存，按 <SaveShortcutHint /> 保存
+					{t('markdownEditor.status.dirty')} <SaveShortcutHint />
 				</span>
 			);
 		case 'saving':
 			return (
-				<span className="inline-flex items-center gap-1.5">正在保存...</span>
+				<span className="inline-flex items-center gap-1.5">
+					{t('markdownEditor.status.saving')}
+				</span>
 			);
 		case 'saved':
 			return (
 				<span className="inline-flex items-center gap-1.5 text-emerald-500">
 					<CircleCheck className="size-3.5 shrink-0" />
-					已保存
+					{t('markdownEditor.status.saved')}
 				</span>
 			);
 		case 'error':
 			return (
 				<span className="inline-flex items-center gap-1.5 text-destructive">
 					<CircleX className="size-3.5 shrink-0" />
-					保存失败
+					{t('markdownEditor.status.error')}
 				</span>
 			);
 		default:
 			return saveMode === 'manual' ? (
 				<span className="inline-flex items-center gap-1.5">
 					<Save className="size-3.5 shrink-0" />
-					手动保存（
-					<SaveShortcutHint />）
+					{t('markdownEditor.status.manual')} <SaveShortcutHint />
 				</span>
 			) : (
 				<span className="inline-flex items-center gap-1.5">
 					<CloudUpload className="size-3.5 shrink-0" />
-					编辑文本自动保存
+					{t('markdownEditor.status.auto')}
 				</span>
 			);
 	}
@@ -138,31 +142,44 @@ function wrapSelection(
 }
 
 const FORMAT_ACTIONS = [
-	{ label: '加粗', icon: Bold, key: 'bold' },
-	{ label: '斜体', icon: Italic, key: 'italic' },
-	{ label: '删除线', icon: Strikethrough, key: 'strikethrough' },
-	{ label: '下划线', icon: Underline, key: 'underline' },
-	{ label: '插入链接', icon: Link, key: 'link' },
-	{ label: '插入图片', icon: ImageIcon, key: 'image' },
+	{ labelKey: 'markdownEditor.actions.bold', icon: Bold, key: 'bold' },
+	{ labelKey: 'markdownEditor.actions.italic', icon: Italic, key: 'italic' },
+	{
+		labelKey: 'markdownEditor.actions.strikethrough',
+		icon: Strikethrough,
+		key: 'strikethrough',
+	},
+	{
+		labelKey: 'markdownEditor.actions.underline',
+		icon: Underline,
+		key: 'underline',
+	},
+	{ labelKey: 'markdownEditor.actions.link', icon: Link, key: 'link' },
+	{ labelKey: 'markdownEditor.actions.image', icon: ImageIcon, key: 'image' },
 ] as const;
 
 type FormatKey = (typeof FORMAT_ACTIONS)[number]['key'];
 
 function FormatToolbar({ onAction }: { onAction: (key: FormatKey) => void }) {
+	const { t } = useTranslation();
+
 	return (
 		<div className="flex items-center gap-0.5 px-1 py-0.5 select-none">
-			{FORMAT_ACTIONS.map(({ label, icon: Icon, key }) => (
-				<MenuItem
-					key={key}
-					aria-label={label}
-					title={label}
-					className="inline-flex size-7 items-center justify-center rounded-sm
-						p-0"
-					onClick={() => onAction(key)}
-				>
-					<Icon className="size-3.5" />
-				</MenuItem>
-			))}
+			{FORMAT_ACTIONS.map(({ labelKey, icon: Icon, key }) => {
+				const label = t(labelKey);
+				return (
+					<MenuItem
+						key={key}
+						aria-label={label}
+						title={label}
+						className="inline-flex size-7 items-center justify-center rounded-sm
+							p-0"
+						onClick={() => onAction(key)}
+					>
+						<Icon className="size-3.5" />
+					</MenuItem>
+				);
+			})}
 		</div>
 	);
 }
@@ -177,10 +194,13 @@ export function MarkdownEditor({
 	title,
 	filePath,
 	rootPath,
+	fontSize,
 
 	value,
 }: MarkdownEditorProps) {
+	const { t } = useTranslation();
 	const { editorRef, viewRef } = useEditor({
+		fontSize,
 		onChange,
 		onCursorChange: (line, col) => setCursorPos({ line, col }),
 		onSave,
@@ -244,25 +264,35 @@ export function MarkdownEditor({
 	const handleBold = () => {
 		const view = viewRef.current;
 		if (!view) return;
-		wrapSelection(view, '**', '**', '粗体文本');
+		wrapSelection(view, '**', '**', t('markdownEditor.placeholders.bold'));
 	};
 
 	const handleItalic = () => {
 		const view = viewRef.current;
 		if (!view) return;
-		wrapSelection(view, '*', '*', '斜体文本');
+		wrapSelection(view, '*', '*', t('markdownEditor.placeholders.italic'));
 	};
 
 	const handleStrikethrough = () => {
 		const view = viewRef.current;
 		if (!view) return;
-		wrapSelection(view, '~~', '~~', '删除线文本');
+		wrapSelection(
+			view,
+			'~~',
+			'~~',
+			t('markdownEditor.placeholders.strikethrough')
+		);
 	};
 
 	const handleUnderline = () => {
 		const view = viewRef.current;
 		if (!view) return;
-		wrapSelection(view, '<u>', '</u>', '下划线文本');
+		wrapSelection(
+			view,
+			'<u>',
+			'</u>',
+			t('markdownEditor.placeholders.underline')
+		);
 	};
 
 	const handleLink = () => {
@@ -270,7 +300,7 @@ export function MarkdownEditor({
 		if (!view) return;
 		const { from, to } = view.state.selection.main;
 		const selected = view.state.sliceDoc(from, to);
-		const text = selected || '链接文本';
+		const text = selected || t('markdownEditor.placeholders.link');
 		const insert = `[${text}](url)`;
 		view.dispatch({
 			changes: { from, to, insert },
@@ -287,7 +317,7 @@ export function MarkdownEditor({
 		if (!view) return;
 		const { from, to } = view.state.selection.main;
 		const selected = view.state.sliceDoc(from, to);
-		const alt = selected || '图片描述';
+		const alt = selected || t('markdownEditor.placeholders.image');
 		const insert = `![${alt}](url)`;
 		view.dispatch({
 			changes: { from, to, insert },
@@ -338,15 +368,15 @@ export function MarkdownEditor({
 				<ContextMenuPopup align="start" sideOffset={6}>
 					<MenuItem onClick={handleCut}>
 						<Scissors />
-						剪切
+						{t('common.actions.cut')}
 					</MenuItem>
 					<MenuItem onClick={handleCopy}>
 						<Copy />
-						复制
+						{t('common.actions.copy')}
 					</MenuItem>
 					<MenuItem onClick={() => void handlePaste()}>
 						<Clipboard />
-						粘贴
+						{t('common.actions.paste')}
 					</MenuItem>
 					<MenuSeparator />
 					<FormatToolbar onAction={handleFormatAction} />
@@ -369,7 +399,7 @@ export function MarkdownEditor({
 						<Spinner className="size-3.5 shrink-0 flex-none text-primary" />
 					) : null}
 					<span className="truncate flex items-center">
-						{getSaveStatusNode(saveStatus, saveMode)}
+						{getSaveStatusNode(saveStatus, saveMode, t)}
 					</span>
 				</div>
 				<div
@@ -377,10 +407,15 @@ export function MarkdownEditor({
 						tabular-nums"
 				>
 					<span className={mode === 'preview' ? 'invisible' : ''}>
-						行 {cursorPos.line}, 列 {cursorPos.col}
+						{t('markdownEditor.cursor.lineCol', {
+							line: cursorPos.line,
+							col: cursorPos.col,
+						})}
 					</span>
 					<span className={mode === 'preview' ? 'invisible' : ''}>
-						{characterCount} 字符
+						{t('markdownEditor.cursor.characters', {
+							count: characterCount,
+						})}
 					</span>
 					<span className={mode === 'preview' ? 'invisible' : ''}>
 						{encoding ?? '-'}
@@ -393,7 +428,11 @@ export function MarkdownEditor({
 							onClick={onToggleMode}
 							className="flex size-5 items-center justify-center rounded
 								hover:bg-muted-foreground/20"
-							title={mode === 'edit' ? '切换为预览' : '切换为编辑'}
+							title={
+								mode === 'edit'
+									? t('markdownEditor.toggle.preview')
+									: t('markdownEditor.toggle.edit')
+							}
 							type="button"
 						>
 							{mode === 'edit' ? (
