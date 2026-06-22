@@ -36,8 +36,12 @@ import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { cn } from '@/lib/utils';
 
 const SETUP_COMPLETE_KEY = 'madora-setup-complete';
-const TEST_PROMPT =
-	'## Test\n\nWrite a short greeting in Chinese for a new user of a Markdown editor called Madora.\n\n';
+const TEST_PROMPT = `# Madora 连接测试
+
+请直接续写下一句，保持自然、简短，不要解释。
+当前模型连接已经`;
+const EMPTY_TEST_RESULT_MESSAGE =
+	'连接成功。模型已正常响应，这次测试没有返回可显示的补全文本。';
 
 const CUSTOM_PROTOCOL_OPTIONS: Array<{
 	label: string;
@@ -144,10 +148,10 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 			if (abortController.signal.aborted) return;
 
 			const finalText = chunks.join('').trim();
-			if (finalText.length === 0)
-				throw new Error('模型已连接，但返回了空内容。');
 
-			setTestResult(finalText);
+			setTestResult(
+				finalText.length > 0 ? finalText : EMPTY_TEST_RESULT_MESSAGE
+			);
 			setTestStatus('success');
 		} catch (error) {
 			if (abortController.signal.aborted) return;

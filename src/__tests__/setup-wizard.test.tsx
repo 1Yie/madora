@@ -126,4 +126,35 @@ describe('SetupWizard', () => {
 		expect(onComplete).toHaveBeenCalledTimes(1);
 		expect(window.localStorage.getItem('madora-setup-complete')).toBe('true');
 	});
+
+	it('treats an empty completion response as a successful connection test', async () => {
+		const user = userEvent.setup();
+		invokeMock.mockImplementation(async (command) => {
+			switch (String(command)) {
+				case 'has_ai_api_key':
+					return false;
+				case 'store_ai_api_key':
+					return undefined;
+				case 'generate_completion_stream':
+					return undefined;
+				default:
+					return undefined;
+			}
+		});
+
+		renderWizard();
+
+		await user.click(await screen.findByRole('button', { name: '开始配置' }));
+		await user.type(screen.getByPlaceholderText('sk-...'), 'sk-test');
+		await user.click(screen.getByRole('button', { name: '继续' }));
+
+		await waitFor(() => {
+			expect(
+				screen.getByText(
+					'连接成功。模型已正常响应，这次测试没有返回可显示的补全文本。'
+				)
+			).toBeInTheDocument();
+			expect(screen.getByRole('button', { name: '完成验证' })).toBeEnabled();
+		});
+	});
 });

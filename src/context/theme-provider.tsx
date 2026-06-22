@@ -198,6 +198,7 @@ const useThemeStore = create<ThemeStore>((set) => ({
 		if (accent === null) {
 			set({ accent: null, accentMode: 'default' });
 			try {
+				window.localStorage.setItem(ACCENT_MODE_STORAGE_KEY, 'default');
 				window.localStorage.removeItem(ACCENT_STORAGE_KEY);
 			} catch {
 				/* ignore */
@@ -213,6 +214,7 @@ const useThemeStore = create<ThemeStore>((set) => ({
 
 		set({ accent: normalized, accentMode: 'custom' });
 		try {
+			window.localStorage.setItem(ACCENT_MODE_STORAGE_KEY, 'custom');
 			window.localStorage.setItem(ACCENT_STORAGE_KEY, normalized);
 		} catch {
 			/* ignore */
@@ -228,6 +230,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 	const theme = useThemeStore((s) => s.theme);
 	const accentMode = useThemeStore((s) => s.accentMode);
 	const accent = useThemeStore((s) => s.accent);
+	const systemAccent = useThemeStore((s) => s.systemAccent);
 
 	const resolvedTheme: ResolvedTheme =
 		theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
@@ -267,17 +270,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 	// Apply accent CSS variables
 	useEffect(() => {
 		const root = document.documentElement;
-		const currentState = useThemeStore.getState();
-		const currentSystemAccent = currentState.systemAccent;
 		const currentEffectiveAccent =
 			accentMode === 'custom'
 				? accent
 				: accentMode === 'system'
-					? currentSystemAccent
+					? systemAccent
 					: null;
 
-		if (currentSystemAccent) {
-			root.style.setProperty('--system-accent', currentSystemAccent);
+		if (systemAccent) {
+			root.style.setProperty('--system-accent', systemAccent);
 		} else {
 			root.style.removeProperty('--system-accent');
 		}
@@ -322,7 +323,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 			sidebarAccentOverlay ?? normalizedAccent
 		);
 		root.style.setProperty('--sidebar-ring', normalizedAccent);
-	}, [accent, accentMode, resolvedTheme]);
+	}, [accent, accentMode, resolvedTheme, systemAccent]);
 
 	return <>{children}</>;
 }

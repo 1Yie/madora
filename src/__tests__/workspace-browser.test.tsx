@@ -196,6 +196,16 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
 							? `${ctx.selectedFile.path}:${ctx.selectedFile.isMissing ? 'missing' : 'present'}`
 							: 'none'
 					}`}</div>
+					<div>{`sidebar-busy:${ctx.sidebarBusy ? 'yes' : 'no'}`}</div>
+					<button type="button" onClick={() => void ctx.openFolder()}>
+						open-folder
+					</button>
+					<button
+						type="button"
+						onClick={() => void ctx.selectNode(rootNode.children[2])}
+					>
+						select-folder
+					</button>
 					<button
 						type="button"
 						onClick={() => ctx.copyNode(rootNode.children[0])}
@@ -235,15 +245,19 @@ vi.mock('@/components/explorer/file/file-explorer-sidebar', async () => {
 describe('WorkspaceBrowser', () => {
 	const mockInvoke = vi.mocked(invoke);
 	let workspaceState: typeof defaultWorkspaceState;
+	let pickedFolderResult: ExplorerNode | null;
 
 	beforeEach(() => {
 		window.localStorage.clear();
 		workspaceState = { ...defaultWorkspaceState };
+		pickedFolderResult = rootNode;
 
 		mockInvoke.mockImplementation(async (command) => {
 			switch (command) {
 				case 'get_workspace_state':
 					return workspaceState;
+				case 'pick_workspace_folder':
+					return pickedFolderResult;
 				case 'scan_workspace_folder':
 					return mockInvoke.mock.calls.filter(
 						([calledCommand]) => calledCommand === 'copy_workspace_node'
@@ -308,6 +322,25 @@ describe('WorkspaceBrowser', () => {
 		);
 	});
 
+	it('clears sidebar busy when folder selection is cancelled', async () => {
+		pickedFolderResult = null;
+		render(<WorkspaceBrowser />);
+
+		await screen.findByText('open-folder');
+		fireEvent.click(screen.getByText('open-folder'));
+
+		await waitFor(() => {
+			expect(mockInvoke).toHaveBeenCalledWith(
+				'pick_workspace_folder',
+				expect.objectContaining({
+					showHiddenFiles: false,
+					sort: true,
+				})
+			);
+			expect(screen.getByText('sidebar-busy:no')).toBeInTheDocument();
+		});
+	});
+
 	it('restores the last opened file into the tab bar on mount', async () => {
 		// Simulate a restored state with an active file path
 		workspaceState.lastActiveFilePath = '/workspace/readme.md';
@@ -321,6 +354,25 @@ describe('WorkspaceBrowser', () => {
 			expect(
 				screen.getAllByText('active:/workspace/readme.md').length
 			).toBeGreaterThan(0);
+		});
+	});
+
+	it('clears the active tab highlight when selecting a folder in the tree', async () => {
+		workspaceState.lastActiveFilePath = '/workspace/readme.md';
+
+		render(<WorkspaceBrowser />);
+
+		await waitFor(() => {
+			expect(
+				screen.getAllByText('active:/workspace/readme.md').length
+			).toBeGreaterThan(0);
+		});
+
+		fireEvent.click(screen.getByText('select-folder'));
+
+		await waitFor(() => {
+			expect(screen.getAllByText('active:none').length).toBeGreaterThan(0);
+			expect(screen.getAllByText('selected:none').length).toBeGreaterThan(0);
 		});
 	});
 

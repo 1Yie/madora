@@ -822,6 +822,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 		if (node.kind === 'directory') {
 			set({
+				activeTabId: null,
 				selectedNodePath: node.path,
 				selectedFile: null,
 				preview: null,
@@ -1489,7 +1490,10 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				showHiddenFiles,
 				sort: get().sortEnabled,
 			});
-			if (!nextRoot) return;
+			if (!nextRoot) {
+				set({ sidebarBusy: false });
+				return;
+			}
 
 			set({ loadingPaths: new Set(), clipboard: null });
 
