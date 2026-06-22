@@ -5,17 +5,17 @@ use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::PromptManager,
     providers::{
-        anthropic::{request_anthropic_compatible_fim, request_anthropic_compatible_fim_stream},
+        openai::{request_openai_compatible_fim, request_openai_compatible_fim_stream},
         CompletionProvider,
     },
 };
 
-pub struct MiniMaxProvider;
+pub struct ZhipuProvider;
 
 #[async_trait]
-impl CompletionProvider for MiniMaxProvider {
+impl CompletionProvider for ZhipuProvider {
     fn provider(&self) -> AiProvider {
-        AiProvider::MiniMax
+        AiProvider::Zhipu
     }
 
     async fn request_fim_completion(
@@ -25,7 +25,7 @@ impl CompletionProvider for MiniMaxProvider {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String> {
-        request_anthropic_compatible_fim(client, prompt_manager, config, request).await
+        request_openai_compatible_fim(client, prompt_manager, config, request).await
     }
 
     async fn request_fim_completion_stream(
@@ -36,7 +36,7 @@ impl CompletionProvider for MiniMaxProvider {
         request: &CompletionRequest,
         on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
     ) -> Result<String, String> {
-        request_anthropic_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
+        request_openai_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
             .await
     }
 }

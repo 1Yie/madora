@@ -3,18 +3,25 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
 
 import { showErrorToast } from '@/components/ui/toast';
+import i18n from '@/i18n';
 
 export type AiProvider =
 	| 'anthropic'
 	| 'custom'
 	| 'deepseek'
+	| 'google'
 	| 'kimi'
 	| 'minimax'
+	| 'minimax-coding'
 	| 'mimo'
 	| 'mimo-coding'
-	| 'openai';
+	| 'openai'
+	| 'opencode-go'
+	| 'opencode-zen'
+	| 'zhipu'
+	| 'zhipu-coding';
 
-export type CustomProviderProtocol = 'anthropic' | 'openai';
+export type CustomProviderProtocol = 'anthropic' | 'google' | 'openai';
 
 type ProviderConfig = {
 	apiUrl: string;
@@ -67,16 +74,28 @@ const PROVIDERS: ProviderDefinition[] = [
 		label: 'Anthropic',
 	},
 	{
+		defaultApiUrl: 'https://generativelanguage.googleapis.com',
+		defaultModel: 'gemini-2.5-flash',
+		key: 'google',
+		label: 'Google Gemini',
+	},
+	{
 		defaultApiUrl: 'https://api.moonshot.cn',
-		defaultModel: 'moonshot-v1-8k',
+		defaultModel: 'kimi-k2.7-code',
 		key: 'kimi',
 		label: 'Kimi',
 	},
 	{
-		defaultApiUrl: 'https://api.minimax.io',
-		defaultModel: 'MiniMax-M2.7',
+		defaultApiUrl: 'https://api.minimaxi.com/anthropic',
+		defaultModel: 'MiniMax-M3',
 		key: 'minimax',
 		label: 'MiniMax',
+	},
+	{
+		defaultApiUrl: 'https://api.minimaxi.com/anthropic',
+		defaultModel: 'MiniMax-M3',
+		key: 'minimax-coding',
+		label: 'MiniMax Coding Plan',
 	},
 	{
 		defaultApiUrl: 'https://api.xiaomimimo.com',
@@ -90,6 +109,31 @@ const PROVIDERS: ProviderDefinition[] = [
 		key: 'mimo-coding',
 		label: 'Xiaomi MiMo Coding Plan',
 	},
+	{
+		defaultApiUrl: 'https://open.bigmodel.cn/api/paas/v4',
+		defaultModel: 'glm-5.2',
+		key: 'zhipu',
+		label: 'Zhipu GLM',
+	},
+	{
+		defaultApiUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+		defaultModel: 'glm-5.2',
+		key: 'zhipu-coding',
+		label: 'Zhipu GLM Coding Plan',
+	},
+	{
+		defaultApiUrl: 'https://opencode.ai/zen/go',
+		defaultModel: 'deepseek-v4-pro',
+		key: 'opencode-go',
+		label: 'OpenCode Go',
+	},
+	{
+		defaultApiUrl: 'https://opencode.ai/zen',
+		defaultModel: 'claude-sonnet-4.6',
+		key: 'opencode-zen',
+		label: 'OpenCode Zen',
+	},
+
 	{
 		defaultApiUrl: '',
 		defaultModel: '',
@@ -127,7 +171,7 @@ function getProviderStorageKey(baseKey: string, provider: AiProvider) {
 function isCustomProviderProtocol(
 	value: string | null
 ): value is CustomProviderProtocol {
-	return value === 'anthropic' || value === 'openai';
+	return value === 'anthropic' || value === 'google' || value === 'openai';
 }
 
 function getProviderKeys(): AiProvider[] {
@@ -141,11 +185,17 @@ function createProviderApiKeyAvailability(
 		anthropic: initialValue,
 		custom: initialValue,
 		deepseek: initialValue,
+		google: initialValue,
 		kimi: initialValue,
 		minimax: initialValue,
+		'minimax-coding': initialValue,
 		mimo: initialValue,
 		'mimo-coding': initialValue,
 		openai: initialValue,
+		'opencode-go': initialValue,
+		'opencode-zen': initialValue,
+		zhipu: initialValue,
+		'zhipu-coding': initialValue,
 	};
 }
 
@@ -220,11 +270,17 @@ function readInitialProviderConfigs(): Record<AiProvider, ProviderConfig> {
 		anthropic: readProviderConfig('anthropic'),
 		custom: readProviderConfig('custom'),
 		deepseek: readProviderConfig('deepseek'),
+		google: readProviderConfig('google'),
 		kimi: readProviderConfig('kimi'),
 		minimax: readProviderConfig('minimax'),
+		'minimax-coding': readProviderConfig('minimax-coding'),
 		mimo: readProviderConfig('mimo'),
 		'mimo-coding': readProviderConfig('mimo-coding'),
 		openai: readProviderConfig('openai'),
+		'opencode-go': readProviderConfig('opencode-go'),
+		'opencode-zen': readProviderConfig('opencode-zen'),
+		zhipu: readProviderConfig('zhipu'),
+		'zhipu-coding': readProviderConfig('zhipu-coding'),
 	};
 }
 
@@ -386,7 +442,7 @@ const useAiSettingsStore = create<AiSettingsStore>((set, get) => ({
 		const trimmedApiKey = apiKey.trim();
 
 		if (trimmedApiKey.length === 0) {
-			throw new Error('请先填写 API Key');
+			throw new Error(i18n.t('ai.apiKeyRequired'));
 		}
 
 		const provider = get().provider;
@@ -452,7 +508,10 @@ const useAiSettingsStore = create<AiSettingsStore>((set, get) => ({
 
 		if (errors.length > 0) {
 			const uniqueErrors = [...new Set(errors)];
-			showErrorToast('无法访问系统密钥存储', uniqueErrors.join('\n'));
+			showErrorToast(
+				i18n.t('aiSettingsProvider.keychainAccessFailed'),
+				uniqueErrors.join('\n')
+			);
 		}
 	},
 }));

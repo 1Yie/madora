@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub enum CustomProviderProtocol {
     #[serde(rename = "anthropic")]
     Anthropic,
+    #[serde(rename = "google")]
+    Google,
     #[serde(rename = "openai")]
     #[default]
     OpenAi,
@@ -18,6 +20,8 @@ pub enum AiProvider {
     #[serde(rename = "deepseek")]
     #[default]
     DeepSeek,
+    #[serde(rename = "google")]
+    Google,
     #[serde(rename = "kimi")]
     Kimi,
     #[serde(rename = "mimo")]
@@ -26,8 +30,18 @@ pub enum AiProvider {
     MiMoCoding,
     #[serde(rename = "minimax")]
     MiniMax,
+    #[serde(rename = "minimax-coding")]
+    MiniMaxCoding,
     #[serde(rename = "openai")]
     OpenAi,
+    #[serde(rename = "opencode-go")]
+    OpenCodeGo,
+    #[serde(rename = "opencode-zen")]
+    OpenCodeZen,
+    #[serde(rename = "zhipu")]
+    Zhipu,
+    #[serde(rename = "zhipu-coding")]
+    ZhipuCoding,
 }
 
 impl AiProvider {
@@ -36,11 +50,17 @@ impl AiProvider {
             Self::Anthropic => "anthropic",
             Self::Custom => "custom",
             Self::DeepSeek => "deepseek",
+            Self::Google => "google",
             Self::Kimi => "kimi",
             Self::MiMo => "mimo",
             Self::MiMoCoding => "mimo-coding",
             Self::MiniMax => "minimax",
+            Self::MiniMaxCoding => "minimax-coding",
             Self::OpenAi => "openai",
+            Self::OpenCodeGo => "opencode-go",
+            Self::OpenCodeZen => "opencode-zen",
+            Self::Zhipu => "zhipu",
+            Self::ZhipuCoding => "zhipu-coding",
         }
     }
 
@@ -49,11 +69,17 @@ impl AiProvider {
             Self::Anthropic => "Anthropic",
             Self::Custom => "Custom",
             Self::DeepSeek => "DeepSeek",
+            Self::Google => "Google Gemini",
             Self::Kimi => "Kimi",
             Self::MiMo => "Xiaomi MiMo",
             Self::MiMoCoding => "Xiaomi MiMo Coding Plan",
             Self::MiniMax => "MiniMax",
+            Self::MiniMaxCoding => "MiniMax Coding Plan",
             Self::OpenAi => "OpenAI",
+            Self::OpenCodeGo => "OpenCode Go",
+            Self::OpenCodeZen => "OpenCode Zen",
+            Self::Zhipu => "Zhipu GLM",
+            Self::ZhipuCoding => "Zhipu GLM Coding Plan",
         }
     }
 }

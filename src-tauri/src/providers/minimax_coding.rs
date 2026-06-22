@@ -10,12 +10,12 @@ use crate::{
     },
 };
 
-pub struct MiniMaxProvider;
+pub struct MiniMaxCodingProvider;
 
 #[async_trait]
-impl CompletionProvider for MiniMaxProvider {
+impl CompletionProvider for MiniMaxCodingProvider {
     fn provider(&self) -> AiProvider {
-        AiProvider::MiniMax
+        AiProvider::MiniMaxCoding
     }
 
     async fn request_fim_completion(

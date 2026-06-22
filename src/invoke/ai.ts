@@ -4,13 +4,19 @@ export type AiProvider =
 	| 'anthropic'
 	| 'custom'
 	| 'deepseek'
+	| 'google'
 	| 'kimi'
 	| 'minimax'
+	| 'minimax-coding'
 	| 'mimo'
 	| 'mimo-coding'
-	| 'openai';
+	| 'openai'
+	| 'opencode-go'
+	| 'opencode-zen'
+	| 'zhipu'
+	| 'zhipu-coding';
 
-export type CustomProviderProtocol = 'anthropic' | 'openai';
+export type CustomProviderProtocol = 'anthropic' | 'google' | 'openai';
 
 /** Configuration for an AI completion request. */
 export type AiCompletionConfig = {

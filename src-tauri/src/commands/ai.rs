@@ -6,6 +6,7 @@ use std::{
 use tauri::{ipc::Channel, State};
 
 use crate::{
+    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
     services::ai,
     services::license::LicenseService,
@@ -29,7 +30,12 @@ fn require_api_key(provider: AiProvider) -> Result<String, String> {
     let api_key = secure_storage::load_ai_api_key_sync(provider)?
         .map(|key| key.trim().to_string())
         .filter(|key| !key.is_empty())
-        .ok_or_else(|| format!("请先在设置中保存 {} API Key", provider.display_name()))?;
+        .ok_or_else(|| {
+            i18n::tf(
+                "ai.save_key_in_settings",
+                &[("provider", provider.display_name())],
+            )
+        })?;
 
     {
         let mut cache = API_KEY_CACHE.lock().unwrap();

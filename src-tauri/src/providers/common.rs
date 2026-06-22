@@ -3,6 +3,7 @@ use reqwest::Response;
 use serde::Deserialize;
 
 use crate::{
+    i18n,
     models::ai::{AiCompletionConfig, CompletionRequest},
     prompt::PromptContext,
 };
@@ -51,7 +52,7 @@ pub fn resolve_api_key(config: &AiCompletionConfig) -> Result<&str, String> {
     let api_key = config.api_key.trim();
 
     if api_key.is_empty() {
-        return Err("请先在设置中保存 API Key".to_string());
+        return Err(i18n::t("ai.api_key_required").to_string());
     }
 
     Ok(api_key)
@@ -69,7 +70,7 @@ pub fn resolve_api_url(
         .unwrap_or(default_api_url);
 
     if api_url.is_empty() {
-        return Err("请先在设置中填写 API URL".to_string());
+        return Err(i18n::t("ai.api_url_required").to_string());
     }
 
     let api_url = trim_trailing_slash(api_url).to_string();
@@ -99,7 +100,7 @@ pub fn resolve_model<'a>(
         .unwrap_or(default_model);
 
     if model.is_empty() {
-        return Err("请先在设置中填写 Model".to_string());
+        return Err(i18n::t("ai.model_required").to_string());
     }
 
     Ok(model)
@@ -241,7 +242,13 @@ pub async fn stream_sse_response(
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| format!("读取流式响应失败: {error}"))?;
+        let error_text = chunk.as_ref().err().map(|error| error.to_string());
+        let chunk = chunk.map_err(|_| {
+            i18n::tf(
+                "ai.read_stream_failed",
+                &[("error", error_text.as_deref().unwrap_or_default())],
+            )
+        })?;
         pending_bytes.extend_from_slice(&chunk);
 
         loop {
@@ -255,14 +262,22 @@ pub async fn stream_sse_response(
                     let valid_up_to = error.valid_up_to();
                     if valid_up_to > 0 {
                         let valid_text = std::str::from_utf8(&pending_bytes[..valid_up_to])
-                            .map_err(|parse_error| format!("解析流式响应失败: {parse_error}"))?;
+                            .map_err(|parse_error| {
+                                i18n::tf(
+                                    "ai.parse_stream_failed",
+                                    &[("error", &parse_error.to_string())],
+                                )
+                            })?;
                         buffer.push_str(valid_text);
                         pending_bytes.drain(..valid_up_to);
                     }
                     break;
                 }
                 Err(error) => {
-                    return Err(format!("解析流式响应失败: {error}"));
+                    return Err(i18n::tf(
+                        "ai.parse_stream_failed",
+                        &[("error", &error.to_string())],
+                    ));
                 }
             }
         }
@@ -275,8 +290,9 @@ pub async fn stream_sse_response(
     }
 
     if !pending_bytes.is_empty() {
-        let text = std::str::from_utf8(&pending_bytes)
-            .map_err(|error| format!("解析流式响应失败: {error}"))?;
+        let text = std::str::from_utf8(&pending_bytes).map_err(|error| {
+            i18n::tf("ai.parse_stream_failed", &[("error", &error.to_string())])
+        })?;
         buffer.push_str(text);
     }
 

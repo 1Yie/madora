@@ -6,8 +6,11 @@ use crate::{
     prompt::PromptManager,
     providers::{
         anthropic::request_anthropic_compatible_fim,
-        anthropic::request_anthropic_compatible_fim_stream, openai::request_openai_compatible_fim,
-        openai::request_openai_compatible_fim_stream, CompletionProvider,
+        anthropic::request_anthropic_compatible_fim_stream,
+        google::{request_google_compatible_fim, request_google_compatible_fim_stream},
+        openai::request_openai_compatible_fim,
+        openai::request_openai_compatible_fim_stream,
+        CompletionProvider,
     },
 };
 
@@ -30,6 +33,9 @@ impl CompletionProvider for CustomProvider {
             CustomProviderProtocol::Anthropic => {
                 request_anthropic_compatible_fim(client, prompt_manager, config, request).await
             }
+            CustomProviderProtocol::Google => {
+                request_google_compatible_fim(client, prompt_manager, config, request).await
+            }
             CustomProviderProtocol::OpenAi => {
                 request_openai_compatible_fim(client, prompt_manager, config, request).await
             }
@@ -47,6 +53,16 @@ impl CompletionProvider for CustomProvider {
         match config.custom_protocol.unwrap_or_default() {
             CustomProviderProtocol::Anthropic => {
                 request_anthropic_compatible_fim_stream(
+                    client,
+                    prompt_manager,
+                    config,
+                    request,
+                    on_chunk,
+                )
+                .await
+            }
+            CustomProviderProtocol::Google => {
+                request_google_compatible_fim_stream(
                     client,
                     prompt_manager,
                     config,

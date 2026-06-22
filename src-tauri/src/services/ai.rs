@@ -8,6 +8,8 @@ use reqwest::Client;
 use tauri::ipc::Channel;
 use tokio::sync::Notify;
 
+use crate::i18n;
+
 use crate::{
     models::ai::{
         AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult, CustomProviderProtocol,
@@ -194,7 +196,7 @@ fn send_completion_chunk(channel: &Channel<String>, chunk: String) -> Result<(),
 
     channel
         .send(chunk)
-        .map_err(|error| format!("发送补全片段失败: {error}"))
+        .map_err(|error| i18n::tf("ai.send_chunk_failed", &[("error", &error.to_string())]))
 }
 
 fn resolve_cache_api_url(provider: AiProvider, config: &AiCompletionConfig) -> String {

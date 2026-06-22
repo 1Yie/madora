@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::json;
 
 use crate::{
+    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::PromptManager,
     providers::{
@@ -65,22 +66,42 @@ impl CompletionProvider for DeepSeekProvider {
             }))
             .send()
             .await
-            .map_err(|error| format!("调用 FIM completion 失败: {error}"))?;
+            .map_err(|error| {
+                let err = error.to_string();
+                i18n::tf(
+                    "ai.provider.request_failed",
+                    &[("provider", "DeepSeek"), ("error", &err)],
+                )
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "无法读取错误详情".to_string());
+                .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
 
-            return Err(format!("FIM completion API error ({status}): {body}"));
+            let status_str = status.as_u16().to_string();
+            return Err(i18n::tf(
+                "ai.provider.api_error",
+                &[
+                    ("provider", "DeepSeek"),
+                    ("status", &status_str),
+                    ("body", &body),
+                ],
+            ));
         }
 
         let payload = response
             .json::<TextCompletionResponse>()
             .await
-            .map_err(|error| format!("解析 FIM completion 响应失败: {error}"))?;
+            .map_err(|error| {
+                let err = error.to_string();
+                i18n::tf(
+                    "ai.provider.parse_response_failed",
+                    &[("provider", "DeepSeek"), ("error", &err)],
+                )
+            })?;
 
         Ok(take_text_completion(payload))
     }
@@ -127,16 +148,30 @@ impl CompletionProvider for DeepSeekProvider {
             }))
             .send()
             .await
-            .map_err(|error| format!("调用流式 FIM completion 失败: {error}"))?;
+            .map_err(|error| {
+                let err = error.to_string();
+                i18n::tf(
+                    "ai.provider.request_stream_failed",
+                    &[("provider", "DeepSeek"), ("error", &err)],
+                )
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "无法读取错误详情".to_string());
+                .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
 
-            return Err(format!("流式 FIM completion API error ({status}): {body}"));
+            let status_str = status.as_u16().to_string();
+            return Err(i18n::tf(
+                "ai.provider.stream_api_error",
+                &[
+                    ("provider", "DeepSeek"),
+                    ("status", &status_str),
+                    ("body", &body),
+                ],
+            ));
         }
 
         let mut completion = String::new();
@@ -145,8 +180,14 @@ impl CompletionProvider for DeepSeekProvider {
                 return Ok(());
             }
 
-            let payload = serde_json::from_str::<TextCompletionResponse>(&event.data)
-                .map_err(|error| format!("解析流式 FIM 响应失败: {error}"))?;
+            let payload =
+                serde_json::from_str::<TextCompletionResponse>(&event.data).map_err(|error| {
+                    let err = error.to_string();
+                    i18n::tf(
+                        "ai.provider.parse_stream_response_failed",
+                        &[("provider", "DeepSeek"), ("error", &err)],
+                    )
+                })?;
             let chunk = take_text_completion(payload);
             if chunk.is_empty() {
                 return Ok(());
