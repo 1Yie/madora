@@ -1,8 +1,19 @@
 import { Check, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+	DEFAULT_EDITOR_FONT_SIZE,
+	MAX_EDITOR_FONT_SIZE,
+	MIN_EDITOR_FONT_SIZE,
+	useAppSettings,
+} from '@/context/app-settings-provider';
 import { useTheme } from '@/context/theme-provider';
+import type { LocalePreference } from '@/i18n/locale';
+import { ColorPicker } from '@/components/ui/color-picker';
+import { Slider } from '@/components/ui/slider';
 import {
 	Option,
+	SettingRow,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
@@ -65,12 +76,12 @@ const DEFAULT_SWATCH = `linear-gradient(135deg,
   color-mix(in oklab, var(--color-foreground) 6%, var(--color-background)))`;
 
 const PRESETS: Array<[string, string]> = [
-	['#7C3AED', '紫色'],
-	['#0EA5E9', '青色'],
-	['#EF4444', '红色'],
-	['#F59E0B', '琥珀'],
-	['#10B981', '绿色'],
-	['#6366F1', '靛蓝'],
+	['#7C3AED', 'settings.appearance.accentOptions.purple'],
+	['#0EA5E9', 'settings.appearance.accentOptions.cyan'],
+	['#EF4444', 'settings.appearance.accentOptions.red'],
+	['#F59E0B', 'settings.appearance.accentOptions.amber'],
+	['#10B981', 'settings.appearance.accentOptions.green'],
+	['#6366F1', 'settings.appearance.accentOptions.indigo'],
 ];
 
 function swatchCardCn(active: boolean) {
@@ -96,6 +107,7 @@ function ActiveBadge() {
 const TAB_BAR_MODE_KEY = 'madora-tab-bar-mode';
 
 function TabBarModeSetting() {
+	const { t } = useTranslation();
 	const [mode, setMode] = useState<'scroll' | 'wrap'>(
 		() =>
 			(window.localStorage.getItem(TAB_BAR_MODE_KEY) as 'scroll' | 'wrap') ??
@@ -115,21 +127,87 @@ function TabBarModeSetting() {
 		<div className="grid gap-3 md:grid-cols-2">
 			<Option
 				active={mode === 'scroll'}
-				label="单行滚动"
-				description="所有标签页保持在一行，超出后通过横向滚动查看"
+				label={t('settings.appearance.tabBar.scroll.label')}
+				description={t('settings.appearance.tabBar.scroll.description')}
 				onClick={() => handleChange('scroll')}
 			/>
 			<Option
 				active={mode === 'wrap'}
-				label="自动换行"
-				description="标签页超出容器宽度后自动换行排列"
+				label={t('settings.appearance.tabBar.wrap.label')}
+				description={t('settings.appearance.tabBar.wrap.description')}
 				onClick={() => handleChange('wrap')}
 			/>
 		</div>
 	);
 }
 
+function LanguagePreferenceSetting() {
+	const { t } = useTranslation();
+	const { localePreference, setLocalePreference } = useAppSettings();
+	const options: Array<{ label: string; value: LocalePreference }> = [
+		{ label: t('language.options.system'), value: 'system' },
+		{ label: t('language.options.zhCN'), value: 'zh-CN' },
+		{ label: t('language.options.en'), value: 'en' },
+		{ label: t('language.options.ja'), value: 'ja' },
+		{ label: t('language.options.ko'), value: 'ko' },
+	];
+
+	return (
+		<div className="grid gap-3 md:grid-cols-3">
+			{options.map((option) => (
+				<Option
+					key={option.value}
+					active={localePreference === option.value}
+					label={option.label}
+					onClick={() => setLocalePreference(option.value)}
+				/>
+			))}
+		</div>
+	);
+}
+
+function EditorTextSizeSetting() {
+	const { t } = useTranslation();
+	const { editorFontSize, setEditorFontSize } = useAppSettings();
+
+	return (
+		<SettingRow
+			title={t('settings.appearance.editorTextSize.label')}
+			stacked
+			accessory={
+				<div
+					className="rounded-md border border-border bg-background px-2.5 py-1
+						font-mono text-sm text-foreground"
+				>
+					{editorFontSize}px
+				</div>
+			}
+		>
+			<div className="space-y-3 px-1">
+				<Slider
+					max={MAX_EDITOR_FONT_SIZE}
+					min={MIN_EDITOR_FONT_SIZE}
+					onValueChange={(next) => {
+						const nextValue = Array.isArray(next) ? next[0] : next;
+						setEditorFontSize(nextValue ?? DEFAULT_EDITOR_FONT_SIZE);
+					}}
+					step={1}
+					value={[editorFontSize]}
+				/>
+				<div
+					className="flex items-center justify-between font-mono text-[11px]
+						text-muted-foreground"
+				>
+					<span>{MIN_EDITOR_FONT_SIZE}px</span>
+					<span>{MAX_EDITOR_FONT_SIZE}px</span>
+				</div>
+			</div>
+		</SettingRow>
+	);
+}
+
 export function AppearanceSettings() {
+	const { t } = useTranslation();
 	const { theme, setTheme, accent, accentMode, setAccent, setAccentMode } =
 		useTheme();
 
@@ -151,34 +229,44 @@ export function AppearanceSettings() {
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard title="标签页">
+			<SettingsSectionCard
+				title={t('settings.appearance.cards.language.title')}
+			>
+				<LanguagePreferenceSetting />
+			</SettingsSectionCard>
+
+			<SettingsSectionCard title={t('settings.appearance.cards.tabs.title')}>
 				<TabBarModeSetting />
 			</SettingsSectionCard>
 
-			<SettingsSectionCard title="主题模式">
+			<SettingsSectionCard title={t('settings.appearance.cards.editor.title')}>
+				<EditorTextSizeSetting />
+			</SettingsSectionCard>
+
+			<SettingsSectionCard title={t('settings.appearance.cards.theme.title')}>
 				<div className="grid gap-3 md:grid-cols-3">
 					<Option
 						active={theme === 'system'}
-						description="跟随当前设备或系统设置"
-						label="跟随系统"
+						description={t('settings.appearance.theme.system.description')}
+						label={t('settings.appearance.theme.system.label')}
 						onClick={() => setTheme('system')}
 					/>
 					<Option
 						active={theme === 'light'}
-						description="更适合明亮环境"
-						label="浅色"
+						description={t('settings.appearance.theme.light.description')}
+						label={t('settings.appearance.theme.light.label')}
 						onClick={() => setTheme('light')}
 					/>
 					<Option
 						active={theme === 'dark'}
-						description="适合夜间或长时间阅读"
-						label="深色"
+						description={t('settings.appearance.theme.dark.description')}
+						label={t('settings.appearance.theme.dark.label')}
 						onClick={() => setTheme('dark')}
 					/>
 				</div>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard title="主题颜色">
+			<SettingsSectionCard title={t('settings.appearance.cards.accent.title')}>
 				<div className="space-y-2.5">
 					<div className="grid grid-cols-3 gap-2.5 md:grid-cols-4">
 						<button
@@ -193,7 +281,9 @@ export function AppearanceSettings() {
 								className="h-9 w-9 shrink-0 rounded-lg"
 								style={{ background: SYSTEM_SWATCH }}
 							/>
-							<span className="text-sm font-medium">跟随系统</span>
+							<span className="text-sm font-medium">
+								{t('settings.appearance.accentOptions.system')}
+							</span>
 						</button>
 
 						<button
@@ -208,21 +298,20 @@ export function AppearanceSettings() {
 								className="h-9 w-9 shrink-0 rounded-lg"
 								style={{ background: DEFAULT_SWATCH }}
 							/>
-							<span className="text-sm font-medium">默认主题</span>
+							<span className="text-sm font-medium">
+								{t('settings.appearance.accentOptions.default')}
+							</span>
 						</button>
 
-						<label
+						<ColorPicker
+							ariaLabel={t('settings.appearance.accentOptions.custom')}
 							className={cn(
 								swatchCardCn(isCustomFreeform),
-								'relative cursor-pointer overflow-hidden'
+								'cursor-pointer overflow-hidden'
 							)}
+							onValueChange={setAccent}
+							value={accent ?? sorted[0][0]}
 						>
-							<input
-								type="color"
-								className="sr-only"
-								value={isCustomFreeform ? (accent ?? '#000000') : '#000000'}
-								onChange={(e) => setAccent(e.target.value)}
-							/>
 							<div className="flex h-full items-center gap-3 px-4 py-3">
 								<div
 									className="relative h-9 w-9 shrink-0 rounded-lg"
@@ -252,7 +341,9 @@ export function AppearanceSettings() {
 									)}
 								</div>
 								<div>
-									<div className="text-sm font-medium">自定义</div>
+									<div className="text-sm font-medium">
+										{t('settings.appearance.accentOptions.custom')}
+									</div>
 									{isCustomFreeform && (
 										<div className="font-mono text-[11px] text-muted-foreground">
 											{accent}
@@ -260,7 +351,7 @@ export function AppearanceSettings() {
 									)}
 								</div>
 							</div>
-						</label>
+						</ColorPicker>
 					</div>
 
 					<div className="grid grid-cols-3 gap-2.5 md:grid-cols-4">
@@ -282,7 +373,7 @@ export function AppearanceSettings() {
 										{selectedPreset === hex && <ActiveBadge />}
 									</div>
 									<div className="px-3 py-2">
-										<div className="text-sm font-medium">{label}</div>
+										<div className="text-sm font-medium">{t(label)}</div>
 										<div className="font-mono text-[11px] text-muted-foreground">
 											{hex}
 										</div>

@@ -1,16 +1,9 @@
-import {
-	Cloud,
-	Keyboard,
-	Palette,
-	Settings2,
-	ShieldCheck,
-	Terminal,
-} from 'lucide-react';
+import type { TFunction } from 'i18next';
+import { Cloud, Keyboard, Palette, Settings2, ShieldCheck } from 'lucide-react';
 
 export type SettingsSectionId =
 	| 'appearance'
 	| 'editor'
-	| 'cli'
 	| 'license'
 	| 'sync'
 	| 'about';
@@ -22,41 +15,37 @@ export type SettingsSection = {
 	icon: typeof Palette;
 };
 
-export const settingsSections: SettingsSection[] = [
-	{
-		id: 'appearance',
-		label: '外观',
-		description: '主题与界面',
-		icon: Palette,
-	},
-	{
-		id: 'editor',
-		label: '编辑器',
-		description: '输入与编辑',
-		icon: Keyboard,
-	},
-	{
-		id: 'sync',
-		label: '同步',
-		description: '配置与同步',
-		icon: Cloud,
-	},
-	{
-		id: 'cli',
-		label: 'CLI',
-		description: '命令行工具',
-		icon: Terminal,
-	},
-	{
-		id: 'license',
-		label: '许可证',
-		description: '激活与管理',
-		icon: ShieldCheck,
-	},
-	{
-		id: 'about',
-		label: '关于',
-		description: '产品与方向',
-		icon: Settings2,
-	},
-];
+export function getSettingsSections(t: TFunction): SettingsSection[] {
+	return [
+		{
+			id: 'appearance',
+			label: t('settings.sections.appearance.label'),
+			description: t('settings.sections.appearance.description'),
+			icon: Palette,
+		},
+		{
+			id: 'editor',
+			label: t('settings.sections.editor.label'),
+			description: t('settings.sections.editor.description'),
+			icon: Keyboard,
+		},
+		{
+			id: 'sync',
+			label: t('settings.sections.sync.label'),
+			description: t('settings.sections.sync.description'),
+			icon: Cloud,
+		},
+		{
+			id: 'license',
+			label: t('settings.sections.license.label'),
+			description: t('settings.sections.license.description'),
+			icon: ShieldCheck,
+		},
+		{
+			id: 'about',
+			label: t('settings.sections.about.label'),
+			description: t('settings.sections.about.description'),
+			icon: Settings2,
+		},
+	];
+}

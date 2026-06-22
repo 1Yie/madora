@@ -1,11 +1,13 @@
 import { Crown, OctagonX, ShieldAlert } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { useLicense } from '@/context/license-provider';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 
 function TrialBanner() {
+	const { t } = useTranslation();
 	const { status, isLoading, deactivate } = useLicense();
 	const [showActivation, setShowActivation] = useState(false);
 	const [switchingToTrial, setSwitchingToTrial] = useState(false);
@@ -48,18 +50,17 @@ function TrialBanner() {
 							<div className="space-y-3">
 								<Spinner className="mx-auto size-5" />
 								<p className="text-sm text-muted-foreground">
-									正在验证许可证...
+									{t('licenseBanner.verifying')}
 								</p>
 							</div>
 						) : (
 							<>
 								<div className="space-y-2">
 									<h2 className="text-xl font-semibold text-foreground">
-										许可证需要更新
+										{t('licenseBanner.revoked.title')}
 									</h2>
 									<p className="text-sm text-muted-foreground">
-										此设备上的许可证已失效，请重新输入许可证密钥以继续使用
-										Madora。
+										{t('licenseBanner.revoked.description')}
 									</p>
 								</div>
 								<div className="flex flex-col gap-2 sm:flex-row">
@@ -70,7 +71,7 @@ function TrialBanner() {
 										onClick={() => setShowActivation(true)}
 									>
 										<Crown className="size-4" />
-										激活新许可证
+										{t('licenseBanner.revoked.action')}
 									</Button>
 									{hasTrial && (
 										<Button
@@ -79,7 +80,7 @@ function TrialBanner() {
 											onClick={handleSwitchToTrial}
 										>
 											{switchingToTrial && <Spinner className="size-4" />}
-											切换到试用期
+											{t('licenseBanner.revoked.switchToTrial')}
 										</Button>
 									)}
 								</div>
@@ -120,17 +121,17 @@ function TrialBanner() {
 							<div className="space-y-3">
 								<Spinner className="mx-auto size-5" />
 								<p className="text-sm text-muted-foreground">
-									正在验证许可证...
+									{t('licenseBanner.verifying')}
 								</p>
 							</div>
 						) : (
 							<>
 								<div className="space-y-2">
 									<h2 className="text-xl font-semibold text-foreground">
-										试用期已结束
+										{t('licenseBanner.expired.title')}
 									</h2>
 									<p className="text-sm text-muted-foreground">
-										您的 14 天试用期已到期。请激活许可证以继续使用 Madora。
+										{t('licenseBanner.expired.description')}
 									</p>
 								</div>
 								<Button
@@ -139,7 +140,7 @@ function TrialBanner() {
 									onClick={() => setShowActivation(true)}
 								>
 									<Crown className="size-4" />
-									激活许可证
+									{t('licenseBanner.expired.action')}
 								</Button>
 							</>
 						)}
@@ -164,7 +165,7 @@ function TrialBanner() {
 					bg-amber-500/10"
 			>
 				<span className="text-xs text-amber-700 dark:text-amber-400">
-					试用期剩余 <span className="font-semibold">{daysRemaining}</span> 天
+					{t('licenseBanner.trial.remaining', { days: daysRemaining })}
 				</span>
 				<Button
 					variant="link"
@@ -174,7 +175,7 @@ function TrialBanner() {
 					onClick={() => setShowActivation(true)}
 					disabled={isLoading}
 				>
-					激活
+					{t('licenseBanner.trial.action')}
 				</Button>
 			</div>
 			<LicenseActivationDialog

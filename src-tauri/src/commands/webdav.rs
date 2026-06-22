@@ -1,5 +1,6 @@
 use tauri::State;
 
+use crate::i18n;
 use crate::models::webdav::{
     WebDavConfig, WebDavConnectionTest, WebDavSyncFileEntry, WebDavSyncResult,
     WebDavSyncStatusResult,
@@ -17,36 +18,55 @@ fn ensure_store() -> Result<(), String> {
     #[cfg(not(target_os = "linux"))]
     let use_secret_service = false;
 
-    keyring::use_native_store(use_secret_service).map_err(|e| format!("无法访问系统密钥存储: {e}"))
+    keyring::use_native_store(use_secret_service)
+        .map_err(|e| i18n::tf("webdav.keyring_access_failed", &[("error", &e.to_string())]))
 }
 
 fn load_password_sync() -> Result<Option<String>, String> {
     ensure_store()?;
-    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY)
-        .map_err(|e| format!("无法初始化密钥存储条目: {e}"))?;
+    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY).map_err(|e| {
+        i18n::tf(
+            "webdav.keyring_entry_init_failed",
+            &[("error", &e.to_string())],
+        )
+    })?;
     match entry.get_password() {
         Ok(pw) => Ok(Some(pw)),
         Err(keyring_core::Error::NoEntry) => Ok(None),
-        Err(e) => Err(format!("读取密码失败: {e}")),
+        Err(e) => Err(i18n::tf(
+            "webdav.read_password_failed",
+            &[("error", &e.to_string())],
+        )),
     }
 }
 
 fn store_password_sync(password: String) -> Result<(), String> {
     ensure_store()?;
-    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY)
-        .map_err(|e| format!("无法初始化密钥存储条目: {e}"))?;
+    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY).map_err(|e| {
+        i18n::tf(
+            "webdav.keyring_entry_init_failed",
+            &[("error", &e.to_string())],
+        )
+    })?;
     entry
         .set_password(&password)
-        .map_err(|e| format!("保存密码失败: {e}"))
+        .map_err(|e| i18n::tf("webdav.save_password_failed", &[("error", &e.to_string())]))
 }
 
 fn delete_password_sync() -> Result<(), String> {
     ensure_store()?;
-    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY)
-        .map_err(|e| format!("无法初始化密钥存储条目: {e}"))?;
+    let entry = keyring_core::Entry::new(KEYRING_SERVICE, KEYRING_PASSWORD_KEY).map_err(|e| {
+        i18n::tf(
+            "webdav.keyring_entry_init_failed",
+            &[("error", &e.to_string())],
+        )
+    })?;
     match entry.delete_credential() {
         Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-        Err(e) => Err(format!("删除密码失败: {e}")),
+        Err(e) => Err(i18n::tf(
+            "webdav.delete_password_failed",
+            &[("error", &e.to_string())],
+        )),
     }
 }
 

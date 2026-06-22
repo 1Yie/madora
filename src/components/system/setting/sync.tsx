@@ -1,5 +1,6 @@
 import { Cloud, GitBranch } from 'lucide-react';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Switch } from '@/components/ui/switch';
 import {
 	SettingsSectionCard,
@@ -9,31 +10,32 @@ import {
 import { useWorkspace } from '@/context/workspace-provider';
 
 export function SyncSettings() {
+	const { t } = useTranslation();
 	const { syncEnabled, setSyncEnabled, syncMode, setSyncMode } = useWorkspace();
 
 	const syncModeOptions = useMemo(
 		() => [
 			{
 				id: 'git' as const,
-				label: 'Git',
-				description: '本地版本控制，支持提交、推送、拉取与分支管理',
+				label: t('settings.sync.options.git.label'),
+				description: t('settings.sync.options.git.description'),
 				icon: GitBranch,
 			},
 			{
 				id: 'webdav' as const,
-				label: 'WebDAV',
-				description: '远端文件同步，通过 WebDAV 协议同步文件',
+				label: t('settings.sync.options.webdav.label'),
+				description: t('settings.sync.options.webdav.description'),
 				icon: Cloud,
 			},
 		],
-		[]
+		[t]
 	);
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard title="同步方案">
+			<SettingsSectionCard title={t('settings.sync.cards.mode.title')}>
 				<div className="space-y-4">
-					<SettingRow title="启用同步">
+					<SettingRow title={t('settings.sync.rows.enabled.title')}>
 						<Switch
 							checked={syncEnabled}
 							onCheckedChange={(checked) => setSyncEnabled(checked)}

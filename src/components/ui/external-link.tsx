@@ -1,6 +1,7 @@
 import { openUrl } from '@/invoke/opener';
 import { ExternalLink } from 'lucide-react';
 import type React from 'react';
+import i18n from '@/i18n';
 
 import { showErrorToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
@@ -22,7 +23,7 @@ function getErrorMessage(error: unknown): string {
 		return error;
 	}
 
-	return '无法打开链接';
+	return i18n.t('errors.openLinkFailed');
 }
 
 export function ExternalLinkAnchor({
@@ -45,7 +46,10 @@ export function ExternalLinkAnchor({
 				event.preventDefault();
 
 				void openUrl(href).catch((error) => {
-					showErrorToast('打开链接失败', getErrorMessage(error));
+					showErrorToast(
+						i18n.t('errors.openLinkFailed'),
+						getErrorMessage(error)
+					);
 				});
 			}}
 		>

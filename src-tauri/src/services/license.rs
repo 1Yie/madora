@@ -7,6 +7,8 @@ use keyring_core::{Entry, Error};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::i18n;
+
 const TRIAL_DAYS: i64 = 14;
 const DEFAULT_AUTH_SERVER_URL: &str = "http://localhost:3000";
 const GRACE_PERIOD_HOURS: i64 = 1;
@@ -101,19 +103,24 @@ fn translate_api_error(status: u16, body: &str) -> String {
         .and_then(|e| e.error);
 
     match code.as_deref() {
-        Some("LICENSE_NOT_FOUND") => "许可证不存在".into(),
-        Some("LICENSE_EXPIRED") => "许可证已过期".into(),
-        Some("LICENSE_REVOKED") => "许可证已被吊销".into(),
-        Some("LICENSE_ALREADY_ACTIVATED") => "许可证已在其他设备激活".into(),
+        Some("LICENSE_NOT_FOUND") => i18n::t("license.code.not_found"),
+        Some("LICENSE_EXPIRED") => i18n::t("license.code.expired"),
+        Some("LICENSE_REVOKED") => i18n::t("license.code.revoked"),
+        Some("LICENSE_ALREADY_ACTIVATED") => i18n::t("license.code.already_activated"),
         Some("LICENSE_MAX_ACTIVATIONS") | Some("MAX_ACTIVATIONS_REACHED") => {
-            "许可证已达到最大激活次数".into()
+            i18n::t("license.code.activation_limit")
         }
-        Some("INVALID_MACHINE") | Some("MACHINE_MISMATCH") => "设备不匹配".into(),
-        Some("INVALID_TOKEN") => "许可证令牌无效，请重新激活".into(),
-        Some("NOT_ACTIVATED") => "此设备尚未激活".into(),
-        Some("ACTIVATION_NOT_FOUND") => "未找到激活记录".into(),
-        Some(code) => format!("服务器错误: {code}"),
-        None => format!("服务器请求失败 (HTTP {status})"),
+        Some("INVALID_MACHINE") | Some("MACHINE_MISMATCH") => {
+            i18n::t("license.code.invalid_machine")
+        }
+        Some("INVALID_TOKEN") => i18n::t("license.code.invalid_token"),
+        Some("NOT_ACTIVATED") => i18n::t("license.code.not_activated"),
+        Some("ACTIVATION_NOT_FOUND") => i18n::t("license.code.activation_not_found"),
+        Some(code) => i18n::tf("license.code.server_error", &[("code", code)]),
+        None => {
+            let status_str = status.to_string();
+            i18n::tf("license.code.request_failed", &[("status", &status_str)])
+        }
     }
 }
 
@@ -151,15 +158,24 @@ impl LicenseService {
             #[cfg(not(target_os = "linux"))]
             let use_secret_service = false;
 
-            keyring::use_native_store(use_secret_service)
-                .map_err(|e| format!("无法访问系统密钥存储: {e}"))
+            keyring::use_native_store(use_secret_service).map_err(|e| {
+                i18n::tf(
+                    "license.keyring_access_failed",
+                    &[("error", &e.to_string())],
+                )
+            })
         })
         .clone()
     }
 
     fn license_entry(user: &str) -> Result<Entry, String> {
         Self::ensure_keyring()?;
-        Entry::new(KEYRING_SERVICE, user).map_err(|e| format!("无法初始化系统密钥存储条目: {e}"))
+        Entry::new(KEYRING_SERVICE, user).map_err(|e| {
+            i18n::tf(
+                "license.keyring_entry_init_failed",
+                &[("error", &e.to_string())],
+            )
+        })
     }
 
     fn generate_machine_id() -> String {
@@ -179,7 +195,8 @@ impl LicenseService {
         let entry = Self::license_entry(KEYRING_USER)?;
 
         match entry.get_password() {
-            Ok(json) => serde_json::from_str(&json).map_err(|e| format!("解析许可证信息失败: {e}")),
+            Ok(json) => serde_json::from_str(&json)
+                .map_err(|e| i18n::tf("license.parse_info_failed", &[("error", &e.to_string())])),
             Err(Error::NoEntry) => {
                 // First run — create default info (no file fallback, all in keyring)
                 let info = LicenseInfo {
@@ -197,17 +214,24 @@ impl LicenseService {
                 self.save_license_info(&info)?;
                 Ok(info)
             }
-            Err(e) => Err(format!("读取许可证信息失败: {e}")),
+            Err(e) => Err(i18n::tf(
+                "license.read_info_failed",
+                &[("error", &e.to_string())],
+            )),
         }
     }
 
     fn save_license_info(&self, info: &LicenseInfo) -> Result<(), String> {
         let entry = Self::license_entry(KEYRING_USER)?;
-        let json =
-            serde_json::to_string_pretty(info).map_err(|e| format!("序列化许可证信息失败: {e}"))?;
+        let json = serde_json::to_string_pretty(info).map_err(|e| {
+            i18n::tf(
+                "license.serialize_info_failed",
+                &[("error", &e.to_string())],
+            )
+        })?;
         entry
             .set_password(&json)
-            .map_err(|e| format!("保存许可证信息失败: {e}"))
+            .map_err(|e| i18n::tf("license.save_info_failed", &[("error", &e.to_string())]))
     }
     fn trial_days_remaining(info: &LicenseInfo) -> Option<i64> {
         let trial_started = info
@@ -311,15 +335,15 @@ impl LicenseService {
         let parts: Vec<&str> = key.split('-').collect();
 
         if parts.len() != 5 || parts[0] != "MADO" {
-            return Err("许可证密钥格式无效：必须以 MADO 开头".into());
+            return Err(i18n::t("license.invalid_key_prefix"));
         }
 
         for part in &parts {
             if part.len() != 4 {
-                return Err("许可证密钥格式无效：每个段必须是 4 个字符".into());
+                return Err(i18n::t("license.invalid_key_segment_length"));
             }
             if !part.chars().all(|c| c.is_ascii_alphanumeric()) {
-                return Err("许可证密钥格式无效：只能包含 0-9 和 A-Z".into());
+                return Err(i18n::t("license.invalid_key_charset"));
             }
         }
 
@@ -342,7 +366,12 @@ impl LicenseService {
             }))
             .send()
             .await
-            .map_err(|e| format!("连接验证服务器失败: {e}"))?;
+            .map_err(|e| {
+                i18n::tf(
+                    "license.connect_verify_failed",
+                    &[("error", &e.to_string())],
+                )
+            })?;
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -350,10 +379,12 @@ impl LicenseService {
             return Err(msg);
         }
 
-        let activate_response: ActivateResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("解析服务器响应失败: {e}"))?;
+        let activate_response: ActivateResponse = response.json().await.map_err(|e| {
+            i18n::tf(
+                "license.parse_server_response_failed",
+                &[("error", &e.to_string())],
+            )
+        })?;
 
         let activated_at = Utc::now().to_rfc3339();
         let updated = LicenseInfo {
@@ -456,7 +487,10 @@ impl LicenseService {
                         }
                     }
                 }
-                return Err(format!("连接验证服务器失败: {e}"));
+                return Err(i18n::tf(
+                    "license.connect_verify_failed",
+                    &[("error", &e.to_string())],
+                ));
             }
         };
 
@@ -472,7 +506,11 @@ impl LicenseService {
                         }
                     }
                 }
-                return Err(format!("验证服务器暂时不可用 (HTTP {})", status.as_u16()));
+                let status_str = status.as_u16().to_string();
+                return Err(i18n::tf(
+                    "license.server_unavailable",
+                    &[("status", &status_str)],
+                ));
             }
 
             // 4xx — license is invalid/revoked
@@ -495,10 +533,12 @@ impl LicenseService {
             });
         }
 
-        let verify_response: VerifyResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("解析服务器响应失败: {e}"))?;
+        let verify_response: VerifyResponse = response.json().await.map_err(|e| {
+            i18n::tf(
+                "license.parse_server_response_failed",
+                &[("error", &e.to_string())],
+            )
+        })?;
 
         if verify_response.valid {
             let verified_at = Utc::now().to_rfc3339();
@@ -551,7 +591,7 @@ impl LicenseService {
 
         let license_key = match &info.license_key {
             Some(k) => k.clone(),
-            None => return Err("没有可停用的许可证".into()),
+            None => return Err(i18n::t("license.no_license_to_deactivate")),
         };
 
         let _ = self
@@ -588,8 +628,8 @@ impl LicenseService {
 
         match status.state {
             LicenseState::Active | LicenseState::Trial => Ok(()),
-            LicenseState::Expired => Err("许可证已过期".into()),
-            LicenseState::Revoked => Err("许可证已被吊销".into()),
+            LicenseState::Expired => Err(i18n::t("license.expired")),
+            LicenseState::Revoked => Err(i18n::t("license.revoked")),
         }
     }
 }

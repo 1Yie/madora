@@ -18,19 +18,24 @@ import {
 	DialogFooter,
 } from '@/components/ui/dialog';
 import { showErrorToast } from '@/components/ui/toast';
+import { useTranslation } from 'react-i18next';
 import {
 	clearStoredMarkdownDrafts,
 	hasUnsaved,
 	saveAll,
 } from '@/lib/unsaved-registry';
 
-function getSaveFailureMessage(error: unknown): string {
+function getSaveFailureMessage(
+	error: unknown,
+	t: (k: string) => string
+): string {
 	if (error instanceof Error) return error.message;
 	if (typeof error === 'string') return error;
-	return '关闭前保存失败';
+	return t('topBar.saveFailureFallback');
 }
 
 export default function Titlebar() {
+	const { t } = useTranslation();
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [savingBeforeClose, setSavingBeforeClose] = useState(false);
 	const bypassCloseGuardRef = useRef(false);
@@ -64,7 +69,10 @@ export default function Titlebar() {
 
 			if (failed.length > 0) {
 				const firstError = failed[0]?.error;
-				showErrorToast('关闭前保存失败', getSaveFailureMessage(firstError));
+				showErrorToast(
+					t('topBar.toasts.saveFailed'),
+					getSaveFailureMessage(firstError, t)
+				);
 			}
 
 			if (!hasUnsaved()) {
@@ -74,8 +82,8 @@ export default function Titlebar() {
 			}
 
 			showErrorToast(
-				'关闭前仍有未保存内容',
-				'请重试保存，或选择不保存并关闭。'
+				t('topBar.toasts.stillUnsaved'),
+				t('topBar.toasts.stillUnsavedDescription')
 			);
 		} finally {
 			setSavingBeforeClose(false);
@@ -158,11 +166,11 @@ export default function Titlebar() {
 			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
 				<DialogPopup showCloseButton={false} className="max-w-md">
 					<DialogHeader>
-						<DialogTitle>工作区还有文档未保存</DialogTitle>
+						<DialogTitle>{t('topBar.confirmClose.title')}</DialogTitle>
 						<DialogDescription>
 							{savingBeforeClose
-								? '正在保存未完成的修改...'
-								: '关闭窗口前请选择：先保存修改，或放弃这些未保存的内容。'}
+								? t('topBar.confirmClose.saving')
+								: t('topBar.confirmClose.description')}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
@@ -171,20 +179,20 @@ export default function Titlebar() {
 							variant="outline"
 							onClick={() => setConfirmOpen(false)}
 						>
-							取消
+							{t('common.actions.cancel')}
 						</Button>
 						<Button
 							disabled={savingBeforeClose}
 							variant="destructive-outline"
 							onClick={() => void handleDiscardAndClose()}
 						>
-							不保存并关闭
+							{t('topBar.confirmClose.discard')}
 						</Button>
 						<Button
 							loading={savingBeforeClose}
 							onClick={() => void handleSaveAndClose()}
 						>
-							保存并关闭
+							{t('topBar.confirmClose.save')}
 						</Button>
 					</DialogFooter>
 				</DialogPopup>

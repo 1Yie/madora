@@ -1,7 +1,4 @@
-use crate::{
-    models::cli::{CliInstallResult, CliStatus, CliUninstallResult},
-    services::cli,
-};
+use crate::i18n;
 
 #[tauri::command]
 pub async fn show_window(window: tauri::Window) {
@@ -9,16 +6,6 @@ pub async fn show_window(window: tauri::Window) {
 }
 
 #[tauri::command]
-pub async fn get_cli_status(app: tauri::AppHandle) -> Result<CliStatus, String> {
-    cli::get_cli_status(&app)
-}
-
-#[tauri::command]
-pub async fn install_cli(app: tauri::AppHandle) -> Result<CliInstallResult, String> {
-    cli::install_cli(&app)
-}
-
-#[tauri::command]
-pub async fn uninstall_cli() -> Result<CliUninstallResult, String> {
-    cli::uninstall_cli()
+pub async fn set_app_locale(locale: String) {
+    i18n::set_locale(&locale);
 }

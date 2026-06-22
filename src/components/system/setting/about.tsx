@@ -1,6 +1,7 @@
 import { getAppInfo } from '@/invoke/app';
 import type { AppInfo } from '@/invoke/app';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import logo from '@/assets/icon.png';
 import packageJson from '../../../../package.json';
 import {
@@ -46,13 +47,14 @@ function useAppInfo() {
 }
 
 export function AboutSettings() {
+	const { t } = useTranslation();
 	const appInfo = useAppInfo();
 
 	const stats: Array<{ label: string; value: React.ReactNode }> = [
-		{ label: '版本', value: appInfo.version },
-		{ label: '作者', value: 'ichiyo' },
+		{ label: t('settings.about.stats.version'), value: appInfo.version },
+		{ label: t('settings.about.stats.author'), value: 'ichiyo' },
 		{
-			label: '网站',
+			label: t('settings.about.stats.website'),
 			value: (
 				<ExternalLinkAnchor href={WEBSITE_URL}>
 					{WEBSITE_URL}
@@ -60,7 +62,7 @@ export function AboutSettings() {
 			),
 		},
 		{
-			label: '源代码',
+			label: t('settings.about.stats.sourceCode'),
 			value: (
 				<ExternalLinkAnchor href={SOURCE_CODE_URL}>
 					{SOURCE_CODE_URL}
@@ -75,9 +77,11 @@ export function AboutSettings() {
 				appName="Madora"
 				tagline={
 					<p className="font-mono text-4xl font-medium tracking-tight">
-						Markdown editing,
+						{t('setup.welcome.taglineTop')}
 						<br />
-						<span className="text-muted-foreground">powered by AI</span>
+						<span className="text-muted-foreground">
+							{t('setup.welcome.taglineBottom')}
+						</span>
 					</p>
 				}
 			>
@@ -87,7 +91,7 @@ export function AboutSettings() {
 					))}
 				</div>
 			</BrandShard>
-			<SettingsSectionCard title="开源许可">
+			<SettingsSectionCard title={t('settings.about.cards.licenses.title')}>
 				<div className="-mx-5 -mb-5 overflow-hidden">
 					<div className="divide-y divide-border">
 						{licenses.map((entry) => (

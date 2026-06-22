@@ -10,6 +10,7 @@ import {
 	Server,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
 	type CustomProviderProtocol,
 	getProviderDefinitions,
@@ -37,29 +38,13 @@ import { Switch } from '@/components/ui/switch';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import providerModels from '@/assets/models.json';
 
-const CUSTOM_PROTOCOL_OPTIONS: Array<{
-	description: string;
-	label: string;
-	value: CustomProviderProtocol;
-}> = [
-	{
-		description: '适用于 /v1/chat/completions 一类 OpenAI 兼容接口。',
-		label: 'OpenAI Compatible',
-		value: 'openai',
-	},
-	{
-		description: '适用于 /v1/messages 一类 Anthropic 兼容接口。',
-		label: 'Anthropic Compatible',
-		value: 'anthropic',
-	},
-];
-
 type ProviderModelOption = {
 	name: string;
 	value: string;
 };
 
 export function EditorSettings() {
+	const { t } = useTranslation();
 	const {
 		apiUrl,
 		customProtocol,
@@ -89,9 +74,36 @@ export function EditorSettings() {
 		(item) => item.key === provider
 	);
 	const isCustom = provider === 'custom';
+	const customProtocolOptions: Array<{
+		description: string;
+		label: string;
+		value: CustomProviderProtocol;
+	}> = [
+		{
+			description: t(
+				'settings.editor.customProtocolOptions.anthropic.description'
+			),
+			label: t('settings.editor.customProtocolOptions.anthropic.label'),
+			value: 'anthropic',
+		},
+		{
+			description: t(
+				'settings.editor.customProtocolOptions.google.description'
+			),
+			label: t('settings.editor.customProtocolOptions.google.label'),
+			value: 'google',
+		},
+		{
+			description: t(
+				'settings.editor.customProtocolOptions.openai.description'
+			),
+			label: t('settings.editor.customProtocolOptions.openai.label'),
+			value: 'openai',
+		},
+	];
 	const availableModels =
 		(providerModels as Record<string, ProviderModelOption[]>)[provider] ?? [];
-	const selectedCustomProtocolOption = CUSTOM_PROTOCOL_OPTIONS.find(
+	const selectedCustomProtocolOption = customProtocolOptions.find(
 		(option) => option.value === customProtocol
 	);
 	const selectedModelLabel =
@@ -113,10 +125,10 @@ export function EditorSettings() {
 			setSavedAt(new Date());
 			setApiKeyDraft('');
 			setIsEditing(false);
-			showSuccessToast('API Key 已保存到系统钥匙串');
+			showSuccessToast(t('settings.editor.toasts.apiKeySaved'));
 		} catch (error) {
 			showErrorToast(
-				'保存 API Key 失败',
+				t('settings.editor.toasts.apiKeySaveFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 		} finally {
@@ -131,10 +143,10 @@ export function EditorSettings() {
 			setApiKeyDraft('');
 			setSavedAt(null);
 			setIsEditing(false);
-			showSuccessToast('已从系统钥匙串删除 API Key');
+			showSuccessToast(t('settings.editor.toasts.apiKeyDeleted'));
 		} catch (error) {
 			showErrorToast(
-				'删除 API Key 失败',
+				t('settings.editor.toasts.apiKeyDeleteFailed'),
 				error instanceof Error ? error.message : String(error)
 			);
 		} finally {
@@ -161,11 +173,11 @@ export function EditorSettings() {
 
 	return (
 		<div className="space-y-4">
-			<SettingsSectionCard title="输入行为">
+			<SettingsSectionCard title={t('settings.editor.cards.input.title')}>
 				<div className="space-y-2">
 					<SettingRow
-						title="自动保存"
-						description="开启后编辑内容会自动写入文件。"
+						title={t('settings.editor.rows.autoSave.title')}
+						description={t('settings.editor.rows.autoSave.description')}
 					>
 						<Switch
 							checked={saveMode === 'auto'}
@@ -175,12 +187,12 @@ export function EditorSettings() {
 						/>
 					</SettingRow>
 					<SettingRow
-						title="显示隐藏文件"
+						title={t('settings.editor.rows.hiddenFiles.title')}
 						description={
 							<>
-								控制侧栏是否显示以{' '}
+								{t('settings.editor.rows.hiddenFiles.prefix')}{' '}
 								<code className="rounded bg-muted px-1 font-mono">.</code>{' '}
-								开头的文件和目录。
+								{t('settings.editor.rows.hiddenFiles.suffix')}
 							</>
 						}
 					>
@@ -192,23 +204,23 @@ export function EditorSettings() {
 				</div>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard title="AI 配置">
+			<SettingsSectionCard title={t('settings.editor.cards.ai.title')}>
 				<div className="space-y-5">
 					<SettingRow
 						title={
 							<span className="flex items-center gap-2">
 								<Sparkles className="size-4" />
-								启用 AI 自动补全
+								{t('settings.editor.rows.enableAi.title')}
 							</span>
 						}
-						description="开启后在输入时会自动向后补全文本。"
+						description={t('settings.editor.rows.enableAi.description')}
 					>
 						<Switch checked={enabled} onCheckedChange={setEnabled} />
 					</SettingRow>
 
 					<div className="space-y-2">
 						<span className="text-sm font-medium text-foreground">
-							Provider
+							{t('common.labels.provider')}
 						</span>
 						<div className="grid gap-2 md:grid-cols-2">
 							{getProviderDefinitions().map((item) => {
@@ -225,7 +237,7 @@ export function EditorSettings() {
 							})}
 						</div>
 						<p className="text-xs text-muted-foreground">
-							各 Provider 的 Key 和模型独立保存，切换后不会互相覆盖。
+							{t('settings.editor.providerHint')}
 						</p>
 					</div>
 
@@ -238,29 +250,37 @@ export function EditorSettings() {
 								className="text-xs font-medium uppercase tracking-wide
 									text-muted-foreground"
 							>
-								自定义接口配置
+								{t('settings.editor.customConfigTitle')}
 							</p>
 
 							<FieldBlock
-								label="协议"
+								label={t('common.labels.protocol')}
 								icon={<Globe />}
 								hint={selectedCustomProtocolOption?.description}
 							>
 								<Select
 									value={customProtocol}
 									onValueChange={(value) => {
-										if (value === 'openai' || value === 'anthropic') {
+										if (
+											value === 'anthropic' ||
+											value === 'google' ||
+											value === 'openai'
+										) {
 											setCustomProtocol(value);
 										}
 									}}
 								>
 									<SelectTrigger>
-										<SelectValue placeholder="选择兼容协议...">
+										<SelectValue
+											placeholder={t(
+												'settings.editor.customProtocolPlaceholder'
+											)}
+										>
 											{selectedCustomProtocolOption?.label}
 										</SelectValue>
 									</SelectTrigger>
 									<SelectContent>
-										{CUSTOM_PROTOCOL_OPTIONS.map((option) => (
+										{customProtocolOptions.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
 												{option.label}
 											</SelectItem>
@@ -270,9 +290,9 @@ export function EditorSettings() {
 							</FieldBlock>
 
 							<FieldBlock
-								label="API URL"
+								label={t('common.labels.apiUrl')}
 								icon={<Server />}
-								hint="自定义 Provider 的接口地址。"
+								hint={t('settings.editor.apiUrlHint')}
 							>
 								<Input
 									autoComplete="off"
@@ -290,11 +310,11 @@ export function EditorSettings() {
 										<div className="flex items-center gap-1.5">
 											<Lock className="size-3.5 text-muted-foreground" />
 											<span className="text-sm font-medium text-foreground">
-												HTTPS
+												{t('common.labels.https')}
 											</span>
 										</div>
 										<p className="text-xs text-muted-foreground">
-											未填写协议时自动使用；自建服务可关闭。
+											{t('settings.editor.httpsHint')}
 										</p>
 									</div>
 								</div>
@@ -304,17 +324,17 @@ export function EditorSettings() {
 					)}
 
 					<FieldBlock
-						label="API Key"
+						label={t('common.labels.apiKey')}
 						icon={<KeyRound />}
 						hint={
 							<span className="space-y-0.5">
 								<span className="block">
 									{hasApiKey
-										? '当前 Provider 已保存 API Key，重新输入并保存可覆盖旧值。'
-										: '当前 Provider 尚未保存 API Key。'}
+										? t('settings.editor.apiKeyHint.existing')
+										: t('settings.editor.apiKeyHint.missing')}
 								</span>
 								<span className="block">
-									Key 存储在系统钥匙串中，不会上传云端，仅通过本机请求使用。
+									{t('settings.editor.apiKeyHint.storage')}
 								</span>
 							</span>
 						}
@@ -322,11 +342,15 @@ export function EditorSettings() {
 						<InputGroup>
 							<Input
 								autoComplete="off"
-								placeholder={hasApiKey && !isEditing ? '已保存' : 'sk-...'}
+								placeholder={
+									hasApiKey && !isEditing
+										? t('settings.editor.apiKeyPlaceholderSaved')
+										: 'sk-...'
+								}
 								type="password"
 								value={apiKeyDraft}
 								onChange={(e) => setApiKeyDraft(e.target.value)}
-								aria-label="API Key"
+								aria-label={t('common.labels.apiKey')}
 								disabled={!isEditing}
 							/>
 							<InputGroupAddon align="inline-end">
@@ -335,7 +359,7 @@ export function EditorSettings() {
 										size="icon-xs"
 										variant="ghost"
 										onClick={() => setIsEditing(true)}
-										aria-label="编辑 API Key"
+										aria-label={t('settings.editor.editApiKeyAria')}
 									>
 										<Edit />
 									</Button>
@@ -345,7 +369,7 @@ export function EditorSettings() {
 											size="icon-xs"
 											variant="ghost"
 											onClick={() => void handleConfirm()}
-											aria-label="确认保存"
+											aria-label={t('settings.editor.confirmSaveAria')}
 										>
 											<Check />
 										</Button>
@@ -353,7 +377,7 @@ export function EditorSettings() {
 											size="icon-xs"
 											variant="ghost"
 											onClick={handleCancel}
-											aria-label="取消编辑"
+											aria-label={t('settings.editor.cancelEditAria')}
 										>
 											<X />
 										</Button>
@@ -364,13 +388,9 @@ export function EditorSettings() {
 					</FieldBlock>
 
 					<FieldBlock
-						label="Model"
+						label={t('common.labels.model')}
 						icon={<Bot />}
-						hint={
-							isCustom
-								? '填写模型名称，不同模型的功能和表现请参考提供方说明。'
-								: undefined
-						}
+						hint={isCustom ? t('settings.editor.modelHintCustom') : undefined}
 					>
 						{isCustom ? (
 							<Input
@@ -386,7 +406,11 @@ export function EditorSettings() {
 							>
 								<SelectTrigger>
 									<SelectValue
-										placeholder={loadingModels ? '加载中...' : '选择模型...'}
+										placeholder={
+											loadingModels
+												? t('settings.editor.loadingSelect')
+												: t('settings.editor.modelPlaceholder')
+										}
 									>
 										{selectedModelLabel || undefined}
 									</SelectValue>
@@ -401,7 +425,7 @@ export function EditorSettings() {
 							</Select>
 						) : loadingModels ? (
 							<p className="text-xs text-muted-foreground">
-								正在加载模型列表...
+								{t('settings.editor.loadingModels')}
 							</p>
 						) : null}
 					</FieldBlock>

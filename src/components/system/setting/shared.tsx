@@ -58,7 +58,8 @@ export function Option({
 		<button
 			type="button"
 			className={cn(
-				'rounded-lg border px-4 py-3 text-left transition-colors duration-100',
+				`relative rounded-lg border px-4 py-3 pr-10 text-left transition-colors
+				duration-100`,
 				active
 					? 'border-primary/30 bg-primary/8 text-foreground'
 					: `border-border bg-background text-muted-foreground hover:bg-accent
@@ -66,21 +67,20 @@ export function Option({
 			)}
 			onClick={onClick}
 		>
-			<div className="flex items-center justify-between gap-3">
-				<div className="flex items-center gap-2.5">
-					{icon && (
-						<div className="flex shrink-0 items-center justify-center">
-							{icon}
-						</div>
-					)}
-					<span className="text-sm font-medium">{label}</span>
-				</div>
-				<span
-					className={cn(
-						'size-2 rounded-full transition-colors',
-						active ? 'bg-primary' : 'bg-border'
-					)}
-				/>
+			<span
+				className={cn(
+					`pointer-events-none absolute right-3 top-3 size-2 rounded-full
+					transition-colors`,
+					active ? 'bg-primary' : 'bg-border'
+				)}
+			/>
+			<div className="flex items-center gap-2.5">
+				{icon && (
+					<div className="flex shrink-0 items-center justify-center">
+						{icon}
+					</div>
+				)}
+				<span className="text-sm font-medium">{label}</span>
 			</div>
 			{description && <p className="mt-1 text-xs leading-5">{description}</p>}
 		</button>
@@ -91,11 +91,35 @@ export function SettingRow({
 	title,
 	description,
 	children,
+	stacked = false,
+	accessory,
 }: {
 	title: ReactNode;
 	description?: ReactNode;
-	children: ReactNode;
+	children?: ReactNode;
+	stacked?: boolean;
+	accessory?: ReactNode;
 }) {
+	if (stacked) {
+		return (
+			<div
+				className="space-y-3 rounded-lg border border-border bg-background px-4
+					py-3"
+			>
+				<div className="flex items-start justify-between gap-4">
+					<div className="min-w-0 space-y-0.5">
+						<div className="text-sm font-medium text-foreground">{title}</div>
+						{description && (
+							<p className="text-xs text-muted-foreground">{description}</p>
+						)}
+					</div>
+					{accessory ? <div className="shrink-0">{accessory}</div> : null}
+				</div>
+				{children ? <div className="min-w-0">{children}</div> : null}
+			</div>
+		);
+	}
+
 	return (
 		<div
 			className="flex items-center justify-between gap-4 rounded-lg border

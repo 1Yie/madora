@@ -1,6 +1,7 @@
 import create from 'zustand';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { showErrorToast } from '@/components/ui/toast';
+import i18n from '@/i18n';
 import {
 	activateLicense,
 	deactivateLicense,
@@ -35,7 +36,7 @@ const useLicenseStore = create<LicenseStore>((set) => ({
 			set({ status: result, isLoading: false });
 		} catch (error) {
 			set({ isLoading: false });
-			showErrorToast('激活失败', String(error));
+			showErrorToast(i18n.t('licenseProvider.activateFailed'), String(error));
 			throw error;
 		}
 	},
@@ -48,7 +49,7 @@ const useLicenseStore = create<LicenseStore>((set) => ({
 			await refresh();
 		} catch (error) {
 			set({ isLoading: false });
-			showErrorToast('停用失败', String(error));
+			showErrorToast(i18n.t('licenseProvider.deactivateFailed'), String(error));
 			throw error;
 		}
 	},
@@ -61,7 +62,10 @@ const useLicenseStore = create<LicenseStore>((set) => ({
 
 			// Detect transition to revoked mid-session and show toast
 			if (result.state === 'revoked' && prev && prev !== 'revoked') {
-				showErrorToast('许可证被吊销', '您的许可证已被吊销，AI 补全功能已禁用');
+				showErrorToast(
+					i18n.t('licenseProvider.revokedTitle'),
+					i18n.t('licenseProvider.revokedDescription')
+				);
 			}
 
 			set({ status: result, isLoading: false });

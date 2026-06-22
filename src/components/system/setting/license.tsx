@@ -9,6 +9,7 @@ import {
 	Zap,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLicense } from '@/context/license-provider';
 import { SettingsSectionCard } from '@/components/system/setting/shared';
 import { Button } from '@/components/ui/button';
@@ -29,17 +30,18 @@ type LicenseState = 'active' | 'expired' | 'trial' | 'revoked';
 
 interface StatusConfig {
 	icon: React.ComponentType<{ className?: string }>;
-	label: string;
 	description?: string;
 	iconClass: string;
 	iconBg: string;
 	badgeClass: string;
 }
 
-const STATUS_CONFIGS: Record<LicenseState, StatusConfig> = {
+const STATUS_CONFIGS: Record<
+	LicenseState,
+	Omit<StatusConfig, 'description'>
+> = {
 	active: {
 		icon: ShieldCheck,
-		label: '已激活',
 		iconClass: 'text-emerald-700 dark:text-emerald-400',
 		iconBg:
 			'bg-emerald-50 border border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800',
@@ -48,14 +50,12 @@ const STATUS_CONFIGS: Record<LicenseState, StatusConfig> = {
 	},
 	expired: {
 		icon: ShieldAlert,
-		label: '已过期',
 		iconClass: 'text-destructive',
 		iconBg: 'bg-destructive/5 border border-destructive/20',
 		badgeClass: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
 	},
 	trial: {
 		icon: Zap,
-		label: '试用中',
 		iconClass: 'text-amber-700 dark:text-amber-400',
 		iconBg:
 			'bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800',
@@ -64,7 +64,6 @@ const STATUS_CONFIGS: Record<LicenseState, StatusConfig> = {
 	},
 	revoked: {
 		icon: OctagonX,
-		label: '已吊销',
 		iconClass: 'text-destructive',
 		iconBg: 'bg-destructive/5 border border-destructive/20',
 		badgeClass: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
@@ -76,6 +75,7 @@ export function LicenseSettings({
 }: {
 	onRequestActivation: () => void;
 }) {
+	const { t } = useTranslation();
 	const { status, isLoading, deactivate } = useLicense();
 	const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
 	const [isDeactivating, setIsDeactivating] = useState(false);
@@ -84,14 +84,14 @@ export function LicenseSettings({
 		setIsDeactivating(true);
 		try {
 			await deactivate();
-			showSuccessToast('许可证已停用');
+			showSuccessToast(t('settings.license.confirm.success'));
 			setShowDeactivateConfirm(false);
 		} catch (error) {
-			showErrorToast('停用失败', String(error));
+			showErrorToast(t('settings.license.confirm.failed'), String(error));
 		} finally {
 			setIsDeactivating(false);
 		}
-	}, [deactivate]);
+	}, [deactivate, t]);
 
 	if (isLoading || !status) {
 		return (
@@ -99,7 +99,7 @@ export function LicenseSettings({
 				className="flex items-center gap-2 py-4 text-sm text-muted-foreground"
 			>
 				<Loader2 className="size-4 animate-spin" />
-				加载许可证信息...
+				{t('settings.license.loading')}
 			</div>
 		);
 	}
@@ -117,7 +117,9 @@ export function LicenseSettings({
 	const statusConfig: StatusConfig = {
 		...STATUS_CONFIGS[licenseState],
 		...(licenseState === 'trial' && {
-			description: `剩余 ${trialDays} 天试用期`,
+			description: t('settings.license.descriptions.trialRemaining', {
+				days: trialDays,
+			}),
 		}),
 	};
 
@@ -133,7 +135,7 @@ export function LicenseSettings({
 
 	return (
 		<div className="space-y-6">
-			<SettingsSectionCard title="许可证详情">
+			<SettingsSectionCard title={t('settings.license.cards.details.title')}>
 				<div className="-mx-5 -mb-5 overflow-hidden">
 					<div className="flex items-start justify-between gap-3 px-5 pb-4">
 						<div className="flex items-start gap-1">
@@ -147,7 +149,9 @@ export function LicenseSettings({
 							<div>
 								<div className="flex items-center gap-1.5">
 									<span className="text-sm font-medium text-foreground">
-										{isActive ? '已授权' : 'Madora 许可证'}
+										{isActive
+											? t('settings.license.labels.licensed')
+											: t('settings.license.labels.license')}
 									</span>
 								</div>
 								<p
@@ -155,8 +159,8 @@ export function LicenseSettings({
 								>
 									{statusConfig.description ||
 										(isActive
-											? '当前设备已获得完整功能访问权限。'
-											: '未检测到有效的许可证。')}
+											? t('settings.license.descriptions.active')
+											: t('settings.license.descriptions.missing'))}
 								</p>
 							</div>
 						</div>
@@ -169,7 +173,7 @@ export function LicenseSettings({
 									onClick={onRequestActivation}
 								>
 									<Crown className="size-3" />
-									激活
+									{t('settings.license.actions.activate')}
 								</Button>
 							</div>
 						)}
@@ -198,7 +202,7 @@ export function LicenseSettings({
 											target="_blank"
 											rel="noopener noreferrer"
 										>
-											管理许可证
+											{t('settings.license.actions.manage')}
 											<ExternalLink className="size-3" />
 										</a>
 									}
@@ -212,7 +216,7 @@ export function LicenseSettings({
 										hover:bg-destructive/10 hover:text-destructive"
 									onClick={() => setShowDeactivateConfirm(true)}
 								>
-									停用此设备
+									{t('settings.license.actions.deactivate')}
 								</Button>
 							</div>
 						</div>
@@ -224,14 +228,14 @@ export function LicenseSettings({
 								border-border/60 bg-muted/30 px-5 py-2.5"
 						>
 							<p className="text-xs text-muted-foreground">
-								需要在其他设备上使用？请先停用当前设备。
+								{t('settings.license.deviceHint')}
 							</p>
 							<Button
 								variant="ghost"
 								size="sm"
 								onClick={() => setShowDeactivateConfirm(true)}
 							>
-								停用此设备
+								{t('settings.license.actions.deactivate')}
 							</Button>
 						</div>
 					)}
@@ -242,7 +246,7 @@ export function LicenseSettings({
 								bg-muted/20 px-5 py-2.5"
 						>
 							<p className="text-xs text-muted-foreground">
-								还没有许可证？{' '}
+								{t('settings.license.purchase')}{' '}
 								<a
 									href={PURCHASE_URL}
 									target="_blank"
@@ -250,7 +254,7 @@ export function LicenseSettings({
 									className="inline-flex items-center gap-0.5 font-medium
 										text-primary underline-offset-4 hover:underline"
 								>
-									前往购买
+									{t('settings.license.actions.purchase')}
 									<ExternalLink className="size-2.5" />
 								</a>
 							</p>
@@ -265,17 +269,16 @@ export function LicenseSettings({
 			>
 				<DialogPopup>
 					<DialogHeader>
-						<DialogTitle>确认停用</DialogTitle>
+						<DialogTitle>{t('settings.license.confirm.title')}</DialogTitle>
 						<DialogDescription>
-							停用后当前设备将无法使用 Madora
-							的专业功能，直到重新激活。你随后可以在其他设备上使用此许可证密钥。
+							{t('settings.license.confirm.description')}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
 						<DialogClose
 							render={<Button variant="outline" disabled={isDeactivating} />}
 						>
-							取消
+							{t('common.actions.cancel')}
 						</DialogClose>
 						<Button
 							variant="destructive"
@@ -284,7 +287,7 @@ export function LicenseSettings({
 							className="gap-1.5"
 						>
 							{isDeactivating && <Loader2 className="size-3.5 animate-spin" />}
-							停用
+							{t('settings.license.confirm.action')}
 						</Button>
 					</DialogFooter>
 				</DialogPopup>

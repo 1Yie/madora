@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { OTPFieldSeparator } from '@/components/ui/otp-field';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 interface LicenseActivationDialogProps {
@@ -40,6 +41,7 @@ export function LicenseActivationDialog({
 	onOpenChange,
 	onActivated,
 }: LicenseActivationDialogProps) {
+	const { t } = useTranslation();
 	const { activate, isLoading } = useLicense();
 	const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -109,7 +111,7 @@ export function LicenseActivationDialog({
 			e.preventDefault();
 
 			if (groups.some((g) => g.length < GROUP_SIZE)) {
-				showErrorToast('请输入完整的许可证密钥');
+				showErrorToast(t('licenseDialog.validation'));
 				return;
 			}
 
@@ -117,7 +119,7 @@ export function LicenseActivationDialog({
 
 			try {
 				await activate(key);
-				showSuccessToast('激活成功');
+				showSuccessToast(t('licenseDialog.success'));
 				onOpenChange(false);
 				onActivated?.();
 			} catch {
@@ -146,14 +148,16 @@ export function LicenseActivationDialog({
 		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogPopup showCloseButton={false}>
 				<DialogHeader>
-					<DialogTitle>激活许可证</DialogTitle>
-					<DialogDescription>请输入许可证密钥以激活 Madora。</DialogDescription>
+					<DialogTitle>{t('licenseDialog.title')}</DialogTitle>
+					<DialogDescription>
+						{t('licenseDialog.description')}
+					</DialogDescription>
 				</DialogHeader>
 				<form onSubmit={handleSubmit}>
 					<div className="space-y-4 px-6 pb-4">
 						<div className="space-y-3">
 							<label className="text-sm font-medium text-foreground">
-								许可证密钥
+								{t('licenseDialog.label')}
 							</label>
 							<div className="flex items-center gap-2">
 								{inputs.map((i) => (
@@ -181,7 +185,7 @@ export function LicenseActivationDialog({
 							</div>
 						</div>
 						<p className="text-center text-xs text-muted-foreground">
-							还没有许可证？{' '}
+							{t('licenseDialog.purchase')}{' '}
 							<a
 								href={PURCHASE_URL}
 								target="_blank"
@@ -189,7 +193,7 @@ export function LicenseActivationDialog({
 								className="inline-flex items-center gap-0.5 font-medium
 									text-primary underline-offset-4 hover:underline"
 							>
-								前往购买
+								{t('licenseDialog.purchaseAction')}
 								<ExternalLink className="size-2.5" />
 							</a>
 						</p>
@@ -198,11 +202,11 @@ export function LicenseActivationDialog({
 						<DialogClose
 							render={<Button variant="outline" disabled={isLoading} />}
 						>
-							取消
+							{t('common.actions.cancel')}
 						</DialogClose>
 						<Button type="submit" disabled={isLoading}>
 							{isLoading && <Loader2 className="animate-spin" />}
-							激活
+							{t('licenseDialog.action')}
 						</Button>
 					</DialogFooter>
 				</form>

@@ -1,5 +1,6 @@
 pub mod app;
 pub mod commands;
+pub mod i18n;
 pub mod models;
 pub mod prompt;
 pub mod protocol;

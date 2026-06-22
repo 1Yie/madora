@@ -1,16 +1,11 @@
 import { streamCompletion } from '@/invoke/ai';
 import { ArrowLeft, ArrowRight, CheckIcon, Crown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import appIcon from '@/assets/icon.png';
 import providerModels from '@/assets/models.json';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
-import { useLicense } from '@/context/license-provider';
-import {
-	type CustomProviderProtocol,
-	getProviderDefinitions,
-	useAiSettings,
-} from '@/context/ai-settings-provider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import {
@@ -31,24 +26,36 @@ import {
 	SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { providerIconMap } from '@/components/ui/provider-icons';
 import { MathCurveLoader } from '@/components/ui/math-curve-loader';
+import { providerIconMap } from '@/components/ui/provider-icons';
+import {
+	useAiSettings,
+	type CustomProviderProtocol,
+	getProviderDefinitions,
+} from '@/context/ai-settings-provider';
+import { useAppSettings } from '@/context/app-settings-provider';
+import { useLicense } from '@/context/license-provider';
+import type { LocalePreference } from '@/i18n/locale';
 import { cn } from '@/lib/utils';
 
 const SETUP_COMPLETE_KEY = 'madora-setup-complete';
-const TEST_PROMPT = `# Madora 连接测试
-
-请直接续写下一句，保持自然、简短，不要解释。
-当前模型连接已经`;
-const EMPTY_TEST_RESULT_MESSAGE =
-	'连接成功。模型已正常响应，这次测试没有返回可显示的补全文本。';
 
 const CUSTOM_PROTOCOL_OPTIONS: Array<{
-	label: string;
+	labelKey: string;
 	value: CustomProviderProtocol;
 }> = [
-	{ label: 'OpenAI 兼容', value: 'openai' },
-	{ label: 'Anthropic 兼容', value: 'anthropic' },
+	{
+		labelKey: 'settings.editor.customProtocolOptions.anthropic.label',
+		value: 'anthropic',
+	},
+	{
+		labelKey: 'settings.editor.customProtocolOptions.google.label',
+		value: 'google',
+	},
+	{
+		labelKey: 'settings.editor.customProtocolOptions.openai.label',
+		value: 'openai',
+	},
 ];
 
 const WIZARD_STEPS = [
@@ -58,6 +65,7 @@ const WIZARD_STEPS = [
 	'license',
 	'success',
 ] as const;
+
 type WizardStep = (typeof WIZARD_STEPS)[number];
 type ProviderModelOption = { name: string; value: string };
 type TestStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -72,6 +80,7 @@ export function shouldShowSetupWizard(): boolean {
 }
 
 export function SetupWizard({ onComplete }: { onComplete: () => void }) {
+	const { t } = useTranslation();
 	const {
 		apiUrl,
 		customProtocol,
@@ -88,26 +97,19 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		setUseSsl,
 		useSsl,
 	} = useAiSettings();
-	const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
+	const { isLoading: licenseLoading } = useLicense();
 
+	const { localePreference, setLocalePreference } = useAppSettings();
+
+	const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
 	const [step, setStep] = useState<WizardStep>('welcome');
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
 	const [configError, setConfigError] = useState<string | null>(null);
 	const [configBusy, setConfigBusy] = useState(false);
 	const [testStatus, setTestStatus] = useState<TestStatus>('idle');
 	const [testResult, setTestResult] = useState('');
-	const testAbortRef = useRef<AbortController | null>(null);
-	const { isLoading: licenseLoading } = useLicense();
 	const [showActivation, setShowActivation] = useState(false);
-
-	const handleLicenseActivated = useCallback(() => {
-		setShowActivation(false);
-		setStep('success');
-	}, []);
-
-	const handleSkipTrial = useCallback(() => {
-		setStep('success');
-	}, []);
+	const testAbortRef = useRef<AbortController | null>(null);
 
 	const providers = getProviderDefinitions();
 	const selectedProvider =
@@ -118,6 +120,15 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
 	useEffect(() => {
 		return () => testAbortRef.current?.abort();
+	}, []);
+
+	const handleLicenseActivated = useCallback(() => {
+		setShowActivation(false);
+		setStep('success');
+	}, []);
+
+	const handleSkipTrial = useCallback(() => {
+		setStep('success');
 	}, []);
 
 	const handleTestCompletion = useCallback(async () => {
@@ -137,7 +148,11 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 					provider,
 					useSsl,
 				},
-				request: { prefix: TEST_PROMPT, suffix: null, title: 'setup-test.md' },
+				request: {
+					prefix: t('setup.testPrompt'),
+					suffix: null,
+					title: 'setup-test.md',
+				},
 				onChunk: (chunk: string) => {
 					if (abortController.signal.aborted) return;
 					chunks.push(chunk);
@@ -148,9 +163,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 			if (abortController.signal.aborted) return;
 
 			const finalText = chunks.join('').trim();
-
 			setTestResult(
-				finalText.length > 0 ? finalText : EMPTY_TEST_RESULT_MESSAGE
+				finalText.length > 0 ? finalText : t('setup.emptyTestResult')
 			);
 			setTestStatus('success');
 		} catch (error) {
@@ -160,7 +174,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		} finally {
 			testAbortRef.current = null;
 		}
-	}, [apiUrl, customProtocol, isCustom, model, provider, useSsl]);
+	}, [apiUrl, customProtocol, isCustom, model, provider, t, useSsl]);
 
 	const handleContinueToTest = useCallback(async () => {
 		const nextApiKey = apiKeyDraft.trim();
@@ -170,17 +184,17 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		if (!enabled) setEnabled(true);
 		if (isCustom && apiUrl.trim().length === 0) {
 			setConfigBusy(false);
-			setConfigError('请填写 API 地址。');
+			setConfigError(t('setup.validation.apiUrlRequired'));
 			return;
 		}
 		if (model.trim().length === 0) {
 			setConfigBusy(false);
-			setConfigError('请选择或填写模型。');
+			setConfigError(t('setup.validation.modelRequired'));
 			return;
 		}
 		if (!hasApiKey && nextApiKey.length === 0) {
 			setConfigBusy(false);
-			setConfigError('请填写 API Key。');
+			setConfigError(t('setup.validation.apiKeyRequired'));
 			return;
 		}
 		if (nextApiKey.length > 0) {
@@ -198,17 +212,18 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		setTestStatus('idle');
 		setTestResult('');
 		setStep('test');
-		handleTestCompletion();
+		void handleTestCompletion();
 	}, [
-		handleTestCompletion,
 		apiKeyDraft,
 		apiUrl,
 		enabled,
+		handleTestCompletion,
 		hasApiKey,
 		isCustom,
 		model,
 		saveApiKey,
 		setEnabled,
+		t,
 	]);
 
 	const stepIndex = WIZARD_STEPS.indexOf(step);
@@ -222,7 +237,6 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 						p-0 shadow-2xl"
 				>
 					<div className="relative flex min-h-125 flex-col bg-background">
-						{/* 返回按钮 */}
 						{step === 'configure' || step === 'test' || step === 'license' ? (
 							<button
 								onClick={() =>
@@ -240,19 +254,22 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 								<ArrowLeft className="size-6" />
 							</button>
 						) : null}
-						{/* 跳过按钮 */}
+
 						{step !== 'success' && (
-							<button
-								onClick={() => setSkipConfirmOpen(true)}
-								className="absolute right-6 top-6 z-10 text-[13px] font-medium
-									text-muted-foreground transition-colors hover:text-foreground"
+							<div
+								className="absolute right-6 top-6 z-10 flex items-center gap-2"
 							>
-								跳过
-							</button>
+								<button
+									onClick={() => setSkipConfirmOpen(true)}
+									className="text-[13px] font-medium text-muted-foreground
+										transition-colors hover:text-foreground"
+								>
+									{t('common.actions.skip')}
+								</button>
+							</div>
 						)}
 
 						<div className="flex flex-1 flex-col px-8 pt-12 pb-6 sm:px-10">
-							{/* Step 1: 欢迎 */}
 							{step === 'welcome' && (
 								<div
 									className="flex h-full flex-1 animate-in fade-in
@@ -267,15 +284,65 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 											className="mb-3 text-3xl font-semibold tracking-tight
 												text-foreground"
 										>
-											欢迎使用 Madora
+											{t('setup.welcome.title')}
 										</h1>
 										<p className="font-mono text-xl font-medium tracking-tight">
-											Markdown editing,
+											{t('setup.welcome.taglineTop')}
 											<br />
 											<span className="text-muted-foreground">
-												powered by AI
+												{t('setup.welcome.taglineBottom')}
 											</span>
 										</p>
+
+										{/* Language selector — inline pills on the welcome page */}
+										<div
+											className="mt-8 flex flex-wrap items-center justify-center
+												gap-1.5"
+										>
+											{(
+												[
+													{
+														label: t('language.options.system'),
+														value: 'system' as LocalePreference,
+													},
+													{
+														label: t('language.options.zhCN'),
+														value: 'zh-CN' as LocalePreference,
+													},
+													{
+														label: t('language.options.en'),
+														value: 'en' as LocalePreference,
+													},
+													{
+														label: t('language.options.ja'),
+														value: 'ja' as LocalePreference,
+													},
+													{
+														label: t('language.options.ko'),
+														value: 'ko' as LocalePreference,
+													},
+												] as const
+											).map((option) => {
+												const isActive = localePreference === option.value;
+												return (
+													<button
+														key={option.value}
+														type="button"
+														onClick={() => setLocalePreference(option.value)}
+														className={cn(
+															`rounded-full px-3.5 py-1.5 text-[13px]
+															font-medium transition-colors`,
+															isActive
+																? 'bg-primary text-primary-foreground'
+																: `bg-muted/40 text-muted-foreground
+																	hover:bg-muted hover:text-foreground`
+														)}
+													>
+														{option.label}
+													</button>
+												);
+											})}
+										</div>
 									</div>
 									<div className="mt-auto w-full pt-6">
 										<Button
@@ -283,13 +350,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 											size="lg"
 											onClick={() => setStep('configure')}
 										>
-											开始配置
+											{t('setup.welcome.action')}
 										</Button>
 									</div>
 								</div>
 							)}
 
-							{/* Step 2: 模型配置 */}
 							{step === 'configure' && (
 								<div
 									className="flex h-full flex-1 animate-in fade-in
@@ -298,10 +364,10 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 									<div className="flex-1">
 										<div className="mb-8 mt-4 text-center">
 											<h2 className="text-xl font-medium tracking-tight">
-												连接提供商
+												{t('setup.configure.title')}
 											</h2>
 											<p className="mt-1.5 text-[13px] text-muted-foreground">
-												配置你的 AI 补全接口
+												{t('setup.configure.description')}
 											</p>
 										</div>
 
@@ -310,13 +376,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												<label
 													className="text-[13px] font-medium text-foreground"
 												>
-													Provider
+													{t('common.labels.provider')}
 												</label>
 												<Select
 													value={provider}
-													onValueChange={(v) => {
-														if (v === null) return;
-														setProvider(v);
+													onValueChange={(value) => {
+														if (value === null) return;
+														setProvider(value);
 														setConfigError(null);
 														setApiKeyDraft('');
 													}}
@@ -360,7 +426,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 															className="text-[13px] font-medium
 																text-foreground"
 														>
-															API 地址
+															{t('common.labels.apiUrl')}
 														</label>
 														<Input
 															placeholder={
@@ -368,7 +434,9 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 																'https://api.example.com'
 															}
 															value={apiUrl}
-															onChange={(e) => setApiUrl(e.target.value)}
+															onChange={(event) =>
+																setApiUrl(event.target.value)
+															}
 														/>
 													</div>
 													<div className="grid grid-cols-2 gap-4">
@@ -377,7 +445,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 																className="text-[13px] font-medium
 																	text-foreground"
 															>
-																HTTPS
+																{t('common.labels.https')}
 															</label>
 															<div className="flex items-center">
 																<Switch
@@ -391,33 +459,35 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 																className="text-[13px] font-medium
 																	text-foreground"
 															>
-																协议
+																{t('common.labels.protocol')}
 															</label>
 															<Select
 																value={customProtocol}
-																onValueChange={(v) => {
-																	if (v === null) return;
+																onValueChange={(value) => {
+																	if (value === null) return;
 																	setCustomProtocol(
-																		v as CustomProviderProtocol
+																		value as CustomProviderProtocol
 																	);
 																}}
 															>
 																<SelectTrigger className="bg-muted/20">
 																	<SelectValue>
-																		{
+																		{t(
 																			CUSTOM_PROTOCOL_OPTIONS.find(
-																				(o) => o.value === customProtocol
-																			)?.label
-																		}
+																				(option) =>
+																					option.value === customProtocol
+																			)?.labelKey ??
+																				'settings.editor.customProtocolOptions.openai.label'
+																		)}
 																	</SelectValue>
 																</SelectTrigger>
 																<SelectContent>
-																	{CUSTOM_PROTOCOL_OPTIONS.map((opt) => (
+																	{CUSTOM_PROTOCOL_OPTIONS.map((option) => (
 																		<SelectItem
-																			key={opt.value}
-																			value={opt.value}
+																			key={option.value}
+																			value={option.value}
 																		>
-																			{opt.label}
+																			{t(option.labelKey)}
 																		</SelectItem>
 																	))}
 																</SelectContent>
@@ -431,7 +501,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												<label
 													className="text-[13px] font-medium text-foreground"
 												>
-													Model
+													{t('common.labels.model')}
 												</label>
 												{isCustom ? (
 													<Input
@@ -440,23 +510,33 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 															selectedProvider?.defaultModel || 'model-name'
 														}
 														value={model}
-														onChange={(e) => setModel(e.target.value)}
+														onChange={(event) => setModel(event.target.value)}
 													/>
 												) : (
 													<Select
 														value={model}
-														onValueChange={(v) => v !== null && setModel(v)}
+														onValueChange={(value) =>
+															value !== null && setModel(value)
+														}
 													>
 														<SelectTrigger className="bg-muted/20">
-															<SelectValue placeholder="选择模型...">
-																{availableModels.find((m) => m.value === model)
-																	?.name ?? model}
+															<SelectValue
+																placeholder={t(
+																	'settings.editor.modelPlaceholder'
+																)}
+															>
+																{availableModels.find(
+																	(item) => item.value === model
+																)?.name ?? model}
 															</SelectValue>
 														</SelectTrigger>
 														<SelectContent>
-															{availableModels.map((opt) => (
-																<SelectItem key={opt.value} value={opt.value}>
-																	{opt.name}
+															{availableModels.map((option) => (
+																<SelectItem
+																	key={option.value}
+																	value={option.value}
+																>
+																	{option.name}
 																</SelectItem>
 															))}
 														</SelectContent>
@@ -469,13 +549,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 													className="flex items-center justify-between
 														text-[13px] font-medium text-foreground"
 												>
-													<span>API Key</span>
+													<span>{t('common.labels.apiKey')}</span>
 													{hasApiKey && (
 														<span
 															className="text-[11px] font-normal
 																text-muted-foreground"
 														>
-															已保存
+															{t('common.status.saved')}
 														</span>
 													)}
 												</label>
@@ -483,10 +563,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 													type="password"
 													className="bg-muted/20"
 													placeholder={
-														hasApiKey ? '留空则沿用当前凭据' : 'sk-...'
+														hasApiKey ? t('common.status.saved') : 'sk-...'
 													}
 													value={apiKeyDraft}
-													onChange={(e) => setApiKeyDraft(e.target.value)}
+													onChange={(event) =>
+														setApiKeyDraft(event.target.value)
+													}
 												/>
 											</div>
 
@@ -507,13 +589,12 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 											loading={configBusy}
 											onClick={() => void handleContinueToTest()}
 										>
-											继续
+											{t('common.actions.continue')}
 										</Button>
 									</div>
 								</div>
 							)}
 
-							{/* Step 3: 测试 */}
 							{step === 'test' && (
 								<div
 									className="flex h-full flex-1 animate-in fade-in
@@ -522,10 +603,10 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 									<div className="flex min-h-0 flex-1 flex-col">
 										<div className="mb-6 mt-4 text-center">
 											<h2 className="text-xl font-medium tracking-tight">
-												连接测试
+												{t('setup.test.title')}
 											</h2>
 											<p className="mt-1.5 text-[13px] text-muted-foreground">
-												正在验证凭据与模型连通性
+												{t('setup.test.description')}
 											</p>
 										</div>
 
@@ -548,7 +629,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 														justify-center gap-3"
 												>
 													<MathCurveLoader className="size-8 text-primary" />
-													等待响应
+													{t('setup.test.waiting')}
 												</div>
 											)}
 											<div className="whitespace-pre-wrap wrap-break-word">
@@ -564,7 +645,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												className="w-full rounded-full"
 												onClick={() => void handleTestCompletion()}
 											>
-												重新测试
+												{t('setup.test.retry')}
 											</Button>
 										) : (
 											<Button
@@ -572,14 +653,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												disabled={testStatus !== 'success'}
 												onClick={() => setStep('license')}
 											>
-												完成验证
+												{t('setup.test.finish')}
 											</Button>
 										)}
 									</div>
 								</div>
 							)}
 
-							{/* Step 4: 许可证 */}
 							{step === 'license' && (
 								<div
 									className="flex h-full flex-1 animate-in fade-in zoom-in-95
@@ -599,15 +679,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 											className="mb-3 text-2xl font-semibold tracking-tight
 												text-foreground"
 										>
-											许可证
+											{t('setup.license.title')}
 										</h1>
 										<p
 											className="mb-4 text-sm leading-relaxed
 												text-muted-foreground"
 										>
-											已有许可证？激活它以获得完整功能。
-											<br />
-											你也可以稍后在设置中激活，先试用再决定。
+											{t('setup.license.description')}
 										</p>
 									</div>
 
@@ -620,7 +698,7 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												disabled={licenseLoading}
 												onClick={handleSkipTrial}
 											>
-												先试用
+												{t('common.actions.tryFirst')}
 											</Button>
 											<Button
 												className="flex-1 rounded-full"
@@ -629,14 +707,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												onClick={() => setShowActivation(true)}
 											>
 												<Crown className="size-4" />
-												激活许可证
+												{t('setup.license.activate')}
 											</Button>
 										</div>
 									</div>
 								</div>
 							)}
 
-							{/* Step 5: 成功 */}
 							{step === 'success' && (
 								<div
 									className="flex h-full flex-1 animate-in fade-in zoom-in-95
@@ -656,15 +733,13 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 											className="mb-3 text-2xl font-semibold tracking-tight
 												text-foreground"
 										>
-											一切就绪
+											{t('setup.success.title')}
 										</h1>
 										<p
 											className="mb-10 text-sm leading-relaxed
 												text-muted-foreground"
 										>
-											Madora 已配置完毕。
-											<br />
-											打开你的 Markdown 文件，即刻开始写作。
+											{t('setup.success.description')}
 										</p>
 									</div>
 
@@ -677,14 +752,14 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 												onComplete();
 											}}
 										>
-											进入编辑器 <ArrowRight className="ml-2 size-4" />
+											{t('common.actions.enterEditor')}{' '}
+											<ArrowRight className="ml-2 size-4" />
 										</Button>
 									</div>
 								</div>
 							)}
 						</div>
 
-						{/* 进度指示器 Dots */}
 						<div className="flex items-center justify-center gap-2 pb-8">
 							{WIZARD_STEPS.map((_, index) => (
 								<div
@@ -705,17 +780,23 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 				<AlertDialog open={skipConfirmOpen} onOpenChange={setSkipConfirmOpen}>
 					<AlertDialogPopup>
 						<AlertDialogHeader>
-							<AlertDialogTitle>跳过设置？</AlertDialogTitle>
+							<AlertDialogTitle>
+								{t('setup.skipConfirm.title')}
+							</AlertDialogTitle>
 							<AlertDialogDescription>
-								确定要跳过设置步骤吗？你可以稍后在设置中重新配置 AI 补全。
+								{t('setup.skipConfirm.description')}
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
 							<AlertDialogClose
-								render={<Button variant="secondary">取消</Button>}
+								render={
+									<Button variant="secondary">
+										{t('common.actions.cancel')}
+									</Button>
+								}
 							/>
 							<AlertDialogClose
-								render={<Button>确定跳过</Button>}
+								render={<Button>{t('setup.skipConfirm.action')}</Button>}
 								onClick={() => {
 									markSetupComplete();
 									onComplete();

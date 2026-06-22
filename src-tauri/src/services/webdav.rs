@@ -5,6 +5,7 @@ use quick_xml::events::Event;
 use quick_xml::Reader;
 use reqwest::Client;
 
+use crate::i18n;
 use crate::models::webdav::{
     ConflictStrategy, WebDavConfig, WebDavConnectionTest, WebDavFileEntry, WebDavSyncResult,
 };
@@ -83,7 +84,8 @@ impl WebDavClient {
     // ── Helpers ───────────────────────────────────────────
 
     fn build_url(&self, base: &str, path: &str) -> Result<String, String> {
-        let mut url = reqwest::Url::parse(base).map_err(|e| format!("无效的 WebDAV URL: {e}"))?;
+        let mut url = reqwest::Url::parse(base)
+            .map_err(|e| i18n::tf("webdav.invalid_url", &[("error", &e.to_string())]))?;
         // Ensure the base path ends with /
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
@@ -93,7 +95,7 @@ impl WebDavClient {
         let clean_path = path.trim_start_matches('/');
         let joined = url
             .join(clean_path)
-            .map_err(|e| format!("无效的路径: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.invalid_path", &[("error", &e.to_string())]))?;
         Ok(joined.to_string())
     }
 
@@ -109,7 +111,7 @@ impl WebDavClient {
             headers.insert(
                 reqwest::header::AUTHORIZATION,
                 reqwest::header::HeaderValue::from_str(&auth_value)
-                    .map_err(|_| "无法编码认证头".to_string())?,
+                    .map_err(|_| i18n::t("webdav.cannot_encode_auth"))?,
             );
         }
 
@@ -155,7 +157,10 @@ impl WebDavClient {
                 return WebDavConnectionTest {
                     success: false,
                     server_name: None,
-                    error: Some(format!("连接失败: {e}")),
+                    error: Some(i18n::tf(
+                        "webdav.connect_failed",
+                        &[("error", &e.to_string())],
+                    )),
                 }
             }
         };
@@ -165,7 +170,10 @@ impl WebDavClient {
             return WebDavConnectionTest {
                 success: false,
                 server_name: None,
-                error: Some(format!("服务器返回 {status}")),
+                error: Some(i18n::tf(
+                    "webdav.server_returned",
+                    &[("status", &status.to_string())],
+                )),
             };
         }
 
@@ -209,17 +217,20 @@ impl WebDavClient {
             .header("Depth", "1")
             .send()
             .await
-            .map_err(|e| format!("PROPFIND 请求失败: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.propfind_failed", &[("error", &e.to_string())]))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(format!("PROPFIND 返回 {status}"));
+            return Err(i18n::tf(
+                "webdav.propfind_failed",
+                &[("error", &status.to_string())],
+            ));
         }
 
         let body = response
             .text()
             .await
-            .map_err(|e| format!("读取响应失败: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.read_response_failed", &[("error", &e.to_string())]))?;
         Self::parse_propfind_response(&body, remote_path)
     }
 
@@ -315,7 +326,12 @@ impl WebDavClient {
                     }
                 }
                 Ok(Event::Eof) => break,
-                Err(e) => return Err(format!("XML 解析错误: {e}")),
+                Err(e) => {
+                    return Err(i18n::tf(
+                        "webdav.xml_parse_error",
+                        &[("error", &e.to_string())],
+                    ))
+                }
                 _ => {}
             }
         }
@@ -403,18 +419,21 @@ impl WebDavClient {
             .headers(headers)
             .send()
             .await
-            .map_err(|e| format!("下载失败: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.download_failed", &[("error", &e.to_string())]))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(format!("下载返回 {status}"));
+            return Err(i18n::tf(
+                "webdav.download_failed",
+                &[("error", &status.to_string())],
+            ));
         }
 
         response
             .bytes()
             .await
             .map(|b| b.to_vec())
-            .map_err(|e| format!("读取数据失败: {e}"))
+            .map_err(|e| i18n::tf("webdav.read_data_failed", &[("error", &e.to_string())]))
     }
 
     // ── PUT (upload file) ──────────────────────────────────
@@ -436,11 +455,14 @@ impl WebDavClient {
             .body(content)
             .send()
             .await
-            .map_err(|e| format!("上传失败: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.upload_failed", &[("error", &e.to_string())]))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(format!("上传返回 {status}"));
+            return Err(i18n::tf(
+                "webdav.upload_failed",
+                &[("error", &status.to_string())],
+            ));
         }
 
         Ok(())
@@ -463,7 +485,7 @@ impl WebDavClient {
             .headers(headers)
             .send()
             .await
-            .map_err(|e| format!("创建目录失败: {e}"))?;
+            .map_err(|e| i18n::tf("webdav.create_dir_failed", &[("error", &e.to_string())]))?;
 
         let status = response.status();
         // 201 Created or 405 Method Not Allowed (already exists) or 409 Conflict
@@ -472,7 +494,10 @@ impl WebDavClient {
             return Ok(());
         }
         if !status.is_success() {
-            return Err(format!("创建目录返回 {status}"));
+            return Err(i18n::tf(
+                "webdav.create_dir_failed",
+                &[("error", &status.to_string())],
+            ));
         }
 
         Ok(())
@@ -549,7 +574,8 @@ impl SyncOrchestrator {
 
         let local_dir = workspace_root.join(local_subdir);
         if !local_dir.exists() {
-            std::fs::create_dir_all(&local_dir).map_err(|e| format!("创建本地目录失败: {e}"))?;
+            std::fs::create_dir_all(&local_dir)
+                .map_err(|e| i18n::tf("webdav.create_dir_failed", &[("error", &e.to_string())]))?;
         }
 
         // Ensure remote dir exists
@@ -605,18 +631,26 @@ impl SyncOrchestrator {
             };
 
             if should_upload {
-                let content = std::fs::read(local_dir.join(local_rel_path))
-                    .map_err(|e| format!("读取 {local_rel_path} 失败: {e}"))?;
+                let content = std::fs::read(local_dir.join(local_rel_path)).map_err(|e| {
+                    i18n::tf(
+                        "webdav.read_file_failed",
+                        &[("path", local_rel_path), ("error", &e.to_string())],
+                    )
+                })?;
 
                 // Ensure parent directory exists on remote before uploading
                 if let Some(parent) = std::path::Path::new(&remote_path).parent() {
                     if !parent.as_os_str().is_empty() {
-                        if let Err(e) = self
+                        if let Err(_e) = self
                             .webdav
                             .create_collection(config, &parent.to_string_lossy())
                             .await
                         {
-                            result.errors.push(format!("创建目录 {parent:?} 失败: {e}"));
+                            let path_str = format!("{:?}", parent);
+                            result.errors.push(i18n::tf(
+                                "webdav.create_dir_failed",
+                                &[("error", &path_str)],
+                            ));
                             continue;
                         }
                     }
@@ -624,9 +658,10 @@ impl SyncOrchestrator {
 
                 match self.webdav.put_file(config, &remote_path, content).await {
                     Ok(_) => result.files_uploaded += 1,
-                    Err(e) => result
-                        .errors
-                        .push(format!("上传 {local_rel_path} 失败: {e}")),
+                    Err(e) => result.errors.push(i18n::tf(
+                        "webdav.upload_file_failed",
+                        &[("path", local_rel_path), ("error", &e.to_string())],
+                    )),
                 }
             }
         }

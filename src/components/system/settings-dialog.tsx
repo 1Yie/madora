@@ -1,8 +1,8 @@
 import { Bolt, XIcon } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AboutSettings } from '@/components/system/setting/about';
 import { AppearanceSettings } from '@/components/system/setting/appearance';
-import { CliSettings } from '@/components/system/setting/cli';
 import { EditorSettings } from '@/components/system/setting/editor';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { LicenseSettings } from '@/components/system/setting/license';
@@ -14,7 +14,7 @@ import {
 	type DialogSidebarItem,
 } from '@/components/ui/dialog-sidebar';
 import {
-	settingsSections,
+	getSettingsSections,
 	type SettingsSectionId,
 } from '@/components/system/setting/types';
 
@@ -26,7 +26,6 @@ function SettingsContent({
 	onRequestLicenseActivation: () => void;
 }) {
 	if (section === 'editor') return <EditorSettings />;
-	if (section === 'cli') return <CliSettings />;
 	if (section === 'license')
 		return <LicenseSettings onRequestActivation={onRequestLicenseActivation} />;
 	if (section === 'sync') return <SyncSettings />;
@@ -35,11 +34,13 @@ function SettingsContent({
 }
 
 export function SettingsDialog() {
+	const { t } = useTranslation();
 	const [open, setOpen] = useState(false);
 	const [activeSection, setActiveSection] =
 		useState<SettingsSectionId>('appearance');
 	const [showLicenseActivation, setShowLicenseActivation] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const settingsSections = useMemo(() => getSettingsSections(t), [t]);
 
 	useEffect(() => {
 		scrollRef.current?.scrollTo(0, 0);
@@ -52,7 +53,7 @@ export function SettingsDialog() {
 	return (
 		<>
 			<Button
-				aria-label="打开设置"
+				aria-label={t('settings.openAria')}
 				className="h-full rounded-full border-transparent text-muted-foreground
 					hover:bg-accent hover:text-accent-foreground"
 				size="sm"
