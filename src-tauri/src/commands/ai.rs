@@ -84,9 +84,9 @@ mod tests {
         let save_key_message =
             i18n::tf("ai.save_key_in_settings", &[("provider", provider.display_name())]);
         let secure_storage_prefixes = [
-            i18n::t("secure_storage.access_failed"),
-            i18n::t("secure_storage.access_failed_linux"),
-            i18n::t("secure_storage.init_entry_failed"),
+            i18n::tf("secure_storage.access_failed", &[("error", "")]),
+            i18n::tf("secure_storage.access_failed_linux", &[("error", "")]),
+            i18n::tf("secure_storage.init_entry_failed", &[("error", "")]),
             i18n::tf(
                 "secure_storage.read_api_key_failed",
                 &[("provider", provider.display_name()), ("error", "")],
