@@ -10,7 +10,25 @@ use crate::{
         workspace::WorkspaceStore,
     },
 };
-use tauri::Manager;
+use tauri::{
+    image::Image,
+    menu::MenuBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager,
+};
+
+const TRAY_MENU_SHOW_WINDOW: &str = "tray_show_window";
+const TRAY_MENU_QUIT: &str = "tray_quit";
+const TRAY_MENU_ICON_SIZE: u32 = 16;
+const TRAY_MENU_SHOW_COLOR: [u8; 4] = [59, 130, 246, 255];
+const TRAY_MENU_SHOW_ACCENT: [u8; 4] = [59, 130, 246, 160];
+const TRAY_MENU_QUIT_COLOR: [u8; 4] = [239, 68, 68, 255];
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum TrayMenuTheme {
+    Light,
+    Dark,
+}
 #[cfg(not(debug_assertions))]
 use tauri_plugin_prevent_default::Flags;
 #[cfg(target_os = "windows")]
@@ -81,6 +99,8 @@ pub fn run() {
         let webdav_store = WebDavStore::new(app_data_dir.clone());
         app.manage(webdav_store);
 
+        setup_tray(app)?;
+
         Ok(())
     });
 
@@ -146,6 +166,8 @@ pub fn run() {
             project::read_file_content,
             project::scan_project,
             system::show_window,
+            system::hide_window,
+            system::quit_app,
             system::set_app_locale,
             license::get_license_status,
             license::activate_license,
@@ -161,6 +183,232 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let tray_icon = app.default_window_icon().cloned();
+    let menu_theme = detect_tray_menu_theme();
+    let show_window_label = crate::i18n::t("tray.show_window");
+    let quit_label = crate::i18n::t("tray.quit");
+
+    let menu = MenuBuilder::new(app)
+        .icon(
+            TRAY_MENU_SHOW_WINDOW,
+            show_window_label,
+            create_show_window_menu_icon(menu_theme),
+        )
+        .separator()
+        .icon(
+            TRAY_MENU_QUIT,
+            quit_label,
+            create_quit_menu_icon(menu_theme),
+        )
+        .build()?;
+
+    let mut tray_builder = TrayIconBuilder::with_id("main")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .tooltip("Madora")
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_MENU_SHOW_WINDOW => show_main_window(app),
+            TRAY_MENU_QUIT => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = tray_icon {
+        tray_builder = tray_builder.icon(icon);
+    }
+
+    tray_builder.build(app)?;
+
+    Ok(())
+}
+
+fn detect_tray_menu_theme() -> TrayMenuTheme {
+    #[cfg(target_os = "windows")]
+    {
+        let scheme = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")
+            .and_then(|key| key.get_value::<u32, &str>("SystemUsesLightTheme"))
+            .map(|value| if value == 0 { "dark" } else { "light" })
+            .unwrap_or("light");
+
+        return match scheme {
+            "dark" => TrayMenuTheme::Dark,
+            _ => TrayMenuTheme::Light,
+        };
+    }
+
+    match crate::commands::theme::get_system_theme().scheme.as_str() {
+        "dark" => TrayMenuTheme::Dark,
+        _ => TrayMenuTheme::Light,
+    }
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn create_show_window_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
+    load_svg_tray_menu_icon(show_window_menu_svg(theme)).unwrap_or_else(|error| {
+        eprintln!("failed to load tray menu icon '{TRAY_MENU_SHOW_WINDOW}': {error}");
+        create_show_window_menu_icon_fallback()
+    })
+}
+
+fn create_quit_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
+    load_svg_tray_menu_icon(quit_menu_svg(theme)).unwrap_or_else(|error| {
+        eprintln!("failed to load tray menu icon '{TRAY_MENU_QUIT}': {error}");
+        create_quit_menu_icon_fallback()
+    })
+}
+
+fn show_window_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
+    match theme {
+        TrayMenuTheme::Light => include_bytes!("../icons/menu/windows-000.svg"),
+        TrayMenuTheme::Dark => include_bytes!("../icons/menu/windows-fff.svg"),
+    }
+}
+
+fn quit_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
+    match theme {
+        TrayMenuTheme::Light => include_bytes!("../icons/menu/x-000.svg"),
+        TrayMenuTheme::Dark => include_bytes!("../icons/menu/x-fff.svg"),
+    }
+}
+
+fn load_svg_tray_menu_icon(svg: &[u8]) -> Result<Image<'static>, String> {
+    let options = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_data(svg, &options).map_err(|error| error.to_string())?;
+    let svg_size = tree.size().to_int_size();
+    let scale_x = TRAY_MENU_ICON_SIZE as f32 / svg_size.width() as f32;
+    let scale_y = TRAY_MENU_ICON_SIZE as f32 / svg_size.height() as f32;
+
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(TRAY_MENU_ICON_SIZE, TRAY_MENU_ICON_SIZE)
+        .ok_or_else(|| "failed to allocate tray menu pixmap".to_string())?;
+
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::from_scale(scale_x, scale_y),
+        &mut pixmap.as_mut(),
+    );
+
+    let mut rgba = pixmap.data().to_vec();
+    unpremultiply_rgba(&mut rgba);
+
+    Ok(Image::new_owned(
+        rgba,
+        TRAY_MENU_ICON_SIZE,
+        TRAY_MENU_ICON_SIZE,
+    ))
+}
+
+fn unpremultiply_rgba(rgba: &mut [u8]) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let alpha = pixel[3] as u32;
+        if alpha == 0 {
+            pixel[0] = 0;
+            pixel[1] = 0;
+            pixel[2] = 0;
+            continue;
+        }
+
+        pixel[0] = ((pixel[0] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+        pixel[1] = ((pixel[1] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+        pixel[2] = ((pixel[2] as u32 * 255 + alpha / 2) / alpha).min(255) as u8;
+    }
+}
+
+fn create_show_window_menu_icon_fallback() -> Image<'static> {
+    let mut rgba = empty_tray_menu_icon();
+
+    draw_rect_outline(&mut rgba, 5, 2, 7, 5, TRAY_MENU_SHOW_ACCENT);
+    draw_rect_outline(&mut rgba, 2, 5, 9, 7, TRAY_MENU_SHOW_COLOR);
+    draw_horizontal_line(&mut rgba, 3, 8, 7, TRAY_MENU_SHOW_COLOR);
+
+    Image::new_owned(rgba, TRAY_MENU_ICON_SIZE, TRAY_MENU_ICON_SIZE)
+}
+
+fn create_quit_menu_icon_fallback() -> Image<'static> {
+    let mut rgba = empty_tray_menu_icon();
+
+    draw_line(&mut rgba, 4, 4, 11, 11, TRAY_MENU_QUIT_COLOR);
+    draw_line(&mut rgba, 5, 4, 11, 10, TRAY_MENU_QUIT_COLOR);
+    draw_line(&mut rgba, 11, 4, 4, 11, TRAY_MENU_QUIT_COLOR);
+    draw_line(&mut rgba, 10, 4, 4, 10, TRAY_MENU_QUIT_COLOR);
+
+    Image::new_owned(rgba, TRAY_MENU_ICON_SIZE, TRAY_MENU_ICON_SIZE)
+}
+
+fn empty_tray_menu_icon() -> Vec<u8> {
+    vec![0; (TRAY_MENU_ICON_SIZE * TRAY_MENU_ICON_SIZE * 4) as usize]
+}
+
+fn draw_rect_outline(rgba: &mut [u8], x: i32, y: i32, width: i32, height: i32, color: [u8; 4]) {
+    draw_horizontal_line(rgba, x, x + width - 1, y, color);
+    draw_horizontal_line(rgba, x, x + width - 1, y + height - 1, color);
+    draw_vertical_line(rgba, x, y, y + height - 1, color);
+    draw_vertical_line(rgba, x + width - 1, y, y + height - 1, color);
+}
+
+fn draw_horizontal_line(rgba: &mut [u8], x1: i32, x2: i32, y: i32, color: [u8; 4]) {
+    for x in x1..=x2 {
+        paint_pixel(rgba, x, y, color);
+    }
+}
+
+fn draw_vertical_line(rgba: &mut [u8], x: i32, y1: i32, y2: i32, color: [u8; 4]) {
+    for y in y1..=y2 {
+        paint_pixel(rgba, x, y, color);
+    }
+}
+
+fn draw_line(rgba: &mut [u8], mut x0: i32, mut y0: i32, x1: i32, y1: i32, color: [u8; 4]) {
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut error = dx + dy;
+
+    loop {
+        paint_pixel(rgba, x0, y0, color);
+        if x0 == x1 && y0 == y1 {
+            break;
+        }
+
+        let twice_error = error * 2;
+        if twice_error >= dy {
+            error += dy;
+            x0 += sx;
+        }
+        if twice_error <= dx {
+            error += dx;
+            y0 += sy;
+        }
+    }
+}
+
+fn paint_pixel(rgba: &mut [u8], x: i32, y: i32, color: [u8; 4]) {
+    if x < 0 || y < 0 || x >= TRAY_MENU_ICON_SIZE as i32 || y >= TRAY_MENU_ICON_SIZE as i32 {
+        return;
+    }
+
+    let index = ((y as u32 * TRAY_MENU_ICON_SIZE + x as u32) * 4) as usize;
+    rgba[index..index + 4].copy_from_slice(&color);
 }
 
 #[cfg(all(target_os = "windows"))]

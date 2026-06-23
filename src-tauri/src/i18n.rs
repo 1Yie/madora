@@ -80,6 +80,8 @@ pub fn tf(key: &str, vars: &[(&str, &str)]) -> String {
 
 fn en(key: &str) -> Option<&'static str> {
     Some(match key {
+        "tray.show_window" => "Show Window",
+        "tray.quit" => "Quit Madora",
         "ai.save_key_in_settings" => "Please save the {provider} API key in settings first",
         "ai.api_key_required" => "Please enter an API key first",
         "ai.api_url_required" => "Please enter the API URL first",
@@ -236,6 +238,8 @@ fn en(key: &str) -> Option<&'static str> {
 
 fn zh_cn(key: &str) -> Option<&'static str> {
     Some(match key {
+        "tray.show_window" => "显示窗口",
+        "tray.quit" => "退出应用",
         "ai.save_key_in_settings" => "请先在设置中保存 {provider} API Key",
         "ai.api_key_required" => "请先填写 API Key",
         "ai.api_url_required" => "请先填写 API URL",
@@ -246,9 +250,7 @@ fn zh_cn(key: &str) -> Option<&'static str> {
         "ai.provider.request_failed" => "调用 {provider} completion 失败: {error}",
         "ai.provider.api_error" => "{provider} completion API 返回错误 (HTTP {status}): {body}",
         "ai.provider.request_stream_failed" => "调用 {provider} 流式 completion 失败: {error}",
-        "ai.provider.stream_api_error" => {
-            "{provider} 流式 completion API 返回错误 (HTTP {status}): {body}"
-        }
+        "ai.provider.stream_api_error" => "{provider} 流式 completion API 返回错误 (HTTP {status}): {body}",
         "ai.provider.parse_response_failed" => "解析 {provider} 响应失败: {error}",
         "ai.provider.parse_stream_response_failed" => "解析 {provider} 流式响应失败: {error}",
         "secure_storage.access_failed" => "无法访问系统密钥存储: {error}",
@@ -400,6 +402,8 @@ fn zh_cn(key: &str) -> Option<&'static str> {
 
 fn ja(key: &str) -> Option<&'static str> {
     Some(match key {
+        "tray.show_window" => "ウィンドウを表示",
+        "tray.quit" => "アプリを終了",
         "ai.save_key_in_settings" => "設定で {provider} API Key を先に保存してください",
         "ai.api_key_required" => "先に API Key を入力してください",
         "ai.api_url_required" => "先に API URL を入力してください",
@@ -554,6 +558,8 @@ fn ja(key: &str) -> Option<&'static str> {
 
 fn ko(key: &str) -> Option<&'static str> {
     Some(match key {
+        "tray.show_window" => "창 표시",
+        "tray.quit" => "앱 종료",
         "ai.save_key_in_settings" => "설정에서 {provider} API Key 를 먼저 저장해 주세요",
         "ai.api_key_required" => "먼저 API Key 를 입력해 주세요",
         "ai.api_url_required" => "먼저 API URL 을 입력해 주세요",

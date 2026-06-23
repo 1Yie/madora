@@ -23,7 +23,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 async-trait = "0.1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-prevent-default = { version = "5", features = [
   "platform-windows",
@@ -54,6 +54,7 @@ dotenv = "0.15"
 getrandom = "0.2"
 keyring = "4"
 keyring-core = "1"
+resvg = { version = "0.45.1", default-features = false }
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
 
