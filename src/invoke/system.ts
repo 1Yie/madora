@@ -27,6 +27,16 @@ export async function showWindow(): Promise<void> {
 	return invoke('show_window');
 }
 
+/** Hides the main application window while keeping the app running. */
+export async function hideWindow(): Promise<void> {
+	return invoke('hide_window');
+}
+
+/** Quits the whole application process. */
+export async function quitApp(): Promise<void> {
+	return invoke('quit_app');
+}
+
 /** Updates the backend locale used for Rust-side messages. */
 export async function setAppLocale(locale: AppLocale): Promise<void> {
 	return invoke('set_app_locale', { locale });

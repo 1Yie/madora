@@ -16,7 +16,10 @@ import {
 	getProviderDefinitions,
 	useAiSettings,
 } from '@/context/ai-settings-provider';
-import { useAppSettings } from '@/context/app-settings-provider';
+import {
+	type CloseBehavior,
+	useAppSettings,
+} from '@/context/app-settings-provider';
 import {
 	FieldBlock,
 	Option,
@@ -42,6 +45,41 @@ type ProviderModelOption = {
 	name: string;
 	value: string;
 };
+
+function CloseBehaviorSetting() {
+	const { t } = useTranslation();
+	const { closeBehavior, setCloseBehavior } = useAppSettings();
+	const options: Array<{
+		description: string;
+		label: string;
+		value: CloseBehavior;
+	}> = [
+		{
+			description: t('settings.editor.closeBehavior.minimize.description'),
+			label: t('settings.editor.closeBehavior.minimize.label'),
+			value: 'minimize',
+		},
+		{
+			description: t('settings.editor.closeBehavior.exit.description'),
+			label: t('settings.editor.closeBehavior.exit.label'),
+			value: 'exit',
+		},
+	];
+
+	return (
+		<div className="grid gap-3 md:grid-cols-2">
+			{options.map((option) => (
+				<Option
+					key={option.value}
+					active={closeBehavior === option.value}
+					description={option.description}
+					label={option.label}
+					onClick={() => setCloseBehavior(option.value)}
+				/>
+			))}
+		</div>
+	);
+}
 
 export function EditorSettings() {
 	const { t } = useTranslation();
@@ -202,6 +240,10 @@ export function EditorSettings() {
 						/>
 					</SettingRow>
 				</div>
+			</SettingsSectionCard>
+
+			<SettingsSectionCard title={t('settings.editor.cards.window.title')}>
+				<CloseBehaviorSetting />
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.editor.cards.ai.title')}>

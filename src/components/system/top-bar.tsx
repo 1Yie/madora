@@ -1,9 +1,9 @@
 import {
-	destroyWindow,
 	minimizeWindow,
 	onCloseRequested,
 	toggleMaximizeWindow,
 } from '@/invoke/window';
+import { hideWindow, quitApp } from '@/invoke/system';
 import { X, Square, Minus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -24,6 +24,10 @@ import {
 	hasUnsaved,
 	saveAll,
 } from '@/lib/unsaved-registry';
+import {
+	type CloseBehavior,
+	useAppSettings,
+} from '@/context/app-settings-provider';
 
 function getSaveFailureMessage(
 	error: unknown,
@@ -36,14 +40,22 @@ function getSaveFailureMessage(
 
 export default function Titlebar() {
 	const { t } = useTranslation();
-	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmMode, setConfirmMode] = useState<CloseBehavior | null>(null);
+	const [displayedConfirmMode, setDisplayedConfirmMode] =
+		useState<CloseBehavior>('exit');
 	const [savingBeforeClose, setSavingBeforeClose] = useState(false);
+	const { closeBehavior } = useAppSettings();
 	const bypassCloseGuardRef = useRef(false);
 
-	const closeWindow = useCallback(async () => {
+	const closeWindow = useCallback(async (targetBehavior: CloseBehavior) => {
+		if (targetBehavior === 'minimize') {
+			await hideWindow();
+			return;
+		}
+
 		bypassCloseGuardRef.current = true;
 		try {
-			await destroyWindow();
+			await quitApp();
 		} finally {
 			window.setTimeout(() => {
 				bypassCloseGuardRef.current = false;
@@ -53,15 +65,18 @@ export default function Titlebar() {
 
 	const requestClose = useCallback(async () => {
 		if (savingBeforeClose) return;
+
+		const targetBehavior = closeBehavior;
 		if (hasUnsaved()) {
-			setConfirmOpen(true);
+			setDisplayedConfirmMode(targetBehavior);
+			setConfirmMode(targetBehavior);
 			return;
 		}
-		await closeWindow();
-	}, [closeWindow, savingBeforeClose]);
+		await closeWindow(targetBehavior);
+	}, [closeBehavior, closeWindow, savingBeforeClose]);
 
 	const handleSaveAndClose = useCallback(async () => {
-		if (savingBeforeClose) return;
+		if (confirmMode !== 'exit' || savingBeforeClose) return;
 		setSavingBeforeClose(true);
 		try {
 			const results = await saveAll();
@@ -76,8 +91,8 @@ export default function Titlebar() {
 			}
 
 			if (!hasUnsaved()) {
-				setConfirmOpen(false);
-				await closeWindow();
+				setConfirmMode(null);
+				await closeWindow('exit');
 				return;
 			}
 
@@ -88,13 +103,20 @@ export default function Titlebar() {
 		} finally {
 			setSavingBeforeClose(false);
 		}
-	}, [closeWindow, savingBeforeClose]);
+	}, [closeWindow, confirmMode, savingBeforeClose, t]);
 
 	const handleDiscardAndClose = useCallback(async () => {
+		if (confirmMode !== 'exit') return;
 		clearStoredMarkdownDrafts();
-		setConfirmOpen(false);
-		await closeWindow();
-	}, [closeWindow]);
+		setConfirmMode(null);
+		await closeWindow('exit');
+	}, [closeWindow, confirmMode]);
+
+	const handleConfirmMinimize = useCallback(async () => {
+		if (confirmMode !== 'minimize') return;
+		setConfirmMode(null);
+		await closeWindow('minimize');
+	}, [closeWindow, confirmMode]);
 
 	const requestCloseRef = useRef(requestClose);
 	useEffect(() => {
@@ -122,6 +144,9 @@ export default function Titlebar() {
 			void unlistenPromise.then((unlisten) => unlisten?.());
 		};
 	}, []);
+
+	const isMinimizeConfirm = displayedConfirmMode === 'minimize';
+	const confirmCopyKey = isMinimizeConfirm ? 'confirmMinimize' : 'confirmClose';
 
 	return (
 		<>
@@ -163,37 +188,52 @@ export default function Titlebar() {
 					</button>
 				</div>
 			</div>
-			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+			<Dialog
+				open={confirmMode !== null}
+				onOpenChange={(open) => {
+					if (!open) {
+						setConfirmMode(null);
+					}
+				}}
+			>
 				<DialogPopup showCloseButton={false} className="max-w-md">
 					<DialogHeader>
-						<DialogTitle>{t('topBar.confirmClose.title')}</DialogTitle>
+						<DialogTitle>{t(`topBar.${confirmCopyKey}.title`)}</DialogTitle>
 						<DialogDescription>
-							{savingBeforeClose
+							{savingBeforeClose && !isMinimizeConfirm
 								? t('topBar.confirmClose.saving')
-								: t('topBar.confirmClose.description')}
+								: t(`topBar.${confirmCopyKey}.description`)}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
 						<Button
 							disabled={savingBeforeClose}
 							variant="outline"
-							onClick={() => setConfirmOpen(false)}
+							onClick={() => setConfirmMode(null)}
 						>
 							{t('common.actions.cancel')}
 						</Button>
-						<Button
-							disabled={savingBeforeClose}
-							variant="destructive-outline"
-							onClick={() => void handleDiscardAndClose()}
-						>
-							{t('topBar.confirmClose.discard')}
-						</Button>
-						<Button
-							loading={savingBeforeClose}
-							onClick={() => void handleSaveAndClose()}
-						>
-							{t('topBar.confirmClose.save')}
-						</Button>
+						{isMinimizeConfirm ? (
+							<Button onClick={() => void handleConfirmMinimize()}>
+								{t('topBar.confirmMinimize.confirm')}
+							</Button>
+						) : (
+							<>
+								<Button
+									disabled={savingBeforeClose}
+									variant="destructive-outline"
+									onClick={() => void handleDiscardAndClose()}
+								>
+									{t('topBar.confirmClose.discard')}
+								</Button>
+								<Button
+									loading={savingBeforeClose}
+									onClick={() => void handleSaveAndClose()}
+								>
+									{t('topBar.confirmClose.save')}
+								</Button>
+							</>
+						)}
 					</DialogFooter>
 				</DialogPopup>
 			</Dialog>

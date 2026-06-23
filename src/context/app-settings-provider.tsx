@@ -9,10 +9,12 @@ import {
 import { setAppLocale } from '@/invoke/system';
 
 export type SaveMode = 'auto' | 'manual';
+export type CloseBehavior = 'exit' | 'minimize';
 
 type AppSettingsState = {
 	localePreference: LocalePreference;
 	saveMode: SaveMode;
+	closeBehavior: CloseBehavior;
 	showHiddenFiles: boolean;
 	editorFontSize: number;
 };
@@ -20,6 +22,7 @@ type AppSettingsState = {
 type AppSettingsActions = {
 	setLocalePreference: (localePreference: LocalePreference) => void;
 	setSaveMode: (saveMode: SaveMode) => void;
+	setCloseBehavior: (closeBehavior: CloseBehavior) => void;
 	setShowHiddenFiles: (showHiddenFiles: boolean) => void;
 	setEditorFontSize: (editorFontSize: number) => void;
 };
@@ -28,6 +31,7 @@ export type AppSettingsStore = AppSettingsState & AppSettingsActions;
 
 const APP_LOCALE_STORAGE_KEY = 'madora-app-locale';
 const EDITOR_SAVE_MODE_STORAGE_KEY = 'madora-editor-save-mode';
+const WINDOW_CLOSE_BEHAVIOR_STORAGE_KEY = 'madora-window-close-behavior';
 const EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY =
 	'madora-explorer-show-hidden-files';
 const EDITOR_FONT_SIZE_STORAGE_KEY = 'madora-editor-font-size';
@@ -64,6 +68,11 @@ function getInitialSaveMode(): SaveMode {
 	return storedValue === 'manual' ? 'manual' : 'auto';
 }
 
+function getInitialCloseBehavior(): CloseBehavior {
+	const storedValue = getStoredValue(WINDOW_CLOSE_BEHAVIOR_STORAGE_KEY);
+	return storedValue === 'exit' ? 'exit' : 'minimize';
+}
+
 function getInitialShowHiddenFiles(): boolean {
 	const storedValue = getStoredValue(EXPLORER_SHOW_HIDDEN_FILES_STORAGE_KEY);
 	if (storedValue === null) {
@@ -93,6 +102,7 @@ function getInitialEditorFontSize(): number {
 const useAppSettingsStore = create<AppSettingsStore>((set) => ({
 	localePreference: getInitialLocalePreference(),
 	saveMode: getInitialSaveMode(),
+	closeBehavior: getInitialCloseBehavior(),
 	showHiddenFiles: getInitialShowHiddenFiles(),
 	editorFontSize: getInitialEditorFontSize(),
 
@@ -103,6 +113,10 @@ const useAppSettingsStore = create<AppSettingsStore>((set) => ({
 	setSaveMode: (saveMode) => {
 		set({ saveMode });
 		setStoredValue(EDITOR_SAVE_MODE_STORAGE_KEY, saveMode);
+	},
+	setCloseBehavior: (closeBehavior) => {
+		set({ closeBehavior });
+		setStoredValue(WINDOW_CLOSE_BEHAVIOR_STORAGE_KEY, closeBehavior);
 	},
 	setShowHiddenFiles: (showHiddenFiles) => {
 		set({ showHiddenFiles });
