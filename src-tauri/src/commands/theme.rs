@@ -142,12 +142,12 @@ pub fn get_system_theme() -> SystemTheme {
         if let Some(home) = std::env::var_os("HOME") {
             let kdeglobals = Path::new(&home).join(".config").join("kdeglobals");
             if let Ok(contents) = std::fs::read_to_string(&kdeglobals) {
-                // 检测深色主题
-                if scheme == "light" {
-                    let lower = contents.to_lowercase();
-                    if lower.contains("colorscheme") && lower.contains("dark") {
-                        scheme = "dark".to_string();
-                    }
+                // 只解析 [General] -> ColorScheme，避免被 DefaultDarkLookAndFeel 之类无关字段误判。
+                if scheme == "light"
+                    && parse_kde_color_scheme(&contents)
+                        .is_some_and(|value| value.to_lowercase().contains("dark"))
+                {
+                    scheme = "dark".to_string();
                 }
 
                 // 读取 KDE accent color：[Colors:Button] 区块下的 ForegroundActive 或 [General] 下的 AccentColor
@@ -160,6 +160,26 @@ pub fn get_system_theme() -> SystemTheme {
         }
 
         SystemTheme { scheme, accent }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn parse_kde_color_scheme(contents: &str) -> Option<&str> {
+        let mut current_section = "";
+
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                current_section = trimmed;
+                continue;
+            }
+            if let Some((key, val)) = trimmed.split_once('=') {
+                if current_section == "[General]" && key.trim() == "ColorScheme" {
+                    return Some(val.trim());
+                }
+            }
+        }
+
+        None
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
