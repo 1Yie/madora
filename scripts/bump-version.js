@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { execSync } from 'node:child_process';
 import fs from 'fs';
 import path from 'path';
 import process from 'node:process';
@@ -81,21 +80,6 @@ if (newVersion === oldPkgVersion) {
 	console.log(`Version unchanged: ${newVersion}`);
 	process.exit(0);
 }
-
-// Generate changelog from conventional commits before bumping
-const changelogPath = path.join(repoRoot, 'CHANGELOG.md');
-console.log('Generating changelog...');
-try {
-	execSync('npx conventional-changelog -p angular -i CHANGELOG.md -s', {
-		cwd: repoRoot,
-		stdio: 'inherit',
-	});
-	console.log(`Updated ${changelogPath}`);
-} catch (err) {
-	console.warn(`Warning: changelog generation failed: ${err.message}`);
-	console.warn('Continuing with version bump...');
-}
-console.log('');
 
 // Update package.json
 pkg.version = newVersion;
