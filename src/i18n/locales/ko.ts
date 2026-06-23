@@ -118,6 +118,7 @@ const ko = {
 			cards: {
 				ai: { title: 'AI 자동완성' },
 				input: { title: '입력 동작' },
+				window: { title: '창' },
 			},
 			rows: {
 				autoSave: {
@@ -132,6 +133,18 @@ const ko = {
 					prefix: '사이드바에서',
 					suffix: '로 시작하는 파일과 폴더를 표시합니다.',
 					title: '숨김 파일 표시',
+				},
+			},
+			closeBehavior: {
+				minimize: {
+					description:
+						'닫기 버튼을 누르면 메인 창을 숨기고 트레이 아이콘에서 계속 실행합니다.',
+					label: '트레이로 최소화',
+				},
+				exit: {
+					description:
+						'닫기 버튼을 누르면 앱을 종료합니다. 저장하지 않은 변경 사항은 먼저 확인합니다.',
+					label: '앱 종료',
 				},
 			},
 			providerHint:
@@ -394,6 +407,11 @@ const ko = {
 			description: '창을 닫기 전에 변경 사항을 저장할지 버릴지 선택하세요.',
 			discard: '저장하지 않고 닫기',
 			save: '저장 후 닫기',
+		},
+		confirmMinimize: {
+			title: '현재 작업공간의 변경 사항이 저장되지 않았습니다',
+			description: '그래도 트레이로 최소화할까요?',
+			confirm: '그래도 최소화',
 		},
 	},
 	errors: {

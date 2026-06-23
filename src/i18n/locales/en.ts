@@ -123,6 +123,7 @@ const en = {
 			cards: {
 				ai: { title: 'AI Completion' },
 				input: { title: 'Typing Behavior' },
+				window: { title: 'Window' },
 			},
 			rows: {
 				autoSave: {
@@ -137,6 +138,18 @@ const en = {
 					prefix: 'Show files and folders in the sidebar that start with',
 					suffix: '.',
 					title: 'Show Hidden Files',
+				},
+			},
+			closeBehavior: {
+				minimize: {
+					description:
+						'Hide the main window when closing. Madora keeps running from the tray icon.',
+					label: 'Minimize to Tray',
+				},
+				exit: {
+					description:
+						'Quit the app when closing. Unsaved changes are confirmed first.',
+					label: 'Quit App',
 				},
 			},
 			providerHint:
@@ -404,6 +417,11 @@ const en = {
 				'Choose what to do before closing the window: save your changes first, or discard them.',
 			discard: 'Close Without Saving',
 			save: 'Save and Close',
+		},
+		confirmMinimize: {
+			title: 'This workspace has unsaved changes',
+			description: 'Minimize to the tray anyway?',
+			confirm: 'Minimize Anyway',
 		},
 	},
 	errors: {

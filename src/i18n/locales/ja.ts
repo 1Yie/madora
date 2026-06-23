@@ -114,6 +114,7 @@ const ja = {
 			cards: {
 				ai: { title: 'AI 補完' },
 				input: { title: '入力動作' },
+				window: { title: 'ウィンドウ' },
 			},
 			rows: {
 				autoSave: {
@@ -128,6 +129,18 @@ const ja = {
 					prefix: 'サイドバーで',
 					suffix: 'で始まるファイルやフォルダーを表示します。',
 					title: '隠しファイルを表示',
+				},
+			},
+			closeBehavior: {
+				minimize: {
+					description:
+						'閉じるボタンでメインウィンドウを隠し、トレイアイコンから実行を継続します。',
+					label: 'トレイに最小化',
+				},
+				exit: {
+					description:
+						'閉じるボタンでアプリを終了します。未保存の変更は先に確認します。',
+					label: 'アプリを終了',
 				},
 			},
 			providerHint:
@@ -391,6 +404,11 @@ const ja = {
 				'ウィンドウを閉じる前に、変更を保存するか破棄するかを選んでください。',
 			discard: '保存せずに閉じる',
 			save: '保存して閉じる',
+		},
+		confirmMinimize: {
+			title: '現在のワークスペースに未保存の変更があります',
+			description: 'それでもトレイに最小化しますか？',
+			confirm: 'そのまま最小化',
 		},
 	},
 	errors: {

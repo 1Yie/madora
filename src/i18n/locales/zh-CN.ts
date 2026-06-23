@@ -107,6 +107,7 @@ const zhCN = {
 			cards: {
 				ai: { title: 'AI 配置' },
 				input: { title: '输入行为' },
+				window: { title: '窗口' },
 			},
 			rows: {
 				autoSave: {
@@ -121,6 +122,16 @@ const zhCN = {
 					prefix: '控制侧栏是否显示以',
 					suffix: '开头的文件和目录。',
 					title: '显示隐藏文件',
+				},
+			},
+			closeBehavior: {
+				minimize: {
+					description: '点击关闭按钮时隐藏主窗口，应用继续在状态栏图标中运行。',
+					label: '最小化到托盘',
+				},
+				exit: {
+					description: '点击关闭按钮时退出应用；存在未保存内容时会先提示。',
+					label: '直接退出',
 				},
 			},
 			providerHint: '各 Provider 的 Key 和模型独立保存，切换后不会互相覆盖。',
@@ -370,6 +381,11 @@ const zhCN = {
 			description: '关闭窗口前请选择：先保存修改，或放弃这些未保存的内容。',
 			discard: '不保存并关闭',
 			save: '保存并关闭',
+		},
+		confirmMinimize: {
+			title: '当前工作区改动未保存',
+			description: '确定要最小化到托盘吗？',
+			confirm: '仍然最小化',
 		},
 	},
 	errors: {
