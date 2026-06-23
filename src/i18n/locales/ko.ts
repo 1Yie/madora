@@ -279,14 +279,30 @@ const ko = {
 			},
 		},
 		about: {
+			actions: {
+				check: '업데이트 확인',
+				viewRelease: '릴리스 보기',
+			},
 			cards: {
 				licenses: { title: '오픈소스 라이선스' },
+				update: {
+					title: '소프트웨어 업데이트',
+				},
 			},
+			currentVersionDescription: '현재 버전: {{version}}',
 			stats: {
 				author: '작성자',
 				sourceCode: '소스 코드',
 				version: '버전',
 				website: '웹사이트',
+			},
+			toasts: {
+				checkFailed: '업데이트 확인에 실패했습니다',
+				checkFailedDescription: '지금은 GitHub Releases 에 연결할 수 없습니다.',
+				upToDate: 'Madora 는 이미 최신 버전입니다 ({{version}})',
+				updateAvailableDescription:
+					'현재 {{currentVersion}} · 최신 {{latestVersion}}',
+				updateAvailableTitle: '새 버전이 있습니다',
 			},
 		},
 	},

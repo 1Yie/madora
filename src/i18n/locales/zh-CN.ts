@@ -258,14 +258,30 @@ const zhCN = {
 			},
 		},
 		about: {
+			actions: {
+				check: '检查更新',
+				viewRelease: '查看发行版',
+			},
 			cards: {
 				licenses: { title: '开源许可' },
+				update: {
+					title: '软件更新',
+				},
 			},
+			currentVersionDescription: '当前版本：{{version}}',
 			stats: {
 				author: '作者',
 				sourceCode: '源代码',
 				version: '版本',
 				website: '网站',
+			},
+			toasts: {
+				checkFailed: '检查更新失败',
+				checkFailedDescription: '当前无法连接到 GitHub Releases。',
+				upToDate: 'Madora 已是最新版本（{{version}}）',
+				updateAvailableDescription:
+					'当前 {{currentVersion}} · 最新 {{latestVersion}}',
+				updateAvailableTitle: '发现新版本',
 			},
 		},
 	},

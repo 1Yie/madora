@@ -287,14 +287,32 @@ const en = {
 			},
 		},
 		about: {
+			actions: {
+				check: 'Check for Updates',
+				viewRelease: 'View Release',
+			},
 			cards: {
 				licenses: { title: 'Open Source Licenses' },
+				update: {
+					description:
+						'Checks the latest GitHub release before you download a new build.',
+					title: 'Software Update',
+				},
 			},
+			currentVersionDescription: 'Current version: {{version}}',
 			stats: {
 				author: 'Author',
 				sourceCode: 'Source Code',
 				version: 'Version',
 				website: 'Website',
+			},
+			toasts: {
+				checkFailed: 'Failed to check for updates',
+				checkFailedDescription: 'Unable to reach GitHub Releases right now.',
+				upToDate: 'Madora is already up to date ({{version}})',
+				updateAvailableDescription:
+					'Current {{currentVersion}} · Latest {{latestVersion}}',
+				updateAvailableTitle: 'A new version is available',
 			},
 		},
 	},
@@ -357,8 +375,6 @@ const en = {
 		verifying: 'Verifying license...',
 		revoked: {
 			title: 'License update required',
-			description:
-				'The license on this device is no longer valid. Enter a new key to continue using Madora.',
 			action: 'Activate New License',
 			switchToTrial: 'Switch to Trial',
 		},

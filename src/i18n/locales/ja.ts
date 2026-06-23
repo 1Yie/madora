@@ -276,14 +276,30 @@ const ja = {
 			},
 		},
 		about: {
+			actions: {
+				check: '更新を確認',
+				viewRelease: 'リリースを見る',
+			},
 			cards: {
 				licenses: { title: 'オープンソースライセンス' },
+				update: {
+					title: 'ソフトウェア更新',
+				},
 			},
+			currentVersionDescription: '現在のバージョン: {{version}}',
 			stats: {
 				author: '作者',
 				sourceCode: 'ソースコード',
 				version: 'バージョン',
 				website: 'ウェブサイト',
+			},
+			toasts: {
+				checkFailed: '更新の確認に失敗しました',
+				checkFailedDescription: '現在 GitHub Releases に接続できません。',
+				upToDate: 'Madora は最新です（{{version}}）',
+				updateAvailableDescription:
+					'現在 {{currentVersion}} ・ 最新 {{latestVersion}}',
+				updateAvailableTitle: '新しいバージョンがあります',
 			},
 		},
 	},

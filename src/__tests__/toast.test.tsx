@@ -1,7 +1,12 @@
-import { act, cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ToastProvider, showErrorToast } from '@/components/ui/toast';
+import {
+	ToastProvider,
+	showErrorToast,
+	toastManager,
+} from '@/components/ui/toast';
 
 afterEach(() => {
 	cleanup();
@@ -72,4 +77,31 @@ it("splits description at ': ' for code-block style, prefix as normal text", asy
 		'{"error":{"message":"Invalid API key"}}'
 	);
 	expect(normalDescriptions[0]).toHaveTextContent('OpenAI API error (401):');
+});
+
+it('wires toast action handlers through the rendered button', async () => {
+	const onClick = vi.fn();
+	const user = userEvent.setup();
+
+	render(
+		<ToastProvider>
+			<div>toast host</div>
+		</ToastProvider>
+	);
+
+	act(() => {
+		toastManager.add({
+			actionProps: {
+				children: 'View Release',
+				onClick,
+			},
+			priority: 'low',
+			title: 'New version available',
+			type: 'success',
+		});
+	});
+
+	await user.click(await screen.findByRole('button', { name: 'View Release' }));
+
+	expect(onClick).toHaveBeenCalledTimes(1);
 });
