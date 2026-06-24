@@ -15,6 +15,7 @@ use tauri::{
     image::Image,
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Runtime,
 };
 use tauri::{AppHandle, Manager};
 
@@ -39,7 +40,7 @@ enum TrayMenuTheme {
 }
 #[cfg(not(debug_assertions))]
 use tauri_plugin_prevent_default::Flags;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(debug_assertions)))]
 use tauri_plugin_prevent_default::PlatformOptions;
 
 pub fn run() {
@@ -207,7 +208,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn build_tray_menu<M: Manager>(app: &M) -> tauri::Result<tauri::menu::Menu> {
+fn build_tray_menu<R: Runtime, M: Manager<R>>(app: &M) -> tauri::Result<tauri::menu::Menu<R>> {
     let menu_theme = detect_tray_menu_theme();
     let show_window_label = crate::i18n::t("tray.show_window");
     let quit_label = crate::i18n::t("tray.quit");
@@ -234,7 +235,7 @@ fn build_tray_menu<M: Manager>(app: &M) -> tauri::Result<tauri::menu::Menu> {
 /// user changes the language in settings.
 #[cfg(not(target_os = "linux"))]
 pub fn refresh_tray_menu(app: &AppHandle) {
-    let Some(tray) = app.tray_by_id(&"main") else {
+    let Some(tray) = app.tray_by_id("main") else {
         return;
     };
     match build_tray_menu(app) {
@@ -384,15 +385,18 @@ fn detect_tray_menu_theme() -> TrayMenuTheme {
             .map(|value| if value == 0 { "dark" } else { "light" })
             .unwrap_or("light");
 
-        return match scheme {
+        match scheme {
             "dark" => TrayMenuTheme::Dark,
             _ => TrayMenuTheme::Light,
-        };
+        }
     }
 
-    match crate::commands::theme::get_system_theme().scheme.as_str() {
-        "dark" => TrayMenuTheme::Dark,
-        _ => TrayMenuTheme::Light,
+    #[cfg(not(target_os = "windows"))]
+    {
+        match crate::commands::theme::get_system_theme().scheme.as_str() {
+            "dark" => TrayMenuTheme::Dark,
+            _ => TrayMenuTheme::Light,
+        }
     }
 }
 

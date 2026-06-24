@@ -15,7 +15,6 @@ pub struct SystemTheme {
 pub fn get_system_theme() -> SystemTheme {
     #[cfg(target_os = "windows")]
     fn detect() -> SystemTheme {
-        use std::io::Error;
         // On Windows registry: HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize -> AppsUseLightTheme
         // 1 = light, 0 = dark
         let scheme = match winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
