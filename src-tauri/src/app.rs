@@ -10,20 +10,28 @@ use crate::{
         workspace::WorkspaceStore,
     },
 };
+#[cfg(not(target_os = "linux"))]
 use tauri::{
     image::Image,
     menu::MenuBuilder,
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
 };
+use tauri::{AppHandle, Manager};
 
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_SHOW_WINDOW: &str = "tray_show_window";
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_QUIT: &str = "tray_quit";
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_ICON_SIZE: u32 = 16;
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_SHOW_COLOR: [u8; 4] = [59, 130, 246, 255];
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_SHOW_ACCENT: [u8; 4] = [59, 130, 246, 160];
+#[cfg(not(target_os = "linux"))]
 const TRAY_MENU_QUIT_COLOR: [u8; 4] = [239, 68, 68, 255];
 
+#[cfg(not(target_os = "linux"))]
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum TrayMenuTheme {
     Light,
@@ -187,12 +195,24 @@ pub fn run() {
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    let tray_icon = app.default_window_icon().cloned();
+    #[cfg(target_os = "linux")]
+    {
+        setup_linux_status_icon_tray(app)
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        setup_tauri_tray(app)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn build_tray_menu<M: Manager>(app: &M) -> tauri::Result<tauri::menu::Menu> {
     let menu_theme = detect_tray_menu_theme();
     let show_window_label = crate::i18n::t("tray.show_window");
     let quit_label = crate::i18n::t("tray.quit");
 
-    let menu = MenuBuilder::new(app)
+    MenuBuilder::new(app)
         .icon(
             TRAY_MENU_SHOW_WINDOW,
             show_window_label,
@@ -204,7 +224,39 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             quit_label,
             create_quit_menu_icon(menu_theme),
         )
-        .build()?;
+        .build()
+}
+
+/// Rebuild the tray menu so its labels follow the current app locale.
+///
+/// The tray menu is built once at startup with the detected OS locale.
+/// Call this after `i18n::set_locale` to refresh the labels when the
+/// user changes the language in settings.
+#[cfg(not(target_os = "linux"))]
+pub fn refresh_tray_menu(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id(&"main") else {
+        return;
+    };
+    match build_tray_menu(app) {
+        Ok(menu) => {
+            if let Err(error) = tray.set_menu(Some(menu)) {
+                eprintln!("failed to refresh tray menu: {error}");
+            }
+        }
+        Err(error) => eprintln!("failed to rebuild tray menu: {error}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn refresh_tray_menu(_app: &AppHandle) {
+    // Linux uses ksni, which re-reads labels via MadoraLinuxTray::menu()
+    // (translated live with crate::i18n::t) — no explicit rebuild needed.
+}
+
+#[cfg(not(target_os = "linux"))]
+fn setup_tauri_tray(app: &tauri::App) -> tauri::Result<()> {
+    let tray_icon = app.default_window_icon().cloned();
+    let menu = build_tray_menu(app)?;
 
     let mut tray_builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -235,6 +287,94 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+struct MadoraLinuxTray {
+    app: AppHandle,
+    icon: ksni::Icon,
+}
+
+#[cfg(target_os = "linux")]
+impl ksni::Tray for MadoraLinuxTray {
+    fn id(&self) -> String {
+        "madora".into()
+    }
+
+    fn title(&self) -> String {
+        "Madora".into()
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        vec![self.icon.clone()]
+    }
+
+    fn activate(&mut self, _x: i32, _y: i32) {
+        show_main_window(&self.app);
+    }
+
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::*;
+
+        vec![
+            StandardItem {
+                label: crate::i18n::t("tray.show_window"),
+                activate: Box::new(|tray: &mut Self| show_main_window(&tray.app)),
+                ..Default::default()
+            }
+            .into(),
+            ksni::MenuItem::Separator,
+            StandardItem {
+                label: crate::i18n::t("tray.quit"),
+                activate: Box::new(|tray: &mut Self| tray.app.exit(0)),
+                ..Default::default()
+            }
+            .into(),
+        ]
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn setup_linux_status_icon_tray(app: &tauri::App) -> tauri::Result<()> {
+    use ksni::TrayMethods;
+
+    let tray = MadoraLinuxTray {
+        app: app.app_handle().clone(),
+        icon: load_linux_tray_icon()?,
+    };
+
+    tauri::async_runtime::spawn(async move {
+        match tray.assume_sni_available(true).spawn().await {
+            Ok(_handle) => std::future::pending::<()>().await,
+            Err(error) => eprintln!("failed to create Linux tray icon: {error}"),
+        }
+    });
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn load_linux_tray_icon() -> tauri::Result<ksni::Icon> {
+    use image::GenericImageView;
+
+    let image = image::load_from_memory_with_format(
+        include_bytes!("../icons/32x32.png"),
+        image::ImageFormat::Png,
+    )
+    .map_err(|error| tauri::Error::Io(std::io::Error::other(error.to_string())))?;
+    let (width, height) = image.dimensions();
+    let mut data = image.into_rgba8().into_vec();
+
+    for pixel in data.chunks_exact_mut(4) {
+        pixel.rotate_right(1);
+    }
+
+    Ok(ksni::Icon {
+        width: width as i32,
+        height: height as i32,
+        data,
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
 fn detect_tray_menu_theme() -> TrayMenuTheme {
     #[cfg(target_os = "windows")]
     {
@@ -264,6 +404,7 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn create_show_window_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
     load_svg_tray_menu_icon(show_window_menu_svg(theme)).unwrap_or_else(|error| {
         eprintln!("failed to load tray menu icon '{TRAY_MENU_SHOW_WINDOW}': {error}");
@@ -271,6 +412,7 @@ fn create_show_window_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
     })
 }
 
+#[cfg(not(target_os = "linux"))]
 fn create_quit_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
     load_svg_tray_menu_icon(quit_menu_svg(theme)).unwrap_or_else(|error| {
         eprintln!("failed to load tray menu icon '{TRAY_MENU_QUIT}': {error}");
@@ -278,6 +420,7 @@ fn create_quit_menu_icon(theme: TrayMenuTheme) -> Image<'static> {
     })
 }
 
+#[cfg(not(target_os = "linux"))]
 fn show_window_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
     match theme {
         TrayMenuTheme::Light => include_bytes!("../icons/menu/windows-000.svg"),
@@ -285,6 +428,7 @@ fn show_window_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn quit_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
     match theme {
         TrayMenuTheme::Light => include_bytes!("../icons/menu/x-000.svg"),
@@ -292,6 +436,7 @@ fn quit_menu_svg(theme: TrayMenuTheme) -> &'static [u8] {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn load_svg_tray_menu_icon(svg: &[u8]) -> Result<Image<'static>, String> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_data(svg, &options).map_err(|error| error.to_string())?;
@@ -318,6 +463,7 @@ fn load_svg_tray_menu_icon(svg: &[u8]) -> Result<Image<'static>, String> {
     ))
 }
 
+#[cfg(not(target_os = "linux"))]
 fn unpremultiply_rgba(rgba: &mut [u8]) {
     for pixel in rgba.chunks_exact_mut(4) {
         let alpha = pixel[3] as u32;
@@ -334,6 +480,7 @@ fn unpremultiply_rgba(rgba: &mut [u8]) {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn create_show_window_menu_icon_fallback() -> Image<'static> {
     let mut rgba = empty_tray_menu_icon();
 
@@ -344,6 +491,7 @@ fn create_show_window_menu_icon_fallback() -> Image<'static> {
     Image::new_owned(rgba, TRAY_MENU_ICON_SIZE, TRAY_MENU_ICON_SIZE)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn create_quit_menu_icon_fallback() -> Image<'static> {
     let mut rgba = empty_tray_menu_icon();
 
@@ -355,10 +503,12 @@ fn create_quit_menu_icon_fallback() -> Image<'static> {
     Image::new_owned(rgba, TRAY_MENU_ICON_SIZE, TRAY_MENU_ICON_SIZE)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn empty_tray_menu_icon() -> Vec<u8> {
     vec![0; (TRAY_MENU_ICON_SIZE * TRAY_MENU_ICON_SIZE * 4) as usize]
 }
 
+#[cfg(not(target_os = "linux"))]
 fn draw_rect_outline(rgba: &mut [u8], x: i32, y: i32, width: i32, height: i32, color: [u8; 4]) {
     draw_horizontal_line(rgba, x, x + width - 1, y, color);
     draw_horizontal_line(rgba, x, x + width - 1, y + height - 1, color);
@@ -366,18 +516,21 @@ fn draw_rect_outline(rgba: &mut [u8], x: i32, y: i32, width: i32, height: i32, c
     draw_vertical_line(rgba, x + width - 1, y, y + height - 1, color);
 }
 
+#[cfg(not(target_os = "linux"))]
 fn draw_horizontal_line(rgba: &mut [u8], x1: i32, x2: i32, y: i32, color: [u8; 4]) {
     for x in x1..=x2 {
         paint_pixel(rgba, x, y, color);
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn draw_vertical_line(rgba: &mut [u8], x: i32, y1: i32, y2: i32, color: [u8; 4]) {
     for y in y1..=y2 {
         paint_pixel(rgba, x, y, color);
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn draw_line(rgba: &mut [u8], mut x0: i32, mut y0: i32, x1: i32, y1: i32, color: [u8; 4]) {
     let dx = (x1 - x0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
@@ -403,6 +556,7 @@ fn draw_line(rgba: &mut [u8], mut x0: i32, mut y0: i32, x1: i32, y1: i32, color:
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn paint_pixel(rgba: &mut [u8], x: i32, y: i32, color: [u8; 4]) {
     if x < 0 || y < 0 || x >= TRAY_MENU_ICON_SIZE as i32 || y >= TRAY_MENU_ICON_SIZE as i32 {
         return;

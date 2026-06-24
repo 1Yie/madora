@@ -115,9 +115,19 @@
 		"url": "https://github.com/rust-lang/git2-rs"
 	},
 	{
+		"license": "MIT",
+		"name": "i18next",
+		"url": "https://github.com/i18next/i18next"
+	},
+	{
 		"license": "Unlicense OR MIT",
 		"name": "ignore",
 		"url": "https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "image",
+		"url": "https://github.com/image-rs/image"
 	},
 	{
 		"license": "MIT",
@@ -135,6 +145,11 @@
 		"url": "https://github.com/open-source-cooperative/keyring-core"
 	},
 	{
+		"license": "Unlicense",
+		"name": "ksni",
+		"url": "https://github.com/iovxw/ksni"
+	},
+	{
 		"license": "ISC",
 		"name": "lucide",
 		"url": "https://github.com/lucide-icons/lucide"
@@ -146,6 +161,11 @@
 	},
 	{
 		"license": "MIT",
+		"name": "openssl-sys",
+		"url": "https://github.com/rust-openssl/rust-openssl"
+	},
+	{
+		"license": "MIT",
 		"name": "overlayscrollbars",
 		"url": "https://github.com/KingSora/OverlayScrollbars"
 	},
@@ -153,6 +173,11 @@
 		"license": "MIT OR Apache-2.0",
 		"name": "pretty_assertions",
 		"url": "https://github.com/rust-pretty-assertions/rust-pretty-assertions"
+	},
+	{
+		"license": "MIT",
+		"name": "quick-xml",
+		"url": "https://github.com/tafia/quick-xml"
 	},
 	{
 		"license": "MIT",
@@ -173,6 +198,11 @@
 		"license": "MIT",
 		"name": "react-dom",
 		"url": "https://github.com/facebook/react"
+	},
+	{
+		"license": "MIT",
+		"name": "react-i18next",
+		"url": "https://github.com/i18next/react-i18next"
 	},
 	{
 		"license": "MIT",
@@ -215,6 +245,11 @@
 		"url": "https://github.com/seanmonstar/reqwest"
 	},
 	{
+		"license": "Apache-2.0 OR MIT",
+		"name": "resvg",
+		"url": "https://github.com/linebender/resvg"
+	},
+	{
 		"license": "MIT",
 		"name": "rfd",
 		"url": "https://github.com/PolyMeilex/rfd"
@@ -238,6 +273,11 @@
 		"license": "MIT",
 		"name": "shiki",
 		"url": "https://github.com/shikijs/shiki"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "sys-locale",
+		"url": "https://github.com/1Password/sys-locale"
 	},
 	{
 		"license": "MIT",
@@ -291,7 +331,22 @@
 	},
 	{
 		"license": "MIT",
+		"name": "urlencoding",
+		"url": "https://lib.rs/urlencoding"
+	},
+	{
+		"license": "MIT OR Apache-2.0",
+		"name": "windows-sys",
+		"url": "https://github.com/microsoft/windows-rs"
+	},
+	{
+		"license": "MIT",
 		"name": "winreg",
 		"url": "https://github.com/gentoo90/winreg-rs"
+	},
+	{
+		"license": "MIT",
+		"name": "zustand",
+		"url": "https://github.com/pmndrs/zustand"
 	}
 ]

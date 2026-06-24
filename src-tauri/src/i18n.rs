@@ -250,7 +250,9 @@ fn zh_cn(key: &str) -> Option<&'static str> {
         "ai.provider.request_failed" => "调用 {provider} completion 失败: {error}",
         "ai.provider.api_error" => "{provider} completion API 返回错误 (HTTP {status}): {body}",
         "ai.provider.request_stream_failed" => "调用 {provider} 流式 completion 失败: {error}",
-        "ai.provider.stream_api_error" => "{provider} 流式 completion API 返回错误 (HTTP {status}): {body}",
+        "ai.provider.stream_api_error" => {
+            "{provider} 流式 completion API 返回错误 (HTTP {status}): {body}"
+        }
         "ai.provider.parse_response_failed" => "解析 {provider} 响应失败: {error}",
         "ai.provider.parse_stream_response_failed" => "解析 {provider} 流式响应失败: {error}",
         "secure_storage.access_failed" => "无法访问系统密钥存储: {error}",

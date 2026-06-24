@@ -19,6 +19,7 @@ pub async fn quit_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub async fn set_app_locale(locale: String) {
+pub async fn set_app_locale(app: tauri::AppHandle, locale: String) {
     i18n::set_locale(&locale);
+    crate::app::refresh_tray_menu(&app);
 }
