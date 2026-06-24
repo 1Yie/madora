@@ -1,3 +1,25 @@
+## [0.3.12](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.12) (2026-06-24)
+
+### Bug Fixes
+
+- **cli:** rebuild cross-platform install and packaging ([b7b7850](https://github.com/1Yie/madora/commit/b7b7850431f1675318f9f85572ea9d76f20746f8))
+- correct setup, theme, and workspace state ([a2fff58](https://github.com/1Yie/madora/commit/a2fff581a4d97305ad9c974200f0bba4a14476b8))
+- **theme:** restrict KDE color scheme detection to [General] section ([989b9cc](https://github.com/1Yie/madora/commit/989b9cc4cf71ff2fdec3fdfcfcca101d2a01e95c))
+- **workspace:** normalize markdown draft keys on Windows ([7121acd](https://github.com/1Yie/madora/commit/7121acdaf69d785385ba929a3bdf4782bac50dda))
+- **workspace:** sync deleted files and ime completions ([f5716d7](https://github.com/1Yie/madora/commit/f5716d79d6678bb0dbf689cb2e89de283b662dc5))
+
+### Features
+
+- **ai:** expand provider support and remove CLI flow ([dcaf137](https://github.com/1Yie/madora/commit/dcaf137dd060d5b3fad9b4cbdc2bd27abd1b3057))
+- **i18n:** add tray and close-behavior UI strings ([bd6c05f](https://github.com/1Yie/madora/commit/bd6c05f9e8c5eee1fccb548e2ddc429e1e8e985b))
+- **i18n:** localize system settings and app chrome ([55dfd1a](https://github.com/1Yie/madora/commit/55dfd1a5d421fa023ca7f16b70ab4741a34e4f97))
+- **settings:** add close behavior option (minimize to tray vs quit) ([04cfd1f](https://github.com/1Yie/madora/commit/04cfd1f32c54e3b9f794a039d4611dc72f641c71))
+- **tray:** add system tray icon with window management ([4b4daa8](https://github.com/1Yie/madora/commit/4b4daa86adcf8fc55c7fb08364c3e319dce3fb0c))
+- **tray:** localize menu labels and add linux status icon ([44aed86](https://github.com/1Yie/madora/commit/44aed8635bac1b56164ab67cf78070bfe82ee16e))
+- **update:** check GitHub releases on startup and in settings ([7e74b1b](https://github.com/1Yie/madora/commit/7e74b1b72f38145c7ed4dcb674b2f6fde3e912f2))
+- **workspace:** add interface zoom controls ([145006d](https://github.com/1Yie/madora/commit/145006d37e9bb47f63cbec589a6b44ab767a9b52))
+- **workspace:** refresh explorer, git, and webdav flows ([a134a4f](https://github.com/1Yie/madora/commit/a134a4f4bd4343cf0dee2295ef7b8381d48b16ed))
+
 ## [0.3.11](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.11) (2026-06-23)
 
 ### Bug Fixes
