@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { explorerBottomSectionHeightClassName } from '../layout';
+import { removeStoredMarkdownDraft } from '@/lib/unsaved-registry';
 import { cn } from '@/lib/utils';
 
 interface NormalBlock {
@@ -108,7 +109,7 @@ export function ConflictEditor({
 			await writeWorkspaceFile({ content: final, path: filePath });
 			await gitStageFile({ path: filePath, rootPath });
 			// 清掉 MarkdownWorkspace 可能缓存的旧草稿
-			window.localStorage.removeItem(`madora-markdown-draft:${filePath}`);
+			removeStoredMarkdownDraft(filePath);
 			window.dispatchEvent(
 				new CustomEvent('workspace-file-saved', {
 					detail: { filePath, source: 'conflict-resolve' },

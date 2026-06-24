@@ -1,4 +1,5 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
+import { normalizeExplorerPath } from '@/lib/path-utils';
 
 type EditorEntry = {
 	id: string;
@@ -17,16 +18,69 @@ export type StoredMarkdownDraft = {
 
 const editors = new Map<string, EditorEntry>();
 
+function normalizeDraftFilePath(filePath: string): string {
+	return normalizeExplorerPath(filePath);
+}
+
+export function getMarkdownDraftStorageKey(filePath: string): string {
+	return `${MARKDOWN_DRAFT_STORAGE_KEY_PREFIX}${normalizeDraftFilePath(filePath)}`;
+}
+
+function findStoredDraftKeys(filePath: string): string[] {
+	const normalizedFilePath = normalizeDraftFilePath(filePath);
+	const canonicalKey = getMarkdownDraftStorageKey(filePath);
+	const matchingKeys = new Set<string>([canonicalKey]);
+
+	for (let index = 0; index < window.localStorage.length; index += 1) {
+		const key = window.localStorage.key(index);
+		if (!key?.startsWith(MARKDOWN_DRAFT_STORAGE_KEY_PREFIX)) {
+			continue;
+		}
+
+		const storedFilePath = key.slice(MARKDOWN_DRAFT_STORAGE_KEY_PREFIX.length);
+		if (!storedFilePath) {
+			continue;
+		}
+
+		if (normalizeDraftFilePath(storedFilePath) === normalizedFilePath) {
+			matchingKeys.add(key);
+		}
+	}
+
+	return [
+		canonicalKey,
+		...Array.from(matchingKeys).filter((key) => key !== canonicalKey),
+	];
+}
+
+export function getStoredMarkdownDraftContent(filePath: string): string | null {
+	for (const key of findStoredDraftKeys(filePath)) {
+		const content = window.localStorage.getItem(key);
+		if (content !== null) {
+			return content;
+		}
+	}
+
+	return null;
+}
+
+export function removeStoredMarkdownDraft(filePath: string) {
+	for (const key of findStoredDraftKeys(filePath)) {
+		window.localStorage.removeItem(key);
+	}
+}
+
 function getRegisteredEditorFilePaths(): Set<string> {
 	return new Set(
 		Array.from(editors.values())
 			.map((editor) => editor.filePath)
 			.filter((filePath): filePath is string => Boolean(filePath))
+			.map((filePath) => normalizeDraftFilePath(filePath))
 	);
 }
 
 export function getStoredMarkdownDrafts(): StoredMarkdownDraft[] {
-	const drafts: StoredMarkdownDraft[] = [];
+	const drafts = new Map<string, StoredMarkdownDraft>();
 
 	for (let index = 0; index < window.localStorage.length; index += 1) {
 		const key = window.localStorage.key(index);
@@ -42,15 +96,22 @@ export function getStoredMarkdownDrafts(): StoredMarkdownDraft[] {
 			continue;
 		}
 
-		drafts.push({ key, filePath, content });
+		const normalizedFilePath = normalizeDraftFilePath(filePath);
+		const existing = drafts.get(normalizedFilePath);
+		const draft = { key, filePath: normalizedFilePath, content };
+		const canonicalKey = getMarkdownDraftStorageKey(normalizedFilePath);
+
+		if (!existing || key === canonicalKey) {
+			drafts.set(normalizedFilePath, draft);
+		}
 	}
 
-	return drafts;
+	return [...drafts.values()];
 }
 
 export function clearStoredMarkdownDrafts() {
 	for (const draft of getStoredMarkdownDrafts()) {
-		window.localStorage.removeItem(draft.key);
+		removeStoredMarkdownDraft(draft.filePath);
 	}
 }
 
@@ -154,7 +215,7 @@ export async function saveAll(opts?: { timeoutMs?: number }) {
 					await savePromise;
 				}
 
-				window.localStorage.removeItem(draft.key);
+				removeStoredMarkdownDraft(draft.filePath);
 				window.dispatchEvent(
 					new CustomEvent('workspace-file-saved', {
 						detail: { filePath: draft.filePath },

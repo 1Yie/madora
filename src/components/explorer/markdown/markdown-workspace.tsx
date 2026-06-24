@@ -5,8 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { useAppSettings } from '@/context/app-settings-provider';
 import { showErrorToast } from '@/components/ui/toast';
 import {
-	MARKDOWN_DRAFT_STORAGE_KEY_PREFIX,
+	getMarkdownDraftStorageKey,
+	getStoredMarkdownDraftContent,
 	registerEditor,
+	removeStoredMarkdownDraft,
 	unregisterEditor,
 } from '@/lib/unsaved-registry';
 
@@ -25,18 +27,14 @@ type MarkdownWorkspaceProps = {
 
 const SAVE_DEBOUNCE_MS = 400;
 
-function getDraftStorageKey(filePath: string): string {
-	return `${MARKDOWN_DRAFT_STORAGE_KEY_PREFIX}${filePath}`;
-}
-
 function getInitialValue(filePath: string, content: string): string {
-	const draft = window.localStorage.getItem(getDraftStorageKey(filePath));
+	const draft = getStoredMarkdownDraftContent(filePath);
 
 	return draft ?? content;
 }
 
 function hasStoredDraft(filePath: string): boolean {
-	return window.localStorage.getItem(getDraftStorageKey(filePath)) !== null;
+	return getStoredMarkdownDraftContent(filePath) !== null;
 }
 
 function getFileTitle(filePath: string): string {
@@ -111,11 +109,12 @@ export function MarkdownWorkspace({
 
 	useEffect(() => {
 		if (value === lastSavedValueRef.current) {
-			window.localStorage.removeItem(getDraftStorageKey(filePath));
+			removeStoredMarkdownDraft(filePath);
 			return;
 		}
 
-		window.localStorage.setItem(getDraftStorageKey(filePath), value);
+		removeStoredMarkdownDraft(filePath);
+		window.localStorage.setItem(getMarkdownDraftStorageKey(filePath), value);
 	}, [filePath, value]);
 
 	const persistValue = useCallback(
@@ -128,7 +127,7 @@ export function MarkdownWorkspace({
 				}
 
 				lastSavedValueRef.current = nextValue;
-				window.localStorage.removeItem(getDraftStorageKey(filePath));
+				removeStoredMarkdownDraft(filePath);
 				setSaveStatus('saved');
 				setSaveError(null);
 				window.dispatchEvent(
