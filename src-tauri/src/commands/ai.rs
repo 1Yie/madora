@@ -81,8 +81,10 @@ mod tests {
     use super::*;
 
     fn assert_require_api_key_error(provider: AiProvider, msg: &str) {
-        let save_key_message =
-            i18n::tf("ai.save_key_in_settings", &[("provider", provider.display_name())]);
+        let save_key_message = i18n::tf(
+            "ai.save_key_in_settings",
+            &[("provider", provider.display_name())],
+        );
         let secure_storage_prefixes = [
             i18n::tf("secure_storage.access_failed", &[("error", "")]),
             i18n::tf("secure_storage.access_failed_linux", &[("error", "")]),
