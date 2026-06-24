@@ -20,9 +20,11 @@ import {
 	setActiveTab as setActiveTabBackend,
 	setSidebarWidth as setSidebarWidthBackend,
 	setOpenTabPaths as setOpenTabPathsBackend,
+	setZoomLevel as setZoomLevelBackend,
 	clearWorkspaceState,
 } from '@/invoke/workspace';
 import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import create from 'zustand';
 import { useEffect, type ReactNode } from 'react';
 
@@ -53,6 +55,10 @@ const MARKDOWN_DRAFT_KEY_PREFIX = 'madora-markdown-draft:';
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
+export const DEFAULT_ZOOM_LEVEL = 1.0;
+export const ZOOM_LEVELS = [0.9, 1.0, 1.15] as const;
+export const MIN_ZOOM_LEVEL = ZOOM_LEVELS[0];
+export const MAX_ZOOM_LEVEL = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 const TAB_BAR_MODE_KEY = 'madora-tab-bar-mode';
 
 // ─── Internal Types ────────────────────────────────────────────────
@@ -66,6 +72,7 @@ type InitialWorkspaceState = {
 	lastActiveFilePath: string | null;
 	sidebarWidth: number;
 	tabBarMode: 'scroll' | 'wrap';
+	zoomLevel: number;
 };
 
 // ─── Module-level refs ─────────────────────────────────────────────
@@ -107,6 +114,10 @@ export type WorkspaceContextValue = {
 	sortEnabled: boolean;
 	sidebarError: string | null;
 	setSidebarWidth: (w: number) => void;
+
+	/* ── Zoom ── */
+	zoomLevel: number;
+	setZoomLevel: (zoomLevel: number) => void;
 
 	/* ── Clipboard ── */
 	clipboard: {
@@ -178,12 +189,50 @@ function clampSidebarWidth(width: number): number {
 	return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 }
 
+export function clampZoomLevel(zoomLevel: number): number {
+	return ZOOM_LEVELS.reduce((prev, curr) =>
+		Math.abs(curr - zoomLevel) < Math.abs(prev - zoomLevel) ? curr : prev
+	);
+}
+
+/** Step to the previous/next discrete zoom level. */
+export function stepZoomLevel(zoomLevel: number, direction: 1 | -1): number {
+	let currentIndex = ZOOM_LEVELS.findIndex(
+		(level) => Math.abs(level - zoomLevel) < 1e-9
+	);
+	if (currentIndex === -1) {
+		currentIndex = ZOOM_LEVELS.indexOf(DEFAULT_ZOOM_LEVEL);
+	}
+	const nextIndex = Math.min(
+		ZOOM_LEVELS.length - 1,
+		Math.max(0, currentIndex + direction)
+	);
+	return ZOOM_LEVELS[nextIndex];
+}
+
 function removeMarkdownDraftsFor(path: string): void {
+	const normalizedTargetPath = normalizeExplorerPath(path);
+	const keysToRemove: string[] = [];
+
 	for (let index = 0; index < window.localStorage.length; index += 1) {
 		const key = window.localStorage.key(index);
-		if (key?.startsWith(`${MARKDOWN_DRAFT_KEY_PREFIX}${path}/`)) {
-			window.localStorage.removeItem(key);
+		if (!key?.startsWith(MARKDOWN_DRAFT_KEY_PREFIX)) {
+			continue;
 		}
+
+		const draftPath = normalizeExplorerPath(
+			key.slice(MARKDOWN_DRAFT_KEY_PREFIX.length)
+		);
+		if (
+			draftPath === normalizedTargetPath ||
+			draftPath.startsWith(`${normalizedTargetPath}/`)
+		) {
+			keysToRemove.push(key);
+		}
+	}
+
+	for (const key of keysToRemove) {
+		window.localStorage.removeItem(key);
 	}
 }
 
@@ -389,6 +438,7 @@ async function fetchInitialState(): Promise<InitialWorkspaceState> {
 				state.tabBarMode === 'wrap' || state.tabBarMode === 'scroll'
 					? state.tabBarMode
 					: stored,
+			zoomLevel: clampZoomLevel(state.zoomLevel ?? DEFAULT_ZOOM_LEVEL),
 		};
 	} catch {
 		return {
@@ -397,6 +447,7 @@ async function fetchInitialState(): Promise<InitialWorkspaceState> {
 			lastActiveFilePath: null,
 			sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 			tabBarMode: stored,
+			zoomLevel: DEFAULT_ZOOM_LEVEL,
 		};
 	}
 }
@@ -471,6 +522,7 @@ type WorkspaceState = {
 	preview: FilePreviewData | null;
 	previewLoading: boolean;
 	sidebarWidth: number;
+	zoomLevel: number;
 	sidebarBusy: boolean;
 	operationBusy: WorkspaceOperation;
 	createBusy: boolean;
@@ -508,6 +560,9 @@ type WorkspaceActions = {
 
 	/* ── Sidebar ── */
 	setSidebarWidth: (w: number) => void;
+
+	/* ── Zoom ── */
+	setZoomLevel: (zoomLevel: number) => void;
 
 	/* ── Clipboard ── */
 	copyNode: (node: ExplorerNode) => void;
@@ -625,6 +680,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 	tabs: [],
 	activeTabId: null,
 	tabBarMode: 'scroll' as const,
+	zoomLevel: DEFAULT_ZOOM_LEVEL,
 	selectedFile: null,
 	selectedNodePath: null,
 	preview: null,
@@ -676,6 +732,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 			set({
 				sidebarWidth: clampSidebarWidth(initialState.sidebarWidth),
 				tabBarMode: initialState.tabBarMode,
+				zoomLevel: initialState.zoomLevel,
 			});
 
 			if (!initialState.rootPath) {
@@ -976,6 +1033,12 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 	setSidebarWidth: (w) => {
 		set({ sidebarWidth: clampSidebarWidth(w) });
+	},
+
+	// ── Zoom ──
+
+	setZoomLevel: (zoomLevel) => {
+		set({ zoomLevel: clampZoomLevel(zoomLevel) });
 	},
 
 	// ── Clipboard ──
@@ -1766,6 +1829,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
 	const initialised = useWorkspaceStore((s) => s.initialised);
 	const sidebarWidth = useWorkspaceStore((s) => s.sidebarWidth);
+	const zoomLevel = useWorkspaceStore((s) => s.zoomLevel);
 	const sidebarError = useWorkspaceStore((s) => s.sidebarError);
 	const previewError = useWorkspaceStore((s) => s.previewError);
 	const tabs = useWorkspaceStore((s) => s.tabs);
@@ -1786,6 +1850,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		if (!initialised) return;
 		void setSidebarWidthBackend(sidebarWidth).catch(() => {});
 	}, [sidebarWidth, initialised]);
+
+	/* ── Zoom: apply to webview + persist ── */
+
+	useEffect(() => {
+		if (!initialised) return;
+		void getCurrentWebview()
+			.setZoom(zoomLevel)
+			.catch(() => {});
+		void setZoomLevelBackend(zoomLevel).catch(() => {});
+	}, [zoomLevel, initialised]);
 
 	useEffect(() => {
 		if (!initialised) return;

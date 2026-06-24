@@ -86,6 +86,12 @@ const zhCN = {
 			editorTextSize: {
 				label: '文本大小',
 			},
+			zoomLevel: {
+				label: '界面缩放',
+				small: '小',
+				medium: '中',
+				large: '大',
+			},
 			theme: {
 				dark: { description: '适合夜间或长时间阅读。', label: '深色' },
 				light: { description: '更适合明亮环境。', label: '浅色' },

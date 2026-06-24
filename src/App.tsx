@@ -11,6 +11,7 @@ import { checkForAppUpdate } from '@/lib/update-check';
 import { showUpdateAvailableToast } from '@/lib/update-toast';
 import Titlebar from './components/system/top-bar';
 import { useWindowResize } from '@/hooks/use-window-resize';
+import { useZoomShortcuts } from '@/hooks/use-zoom-shortcuts';
 import { useOverlayScrollbars } from '@/hooks/use-overlay-scrollbars';
 import packageJson from '../package.json';
 
@@ -26,6 +27,7 @@ function App() {
 
 	useWindowResize();
 	useOverlayScrollbars();
+	useZoomShortcuts();
 
 	useLayoutEffect(() => {
 		const isDev = import.meta.env.DEV;

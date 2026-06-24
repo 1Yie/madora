@@ -61,6 +61,14 @@ pub async fn set_tab_bar_mode(
 }
 
 #[tauri::command]
+pub async fn set_zoom_level(
+    store: State<'_, WorkspaceStore>,
+    zoom_level: f64,
+) -> Result<(), String> {
+    store.set_zoom_level(zoom_level)
+}
+
+#[tauri::command]
 pub async fn set_open_tab_paths(
     store: State<'_, WorkspaceStore>,
     paths: Vec<String>,

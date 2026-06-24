@@ -17,4 +17,6 @@ pub struct WorkspaceState {
     pub show_hidden_files: Option<bool>,
     /// Tab bar display mode ("scroll" or "wrap").
     pub tab_bar_mode: Option<String>,
+    /// Webview zoom level (1.0 = 100%).
+    pub zoom_level: Option<f64>,
 }

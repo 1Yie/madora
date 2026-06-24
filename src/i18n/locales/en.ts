@@ -93,6 +93,12 @@ const en = {
 			editorTextSize: {
 				label: 'Text Size',
 			},
+			zoomLevel: {
+				label: 'Interface Zoom',
+				small: 'Small',
+				medium: 'Medium',
+				large: 'Large',
+			},
 			theme: {
 				dark: {
 					description: 'Works well at night or during long reading sessions.',

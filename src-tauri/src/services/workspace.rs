@@ -172,6 +172,14 @@ impl WorkspaceStore {
         Ok(())
     }
 
+    /// Persist webview zoom level.
+    pub fn set_zoom_level(&self, zoom_level: f64) -> Result<(), String> {
+        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
+        guard.zoom_level = Some(zoom_level);
+        self.save_inner(&guard);
+        Ok(())
+    }
+
     /// Replace the open tab paths wholesale (used when restoring from a reorder).
     pub fn set_open_tab_paths(&self, paths: &[String]) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
@@ -305,6 +313,7 @@ impl Default for WorkspaceState {
             sort_enabled: Some(true),
             show_hidden_files: Some(false),
             tab_bar_mode: Some("scroll".to_string()),
+            zoom_level: Some(1.0),
         }
     }
 }

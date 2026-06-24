@@ -63,3 +63,9 @@ vi.mock('@tauri-apps/api/core', () => ({
 	Channel: ChannelMock,
 	invoke: vi.fn(),
 }));
+
+vi.mock('@tauri-apps/api/webview', () => ({
+	getCurrentWebview: () => ({
+		setZoom: vi.fn(() => Promise.resolve()),
+	}),
+}));

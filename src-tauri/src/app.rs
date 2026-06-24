@@ -135,6 +135,7 @@ pub fn run() {
             workspace::set_active_tab,
             workspace::set_sidebar_width,
             workspace::set_tab_bar_mode,
+            workspace::set_zoom_level,
             workspace::set_open_tab_paths,
             workspace::clear_workspace_state,
             workspace::resolve_image_src,

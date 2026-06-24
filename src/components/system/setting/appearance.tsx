@@ -1,5 +1,6 @@
-import { Check, Plus } from 'lucide-react';
+import { Check, Plus, Maximize2, Minimize2, ScanLine } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
 	DEFAULT_EDITOR_FONT_SIZE,
@@ -7,13 +8,14 @@ import {
 	MIN_EDITOR_FONT_SIZE,
 	useAppSettings,
 } from '@/context/app-settings-provider';
+import { ZOOM_LEVELS, useWorkspace } from '@/context/workspace-provider';
 import { useTheme } from '@/context/theme-provider';
 import type { LocalePreference } from '@/i18n/locale';
 import { ColorPicker } from '@/components/ui/color-picker';
 import { Slider } from '@/components/ui/slider';
 import {
+	FieldBlock,
 	Option,
-	SettingRow,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
@@ -171,20 +173,10 @@ function EditorTextSizeSetting() {
 	const { editorFontSize, setEditorFontSize } = useAppSettings();
 
 	return (
-		<SettingRow
-			title={t('settings.appearance.editorTextSize.label')}
-			stacked
-			accessory={
-				<div
-					className="rounded-md border border-border bg-background px-2.5 py-1
-						font-mono text-sm text-foreground"
-				>
-					{editorFontSize}px
-				</div>
-			}
-		>
-			<div className="space-y-3 px-1">
+		<FieldBlock label={t('settings.appearance.editorTextSize.label')}>
+			<div className="flex items-center gap-3">
 				<Slider
+					className="flex-1"
 					max={MAX_EDITOR_FONT_SIZE}
 					min={MIN_EDITOR_FONT_SIZE}
 					onValueChange={(next) => {
@@ -194,15 +186,60 @@ function EditorTextSizeSetting() {
 					step={1}
 					value={[editorFontSize]}
 				/>
-				<div
-					className="flex items-center justify-between font-mono text-[11px]
-						text-muted-foreground"
+				<span
+					className="w-12 shrink-0 rounded-md border border-border bg-background
+						px-2 py-1 text-center font-mono text-xs text-foreground"
 				>
-					<span>{MIN_EDITOR_FONT_SIZE}px</span>
-					<span>{MAX_EDITOR_FONT_SIZE}px</span>
-				</div>
+					{editorFontSize}px
+				</span>
 			</div>
-		</SettingRow>
+			<div
+				className="flex items-center justify-between font-mono text-[11px]
+					text-muted-foreground"
+			>
+				<span>{MIN_EDITOR_FONT_SIZE}px</span>
+				<span>{MAX_EDITOR_FONT_SIZE}px</span>
+			</div>
+		</FieldBlock>
+	);
+}
+
+function ZoomLevelSetting() {
+	const { t } = useTranslation();
+	const { zoomLevel, setZoomLevel } = useWorkspace();
+
+	const options: Array<{ label: string; value: number; icon: ReactNode }> = [
+		{
+			label: t('settings.appearance.zoomLevel.small'),
+			value: ZOOM_LEVELS[0],
+			icon: <Minimize2 className="size-4" />,
+		},
+		{
+			label: t('settings.appearance.zoomLevel.medium'),
+			value: ZOOM_LEVELS[1],
+			icon: <ScanLine className="size-4" />,
+		},
+		{
+			label: t('settings.appearance.zoomLevel.large'),
+			value: ZOOM_LEVELS[2],
+			icon: <Maximize2 className="size-4" />,
+		},
+	];
+
+	return (
+		<FieldBlock label={t('settings.appearance.zoomLevel.label')}>
+			<div className="grid gap-2 md:grid-cols-3">
+				{options.map((option) => (
+					<Option
+						key={option.value}
+						active={Math.abs(zoomLevel - option.value) < 1e-9}
+						icon={option.icon}
+						label={`${option.label}\u00A0\u00B7\u00A0${Math.round(option.value * 100)}%`}
+						onClick={() => setZoomLevel(option.value)}
+					/>
+				))}
+			</div>
+		</FieldBlock>
 	);
 }
 
@@ -240,7 +277,10 @@ export function AppearanceSettings() {
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.appearance.cards.editor.title')}>
-				<EditorTextSizeSetting />
+				<div className="space-y-4">
+					<EditorTextSizeSetting />
+					<ZoomLevelSetting />
+				</div>
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.appearance.cards.theme.title')}>

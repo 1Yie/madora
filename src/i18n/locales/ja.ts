@@ -87,6 +87,12 @@ const ja = {
 			editorTextSize: {
 				label: '文字サイズ',
 			},
+			zoomLevel: {
+				label: 'インターフェース拡大率',
+				small: '小',
+				medium: '中',
+				large: '大',
+			},
 			theme: {
 				dark: {
 					description: '夜間や長時間の読書に適しています。',

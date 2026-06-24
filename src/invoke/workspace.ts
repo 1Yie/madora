@@ -8,6 +8,7 @@ export type WorkspaceState = {
 	sortEnabled: boolean | null;
 	showHiddenFiles: boolean | null;
 	tabBarMode: string | null;
+	zoomLevel: number | null;
 };
 
 /** Get the persisted workspace state (called on app start). */
@@ -48,6 +49,11 @@ export async function setSidebarWidth(width: number): Promise<void> {
 /** Persist tab bar mode ("scroll" | "wrap"). */
 export async function setTabBarMode(mode: string): Promise<void> {
 	return invoke('set_tab_bar_mode', { mode });
+}
+
+/** Persist webview zoom level (1.0 = 100%). */
+export async function setZoomLevel(zoomLevel: number): Promise<void> {
+	return invoke('set_zoom_level', { zoomLevel });
 }
 
 /** Replace the open tab paths wholesale. */

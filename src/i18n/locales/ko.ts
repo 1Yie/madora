@@ -91,6 +91,12 @@ const ko = {
 					'오른쪽 편집 영역에서 입력하는 텍스트 크기를 실시간으로 조절합니다.',
 				label: '텍스트 크기',
 			},
+			zoomLevel: {
+				label: '인터페이스 확대',
+				small: '작게',
+				medium: '보통',
+				large: '크게',
+			},
 			theme: {
 				dark: {
 					description: '야간이나 장시간 읽기에 적합합니다.',
