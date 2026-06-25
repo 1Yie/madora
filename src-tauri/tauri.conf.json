@@ -33,10 +33,6 @@
 			"icons/icon.ico"
 		],
 		"linux": {
-			"appimage": {
-				"bundleMediaFramework": false,
-				"files": {}
-			},
 			"deb": {
 				"desktopTemplate": "madora.desktop",
 				"files": {}
@@ -49,7 +45,7 @@
 			}
 		},
 		"publisher": "ichiyo",
-		"targets": "all"
+		"targets": ["app", "dmg", "deb", "rpm", "msi", "nsis"]
 	},
 	"identifier": "in.ichiyo.madora",
 	"productName": "Madora",
