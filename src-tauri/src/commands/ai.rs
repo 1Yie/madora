@@ -80,6 +80,12 @@ pub async fn generate_completion_stream(
 mod tests {
     use super::*;
 
+    // Serialize all tests that touch the global API_KEY_CACHE.
+    // Rust runs tests in parallel by default, and these tests
+    // mutate a shared static — without this gate they race on
+    // insert/clear and intermittently fail (notably on Windows).
+    static CACHE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     fn assert_require_api_key_error(provider: AiProvider, msg: &str) {
         let save_key_message = i18n::tf(
             "ai.save_key_in_settings",
@@ -107,6 +113,7 @@ mod tests {
 
     #[test]
     fn invalidate_api_key_cache_clears_cache() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
         {
             let mut cache = API_KEY_CACHE.lock().unwrap();
             cache.insert(AiProvider::DeepSeek, "sk-test".into());
@@ -120,13 +127,15 @@ mod tests {
 
     #[test]
     fn invalidate_api_key_cache_empty_is_ok() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
         invalidate_api_key_cache();
         assert!(API_KEY_CACHE.lock().unwrap().is_empty());
     }
 
     #[test]
     fn require_api_key_cache_hit_returns_key() {
-        // Test the cache directly to avoid races with parallel tests
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        // Test the cache directly to avoid avoid races with parallel tests
         let mut cache = API_KEY_CACHE.lock().unwrap();
         cache.clear();
         cache.insert(AiProvider::DeepSeek, "sk-cached-key".into());
@@ -137,6 +146,7 @@ mod tests {
 
     #[test]
     fn require_api_key_cache_miss_no_keyring_fallback() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
         invalidate_api_key_cache();
 
         let provider = AiProvider::DeepSeek;
