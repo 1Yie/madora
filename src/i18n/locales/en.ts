@@ -288,10 +288,13 @@ const en = {
 		},
 		sync: {
 			cards: {
-				mode: { title: 'Sync Mode' },
+				mode: { title: 'Repository Sync' },
 			},
 			rows: {
-				enabled: { title: 'Enable Sync' },
+				enabled: {
+					title: 'Enable Sync',
+					description: 'Enable Git or WebDAV sync for this workspace.',
+				},
 			},
 			options: {
 				git: {
@@ -299,9 +302,114 @@ const en = {
 						'Local version control with commits, pushes, pulls, and branches.',
 					label: 'Git',
 				},
+				madoraSync: {
+					description:
+						'Desktop-hosted real-time sync for phones and other Madora clients on your network.',
+					label: 'Madora Sync',
+				},
 				webdav: {
 					description: 'Remote file sync over the WebDAV protocol.',
 					label: 'WebDAV',
+				},
+			},
+			madora: {
+				actions: {
+					clearPairingCode: 'Clear code',
+					issuePairingCode: 'Generate pairing code',
+					refreshPairingQr: 'Refresh QR Code',
+					removeDevice: 'Remove',
+				},
+				cards: {
+					devices: { title: 'Trusted Devices' },
+					features: {
+						description:
+							'These settings define how the desktop host exposes sync services to local clients.',
+						title: 'Host Features',
+					},
+					host: { title: 'Host Settings' },
+					pairing: {
+						description:
+							'Scan the QR code from mobile to pair automatically. The code is only a fallback path.',
+						title: 'Pairing',
+					},
+					status: { title: 'Connection Status' },
+				},
+				connectionStates: {
+					authenticating: 'Authenticating',
+					connected: 'Connected',
+					connecting: 'Connecting',
+					disconnected: 'Disconnected',
+					discovering: 'Discovering',
+					syncing: 'Syncing',
+				},
+				empty: {
+					devices: 'No trusted devices yet.',
+				},
+				fields: {
+					deviceName: 'Device Name',
+					fallbackCode: 'Fallback Code',
+					pairingCode: 'Pairing Code',
+					port: 'Port',
+				},
+				hints: {
+					port: 'Reserve a stable port for the desktop sync host. Mobile clients will reconnect to this endpoint.',
+				},
+				rows: {
+					enabled: {
+						description:
+							'Allow phones and other Madora clients to connect to this desktop and collaborate on the same workspace.',
+						title: 'Enable Device Collaboration',
+					},
+					aiSharing: {
+						description:
+							'Route mobile AI completion requests through this desktop device.',
+						title: 'Share AI Completion',
+					},
+					autoStart: {
+						description:
+							'Start the local sync host automatically when Madora launches.',
+						title: 'Auto-start Host',
+					},
+					lanDiscovery: {
+						description:
+							'Advertise this desktop on the local network for zero-config discovery.',
+						title: 'LAN Discovery',
+					},
+				},
+				status: {
+					automaticPairing:
+						'Scanning carries a one-time pairing ticket to this host, so the phone does not need a manual code entry.',
+					availableHosts: 'Available hosts',
+					connection: 'Connection',
+					expiresAt: 'Expires at {{time}}',
+					fallbackCodeDescription:
+						'Use this only when QR scanning is unavailable or the client does not support automatic pairing tickets yet.',
+					hostMode: 'Host mode',
+					lastSeenAt: 'Last seen {{time}}',
+					lastSync: 'Last Sync',
+					neverSynced: 'Not synced yet',
+					noPairingCode: 'No active pairing code',
+					noReachableHost: 'No reachable LAN address detected',
+					pairedDevices: 'Paired Devices',
+					primaryHost: 'Primary host',
+					qrUnavailable:
+						'QR code will appear after a reachable LAN address is available.',
+					scanToConnect: 'Scan to Connect',
+					trusted: 'Trusted',
+					unavailable: 'Madora Sync unavailable',
+					unknownPlatform: 'Unknown platform',
+				},
+				toasts: {
+					loadFailed: 'Failed to load Madora Sync settings',
+					pairingCodeFailed: 'Failed to update pairing code',
+					pairingCodeIssued: 'Pairing code generated',
+					pairingQrFailed: 'Failed to load pairing QR code',
+					removeDeviceFailed: 'Failed to remove paired device',
+					saveFailed: 'Failed to save Madora Sync settings',
+					saved: 'Madora Sync settings saved',
+				},
+				validation: {
+					invalidPort: 'Enter a valid TCP port between 1 and 65535.',
 				},
 			},
 		},

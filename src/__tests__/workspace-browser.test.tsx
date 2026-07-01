@@ -102,6 +102,7 @@ const defaultWorkspaceState = {
 	sortEnabled: true,
 	showHiddenFiles: false,
 	tabBarMode: 'scroll',
+	zoomLevel: 1,
 };
 
 vi.mock('@/context/app-settings-provider', () => {

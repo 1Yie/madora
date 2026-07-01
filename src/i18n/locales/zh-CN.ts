@@ -258,19 +258,122 @@ const zhCN = {
 		},
 		sync: {
 			cards: {
-				mode: { title: '同步方案' },
+				mode: { title: '仓库同步' },
 			},
 			rows: {
-				enabled: { title: '启用同步' },
+				enabled: {
+					title: '启用同步',
+					description: '为当前工作区启用 Git 或 WebDAV 同步',
+				},
 			},
 			options: {
 				git: {
 					description: '本地版本控制，支持提交、推送、拉取与分支管理',
 					label: 'Git',
 				},
+				madoraSync: {
+					description:
+						'由桌面端托管的局域网实时同步，面向手机和其他 Madora 客户端',
+					label: 'Madora Sync',
+				},
 				webdav: {
 					description: '远端文件同步，通过 WebDAV 协议同步文件',
 					label: 'WebDAV',
+				},
+			},
+			madora: {
+				actions: {
+					clearPairingCode: '清除验证码',
+					issuePairingCode: '生成验证码',
+					refreshPairingQr: '刷新二维码',
+					removeDevice: '移除',
+				},
+				cards: {
+					devices: { title: '受信设备' },
+					features: {
+						description: '这些设置决定桌面主机如何向局域网客户端提供同步能力',
+						title: '主机能力',
+					},
+					host: { title: '主机设置' },
+					pairing: {
+						description:
+							'打开手机端扫描二维码即可自动配对，验证码仅在扫码不可用时作为备用方式。',
+						title: '设备配对',
+					},
+					status: { title: '连接状态' },
+				},
+				connectionStates: {
+					authenticating: '认证中',
+					connected: '已连接',
+					connecting: '连接中',
+					disconnected: '未连接',
+					discovering: '发现中',
+					syncing: '同步中',
+				},
+				empty: {
+					devices: '还没有受信设备',
+				},
+				fields: {
+					deviceName: '设备名称',
+					fallbackCode: '备用验证码',
+					pairingCode: '配对验证码',
+					port: '端口',
+				},
+				hints: {
+					port: '为桌面同步主机保留固定端口，移动端会重连到这个地址。',
+				},
+				rows: {
+					enabled: {
+						description:
+							'允许手机和其他 Madora 客户端连接当前桌面设备，在同一工作区上协同编辑。',
+						title: '启用设备协同',
+					},
+					aiSharing: {
+						description: '让移动端的 AI 补全请求通过当前桌面设备转发。',
+						title: '共享 AI 补全',
+					},
+					autoStart: {
+						description: 'Madora 启动时自动启动本地同步主机。',
+						title: '自动启动主机',
+					},
+					lanDiscovery: {
+						description: '在局域网中广播当前桌面设备，供客户端自动发现。',
+						title: '局域网发现',
+					},
+				},
+				status: {
+					automaticPairing:
+						'手机扫码后会直接携带一次性配对票据连接当前主机，不需要再手动输入验证码。',
+					availableHosts: '可用地址',
+					connection: '连接',
+					expiresAt: '到期时间 {{time}}',
+					fallbackCodeDescription:
+						'仅在无法扫码或客户端暂不支持自动票据时使用这个验证码。',
+					hostMode: '主机模式',
+					lastSeenAt: '最后在线 {{time}}',
+					lastSync: '最近同步',
+					neverSynced: '尚未同步',
+					noPairingCode: '当前没有有效验证码',
+					noReachableHost: '未检测到可用的局域网地址',
+					pairedDevices: '已配对设备',
+					primaryHost: '主地址',
+					qrUnavailable: '检测到可用局域网地址后会显示二维码。',
+					scanToConnect: '扫码自动连接',
+					trusted: '已信任',
+					unavailable: 'Madora Sync 不可用',
+					unknownPlatform: '未知平台',
+				},
+				toasts: {
+					loadFailed: '加载 Madora Sync 设置失败',
+					pairingCodeFailed: '更新验证码失败',
+					pairingCodeIssued: '验证码已生成',
+					pairingQrFailed: '加载配对二维码失败',
+					removeDeviceFailed: '移除配对设备失败',
+					saveFailed: '保存 Madora Sync 设置失败',
+					saved: 'Madora Sync 设置已保存',
+				},
+				validation: {
+					invalidPort: '请输入 1 到 65535 之间的有效 TCP 端口。',
 				},
 			},
 		},

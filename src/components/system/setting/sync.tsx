@@ -1,6 +1,7 @@
 import { Cloud, GitBranch } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { MadoraSyncSettings } from '@/components/system/setting/madora-sync';
 import { Switch } from '@/components/ui/switch';
 import {
 	SettingsSectionCard,
@@ -35,7 +36,10 @@ export function SyncSettings() {
 		<div className="space-y-4">
 			<SettingsSectionCard title={t('settings.sync.cards.mode.title')}>
 				<div className="space-y-4">
-					<SettingRow title={t('settings.sync.rows.enabled.title')}>
+					<SettingRow
+						title={t('settings.sync.rows.enabled.title')}
+						description={t('settings.sync.rows.enabled.description')}
+					>
 						<Switch
 							checked={syncEnabled}
 							onCheckedChange={(checked) => setSyncEnabled(checked)}
@@ -57,6 +61,7 @@ export function SyncSettings() {
 					)}
 				</div>
 			</SettingsSectionCard>
+			<MadoraSyncSettings />
 		</div>
 	);
 }

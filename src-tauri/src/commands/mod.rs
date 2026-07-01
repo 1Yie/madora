@@ -2,6 +2,7 @@ pub mod ai;
 pub mod explorer;
 pub mod git;
 pub mod license;
+pub mod madora_sync;
 pub mod project;
 pub mod secure_storage;
 pub mod system;

@@ -280,10 +280,13 @@ const ko = {
 		},
 		sync: {
 			cards: {
-				mode: { title: '동기화 방식' },
+				mode: { title: '저장소 동기화' },
 			},
 			rows: {
-				enabled: { title: '동기화 사용' },
+				enabled: {
+					title: '동기화 사용',
+					description: '이 워크스페이스에 Git 또는 WebDAV 동기화를 사용합니다.',
+				},
 			},
 			options: {
 				git: {
@@ -291,9 +294,114 @@ const ko = {
 						'로컬 버전 관리로 커밋, 푸시, 풀, 브랜치 관리를 지원합니다.',
 					label: 'Git',
 				},
+				madoraSync: {
+					description:
+						'데스크톱이 호스트하는 로컬 네트워크용 실시간 동기화입니다. 모바일과 다른 Madora 클라이언트를 연결합니다.',
+					label: 'Madora Sync',
+				},
 				webdav: {
 					description: 'WebDAV 프로토콜을 통한 원격 파일 동기화입니다.',
 					label: 'WebDAV',
+				},
+			},
+			madora: {
+				actions: {
+					clearPairingCode: '코드 지우기',
+					issuePairingCode: '페어링 코드 생성',
+					refreshPairingQr: 'QR 코드 새로고침',
+					removeDevice: '제거',
+				},
+				cards: {
+					devices: { title: '신뢰된 장치' },
+					features: {
+						description:
+							'이 설정은 데스크톱 호스트가 로컬 클라이언트에 동기화 기능을 어떻게 제공할지 결정합니다.',
+						title: '호스트 기능',
+					},
+					host: { title: '호스트 설정' },
+					pairing: {
+						description:
+							'모바일에서 QR 코드를 스캔하면 자동으로 페어링됩니다. 코드 입력은 예비 경로입니다.',
+						title: '페어링',
+					},
+					status: { title: '연결 상태' },
+				},
+				connectionStates: {
+					authenticating: '인증 중',
+					connected: '연결됨',
+					connecting: '연결 중',
+					disconnected: '연결 안 됨',
+					discovering: '검색 중',
+					syncing: '동기화 중',
+				},
+				empty: {
+					devices: '아직 신뢰된 장치가 없습니다.',
+				},
+				fields: {
+					deviceName: '장치 이름',
+					fallbackCode: '예비 코드',
+					pairingCode: '페어링 코드',
+					port: '포트',
+				},
+				hints: {
+					port: '데스크톱 동기화 호스트용 고정 포트를 지정합니다. 모바일 클라이언트는 이 주소로 다시 연결합니다.',
+				},
+				rows: {
+					enabled: {
+						description:
+							'모바일과 다른 Madora 클라이언트가 현재 데스크톱에 연결해 같은 워크스페이스를 함께 편집할 수 있게 합니다.',
+						title: '장치 협업 사용',
+					},
+					aiSharing: {
+						description:
+							'모바일 AI 자동완성 요청을 현재 데스크톱 장치를 통해 처리합니다.',
+						title: 'AI 자동완성 공유',
+					},
+					autoStart: {
+						description:
+							'Madora 시작 시 로컬 동기화 호스트를 자동으로 시작합니다.',
+						title: '호스트 자동 시작',
+					},
+					lanDiscovery: {
+						description:
+							'현재 데스크톱을 로컬 네트워크에 광고해 자동 검색을 허용합니다.',
+						title: 'LAN 검색',
+					},
+				},
+				status: {
+					automaticPairing:
+						'QR 스캔 시 이 호스트용 일회성 페어링 티켓이 함께 전달되므로 보통 수동 코드 입력이 필요 없습니다.',
+					availableHosts: '사용 가능한 호스트',
+					connection: '연결',
+					expiresAt: '{{time}} 에 만료',
+					fallbackCodeDescription:
+						'QR 스캔을 쓸 수 없거나 클라이언트가 자동 페어링 티켓을 아직 지원하지 않을 때만 사용합니다.',
+					hostMode: '호스트 모드',
+					lastSeenAt: '마지막 확인 {{time}}',
+					lastSync: '마지막 동기화',
+					neverSynced: '아직 동기화하지 않음',
+					noPairingCode: '활성 페어링 코드 없음',
+					noReachableHost: '접근 가능한 LAN 주소를 찾지 못했습니다',
+					pairedDevices: '페어링된 장치',
+					primaryHost: '기본 호스트',
+					qrUnavailable:
+						'사용 가능한 LAN 주소가 감지되면 QR 코드가 표시됩니다.',
+					scanToConnect: '스캔하여 연결',
+					trusted: '신뢰됨',
+					unavailable: 'Madora Sync 사용 불가',
+					unknownPlatform: '알 수 없는 플랫폼',
+				},
+				toasts: {
+					loadFailed: 'Madora Sync 설정을 불러오지 못했습니다',
+					pairingCodeFailed: '페어링 코드 갱신에 실패했습니다',
+					pairingCodeIssued: '페어링 코드를 생성했습니다',
+					pairingQrFailed: '페어링 QR 코드를 불러오지 못했습니다',
+					removeDeviceFailed: '페어링된 장치를 제거하지 못했습니다',
+					saveFailed: 'Madora Sync 설정을 저장하지 못했습니다',
+					saved: 'Madora Sync 설정을 저장했습니다',
+				},
+				validation: {
+					invalidPort: '1에서 65535 사이의 유효한 TCP 포트를 입력하세요.',
 				},
 			},
 		},

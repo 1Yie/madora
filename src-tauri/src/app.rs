@@ -2,12 +2,13 @@ use std::env;
 
 use crate::{
     commands::{
-        ai, explorer, git, license, project, secure_storage, system, utility, webdav, workspace,
+        ai, explorer, git, license, madora_sync, project, secure_storage, system, utility,
+        webdav, workspace,
     },
     protocol::MadoraProtocolState,
     services::{
-        ai::AiCompletionService, license::LicenseService, webdav::WebDavStore,
-        workspace::WorkspaceStore,
+        ai::AiCompletionService, license::LicenseService, madora_sync::MadoraSyncStore,
+        webdav::WebDavStore, workspace::WorkspaceStore,
     },
 };
 #[cfg(not(target_os = "linux"))]
@@ -108,6 +109,13 @@ pub fn run() {
         let webdav_store = WebDavStore::new(app_data_dir.clone());
         app.manage(webdav_store);
 
+        // Initialize Madora Sync store
+        let madora_sync_store = MadoraSyncStore::new(app_data_dir.clone());
+        app.manage(madora_sync_store);
+
+        // Start the WebSocket sync server (if enabled in sync config)
+        crate::services::sync_server::spawn(app.handle().clone());
+
         setup_tray(app)?;
 
         Ok(())
@@ -190,6 +198,15 @@ pub fn run() {
             webdav::webdav_test_connection,
             webdav::webdav_sync,
             webdav::webdav_get_status,
+            madora_sync::madora_sync_get_config,
+            madora_sync::madora_sync_save_settings,
+            madora_sync::madora_sync_issue_pairing_code,
+            madora_sync::madora_sync_get_pairing_qr,
+            madora_sync::madora_sync_clear_pairing_code,
+            madora_sync::madora_sync_pair_device,
+            madora_sync::madora_sync_remove_paired_device,
+            madora_sync::madora_sync_server_status,
+            madora_sync::madora_sync_restart_server,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

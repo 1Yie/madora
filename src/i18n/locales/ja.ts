@@ -277,10 +277,14 @@ const ja = {
 		},
 		sync: {
 			cards: {
-				mode: { title: '同期方法' },
+				mode: { title: 'リポジトリ同期' },
 			},
 			rows: {
-				enabled: { title: '同期を有効化' },
+				enabled: {
+					title: '同期を有効化',
+					description:
+						'このワークスペースで Git または WebDAV 同期を有効にします。',
+				},
 			},
 			options: {
 				git: {
@@ -288,9 +292,115 @@ const ja = {
 						'ローカルのバージョン管理。コミット、push、pull、ブランチ管理に対応。',
 					label: 'Git',
 				},
+				madoraSync: {
+					description:
+						'デスクトップがホストするローカルネットワーク向けリアルタイム同期。モバイルや他の Madora クライアント向け。',
+					label: 'Madora Sync',
+				},
 				webdav: {
 					description: 'WebDAV プロトコルによるリモートファイル同期。',
 					label: 'WebDAV',
+				},
+			},
+			madora: {
+				actions: {
+					clearPairingCode: 'コードをクリア',
+					issuePairingCode: 'ペアリングコードを生成',
+					refreshPairingQr: 'QR コードを更新',
+					removeDevice: '削除',
+				},
+				cards: {
+					devices: { title: '信頼済み端末' },
+					features: {
+						description:
+							'これらの設定は、デスクトップホストがローカルクライアントに同期機能をどう公開するかを決めます。',
+						title: 'ホスト機能',
+					},
+					host: { title: 'ホスト設定' },
+					pairing: {
+						description:
+							'モバイル側で QR コードを読み取ると自動でペアリングします。コード入力は予備手段です。',
+						title: 'ペアリング',
+					},
+					status: { title: '接続状態' },
+				},
+				connectionStates: {
+					authenticating: '認証中',
+					connected: '接続済み',
+					connecting: '接続中',
+					disconnected: '未接続',
+					discovering: '探索中',
+					syncing: '同期中',
+				},
+				empty: {
+					devices: '信頼済み端末はまだありません。',
+				},
+				fields: {
+					deviceName: '端末名',
+					fallbackCode: '予備コード',
+					pairingCode: 'ペアリングコード',
+					port: 'ポート',
+				},
+				hints: {
+					port: 'デスクトップ同期ホスト用に固定ポートを確保します。モバイル端末はこのエンドポイントへ再接続します。',
+				},
+				rows: {
+					enabled: {
+						description:
+							'モバイルや他の Madora クライアントがこのデスクトップへ接続し、同じワークスペースを共同編集できるようにします。',
+						title: '端末コラボレーションを有効化',
+					},
+					aiSharing: {
+						description:
+							'モバイル側の AI 補完リクエストをこのデスクトップ経由で処理します。',
+						title: 'AI 補完を共有',
+					},
+					autoStart: {
+						description:
+							'Madora 起動時にローカル同期ホストを自動で起動します。',
+						title: 'ホストを自動起動',
+					},
+					lanDiscovery: {
+						description:
+							'このデスクトップをローカルネットワーク上へ公開し、自動検出を有効にします。',
+						title: 'LAN 検出',
+					},
+				},
+				status: {
+					automaticPairing:
+						'QR スキャン時にこのホスト向けのワンタイムペアリングチケットを渡すため、通常は手入力が不要です。',
+					availableHosts: '利用可能なホスト',
+					connection: '接続',
+					expiresAt: '{{time}} に失効',
+					fallbackCodeDescription:
+						'QR スキャンが使えない場合や、クライアントが自動チケットに未対応の場合のみ使います。',
+					hostMode: 'ホストモード',
+					lastSeenAt: '最終確認 {{time}}',
+					lastSync: '最終同期',
+					neverSynced: 'まだ同期していません',
+					noPairingCode: '有効なペアリングコードはありません',
+					noReachableHost: '到達可能な LAN アドレスを検出できませんでした',
+					pairedDevices: 'ペア済み端末',
+					primaryHost: 'プライマリホスト',
+					qrUnavailable:
+						'利用可能な LAN アドレスが見つかると QR コードを表示します。',
+					scanToConnect: 'スキャンして接続',
+					trusted: '信頼済み',
+					unavailable: 'Madora Sync は利用できません',
+					unknownPlatform: '不明なプラットフォーム',
+				},
+				toasts: {
+					loadFailed: 'Madora Sync 設定の読み込みに失敗しました',
+					pairingCodeFailed: 'ペアリングコードの更新に失敗しました',
+					pairingCodeIssued: 'ペアリングコードを生成しました',
+					pairingQrFailed: 'ペアリング QR コードの読み込みに失敗しました',
+					removeDeviceFailed: '端末の削除に失敗しました',
+					saveFailed: 'Madora Sync 設定の保存に失敗しました',
+					saved: 'Madora Sync 設定を保存しました',
+				},
+				validation: {
+					invalidPort:
+						'1 から 65535 の範囲で有効な TCP ポートを入力してください。',
 				},
 			},
 		},
