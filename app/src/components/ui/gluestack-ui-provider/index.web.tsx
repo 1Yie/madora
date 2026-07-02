@@ -35,6 +35,7 @@ export function GluestackUIProvider({
 		if (mode !== 'system') return;
 		const media = window.matchMedia('(prefers-color-scheme: dark)');
 
+		script(media.matches ? 'dark' : 'light');
 		media.addListener(handleMediaQuery);
 
 		return () => media.removeListener(handleMediaQuery);

@@ -54,9 +54,8 @@ const en = {
 				'Configure theme and interface, typing behavior, sync, and product information.',
 			detail: {
 				about: 'Product version, links, updates, and open source licenses.',
-				appearance:
-					'Language, tabs, editor pane, theme mode, and theme accent.',
-				editor: 'Typing behavior, window behavior, and AI completion settings.',
+				appearance: 'Language, theme mode, and editor text size.',
+				editor: 'Auto save and inline AI completion settings.',
 			},
 		},
 		openAria: 'Open settings',
@@ -66,8 +65,15 @@ const en = {
 				description: 'Theme and interface',
 				label: 'Appearance',
 			},
+			ai: { description: 'Provider, model, and API key', label: 'AI' },
 			editor: { description: 'Typing and editing', label: 'Editor' },
 			sync: { description: 'Sync and configuration', label: 'Sync' },
+		},
+		ai: {
+			apiKeyMissing: 'No key saved',
+			apiKeySaved: 'Key saved',
+			description:
+				'Configure the provider used by editor inline completion. Provider credentials stay on this device.',
 		},
 		appearance: {
 			cards: {
@@ -95,9 +101,9 @@ const en = {
 				system: 'System',
 			},
 			editorTextSize: {
-				description:
-					'Control Markdown editor text size and overall interface zoom.',
+				description: 'Control Markdown editor text size.',
 				label: 'Text Size',
+				reset: 'Reset',
 			},
 			tabBar: {
 				scroll: {
@@ -378,9 +384,15 @@ const en = {
 		},
 	},
 	syncSettings: {
+		detail:
+			'Pair with Madora desktop over the local network and manage local sync records.',
+		eyebrow: 'Sync',
 		connection: {
 			detail: 'WebSocket link to the desktop sync server.',
+			lastSync: 'Last sync',
+			neverSynced: 'Not synced yet',
 			refreshFiles: 'Refresh files',
+			state: 'State',
 			title: 'Connection',
 		},
 		emptyTrusted: 'No paired devices yet.',
@@ -405,6 +417,7 @@ const en = {
 			detail: 'Stored locally for reconnect.',
 			title: 'Trusted devices',
 		},
+		title: 'Sync settings',
 	},
 	qrScanner: {
 		cancel: 'Cancel',

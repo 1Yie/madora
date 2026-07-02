@@ -3,11 +3,13 @@ import { Linking, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import katex from 'katex';
 import { marked } from 'marked';
+import type { ResolvedThemePreference } from '@/features/settings';
 
 type MarkdownPreviewProps = {
 	content: string;
 	contentBottomPadding?: number;
 	contentTopPadding?: number;
+	theme?: ResolvedThemePreference;
 };
 
 type MathToken = {
@@ -23,25 +25,28 @@ export function MarkdownPreview({
 	content,
 	contentBottomPadding = 0,
 	contentTopPadding = 0,
+	theme = 'light',
 }: MarkdownPreviewProps) {
+	const backgroundColor = theme === 'dark' ? '#0a0a0a' : '#ffffff';
 	const html = useMemo(
 		() =>
 			buildPreviewHtml(
 				content,
 				Math.max(0, contentTopPadding),
-				Math.max(0, contentBottomPadding)
+				Math.max(0, contentBottomPadding),
+				theme
 			),
-		[content, contentBottomPadding, contentTopPadding]
+		[content, contentBottomPadding, contentTopPadding, theme]
 	);
 
 	return (
-		<View style={styles.container}>
+		<View style={[styles.container, { backgroundColor }]}>
 			<WebView
 				javaScriptEnabled={false}
 				originWhitelist={['*']}
 				setSupportMultipleWindows={false}
 				source={{ html }}
-				style={styles.webview}
+				style={[styles.webview, { backgroundColor }]}
 				onShouldStartLoadWithRequest={(request) => {
 					if (request.url === 'about:blank') return true;
 					if (
@@ -61,7 +66,8 @@ export function MarkdownPreview({
 function buildPreviewHtml(
 	content: string,
 	contentTopPadding: number,
-	contentBottomPadding: number
+	contentBottomPadding: number,
+	theme: ResolvedThemePreference
 ) {
 	const normalized = normalizeLeadingWhitespace(content);
 	const { markdown, mathTokens } = protectMath(normalized);
@@ -77,7 +83,7 @@ function buildPreviewHtml(
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    <style>${previewCss(contentTopPadding, contentBottomPadding)}</style>
+    <style>${previewCss(contentTopPadding, contentBottomPadding, theme)}</style>
   </head>
   <body>
     <main class="prose">${safeHtml}</main>
@@ -147,23 +153,43 @@ function escapeHtml(value: string) {
 		.replace(/"/g, '&quot;');
 }
 
-function previewCss(contentTopPadding: number, contentBottomPadding: number) {
+function previewCss(
+	contentTopPadding: number,
+	contentBottomPadding: number,
+	theme: ResolvedThemePreference
+) {
 	const safePaddingBottom = Math.max(120, contentBottomPadding + 18);
+	const isDark = theme === 'dark';
+	const backgroundColor = isDark ? '#0a0a0a' : '#fbfcff';
+	const foregroundColor = isDark ? '#f5f5f5' : '#111827';
+	const headingColor = isDark ? '#fafafa' : '#0f172a';
+	const blockquoteColor = isDark ? '#a3a3a3' : '#475569';
+	const inlineCodeBackground = isDark
+		? 'rgba(255, 255, 255, 0.08)'
+		: 'rgba(15, 23, 42, 0.06)';
+	const preBackground = isDark ? '#171717' : '#0f172a';
+	const preForeground = isDark ? '#f3f4f6' : '#e5e7eb';
+	const tableBorder = isDark
+		? 'rgba(255, 255, 255, 0.12)'
+		: 'rgba(15, 23, 42, 0.14)';
+	const thBackground = isDark
+		? 'rgba(37, 99, 235, 0.18)'
+		: 'rgba(37, 99, 235, 0.08)';
 
 	return `
     :root {
-      color-scheme: light;
+      color-scheme: ${theme};
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 16px;
       line-height: 1.65;
-      background: #fbfcff;
-      color: #111827;
+      background: ${backgroundColor};
+      color: ${foregroundColor};
     }
     html,
     body {
       min-height: 100%;
       margin: 0;
-      background: #fbfcff;
+      background: ${backgroundColor};
     }
     body {
       overflow-wrap: anywhere;
@@ -182,7 +208,7 @@ function previewCss(contentTopPadding: number, contentBottomPadding: number) {
     h6 {
       line-height: 1.25;
       margin: 1.35em 0 0.55em;
-      color: #0f172a;
+      color: ${headingColor};
     }
     h1 { font-size: 1.8rem; }
     h2 { font-size: 1.45rem; }
@@ -201,20 +227,20 @@ function previewCss(contentTopPadding: number, contentBottomPadding: number) {
     }
     blockquote {
       border-left: 3px solid rgba(37, 99, 235, 0.28);
-      color: #475569;
+      color: ${blockquoteColor};
       padding-left: 12px;
     }
     code {
-      background: rgba(15, 23, 42, 0.06);
+      background: ${inlineCodeBackground};
       border-radius: 4px;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
       font-size: 0.9em;
       padding: 0.1em 0.3em;
     }
     pre {
-      background: #0f172a;
+      background: ${preBackground};
       border-radius: 8px;
-      color: #e5e7eb;
+      color: ${preForeground};
       overflow-x: auto;
       padding: 14px;
     }
@@ -232,11 +258,11 @@ function previewCss(contentTopPadding: number, contentBottomPadding: number) {
     }
     th,
     td {
-      border: 1px solid rgba(15, 23, 42, 0.14);
+      border: 1px solid ${tableBorder};
       padding: 8px 10px;
     }
     th {
-      background: rgba(37, 99, 235, 0.08);
+      background: ${thBackground};
       font-weight: 700;
     }
     img {
@@ -260,11 +286,9 @@ function previewCss(contentTopPadding: number, contentBottomPadding: number) {
 
 const styles = StyleSheet.create({
 	container: {
-		backgroundColor: '#fbfcff',
 		flex: 1,
 	},
 	webview: {
-		backgroundColor: '#fbfcff',
 		flex: 1,
 	},
 });

@@ -21,6 +21,10 @@ import {
 	Underline,
 } from 'lucide-react-native';
 import { Spinner } from '@/components/ui/spinner';
+import {
+	APP_THEME_BACKGROUND_COLORS,
+	type ResolvedThemePreference,
+} from '@/features/settings';
 import { useSetMarkdownToolbar } from '../providers/markdown-toolbar-provider';
 import { MarkdownPreview } from './markdown-preview';
 import type {
@@ -54,6 +58,7 @@ export function MarkdownEditor({
 	onRequestCompletion,
 	onSave,
 	onToggleMode,
+	theme = 'light',
 	title,
 	value,
 }: {
@@ -70,6 +75,7 @@ export function MarkdownEditor({
 	) => Promise<string>;
 	onSave?: () => void;
 	onToggleMode?: () => void;
+	theme?: ResolvedThemePreference;
 	rootPath?: string | null;
 	saveMode?: SaveMode;
 	saveStatus?: SaveStatus;
@@ -172,9 +178,10 @@ export function MarkdownEditor({
 				apiRef.current,
 				fontSize,
 				contentTopPadding,
-				contentBottomPadding
+				contentBottomPadding,
+				theme
 			);
-	}, [contentBottomPadding, contentTopPadding, fontSize]);
+	}, [contentBottomPadding, contentTopPadding, fontSize, theme]);
 
 	const scheduleCompletion = useCallback(
 		(nextValue: string) => {
@@ -255,14 +262,20 @@ export function MarkdownEditor({
 			apiRef.current = api;
 			setEditorReady(true);
 			setEditorLoadError(null);
-			injectEditorStyle(api, fontSize, contentTopPadding, contentBottomPadding);
+			injectEditorStyle(
+				api,
+				fontSize,
+				contentTopPadding,
+				contentBottomPadding,
+				theme
+			);
 			injectGhostTextSupport(api);
 			void api.editor.setFontSize(fontSize);
 			void api.editor.registerShortcut('Mod-s', 'save');
 			void api.editor.registerShortcut('Escape', 'dismissCompletion');
 			void api.focus();
 		},
-		[contentBottomPadding, contentTopPadding, fontSize]
+		[contentBottomPadding, contentTopPadding, fontSize, theme]
 	);
 
 	const handleShortcut = useCallback(
@@ -400,14 +413,37 @@ export function MarkdownEditor({
 	}, [completionControl, setMarkdownToolbar, toolbarActions]);
 
 	const previewContent = useMemo(() => value || '', [value]);
+	const containerStyle = useMemo(
+		() => [
+			styles.container,
+			{ backgroundColor: theme === 'dark' ? '#0a0a0a' : '#fbfcff' },
+		],
+		[theme]
+	);
+	const blockingViewStyle = useMemo(
+		() => [
+			styles.blockingView,
+			{ backgroundColor: theme === 'dark' ? '#0a0a0a' : '#ffffff' },
+		],
+		[theme]
+	);
 
 	return (
 		<KeyboardAvoidingView
 			behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-			style={styles.container}
+			style={containerStyle}
 		>
 			<View style={styles.editorPane}>
-				{effectiveMode === 'edit' ? (
+				<View
+					pointerEvents={effectiveMode === 'edit' ? 'auto' : 'none'}
+					style={[
+						styles.modePane,
+						{
+							opacity: effectiveMode === 'edit' ? 1 : 0,
+							position: effectiveMode === 'edit' ? 'relative' : 'absolute',
+						},
+					]}
+				>
 					<CodeEditor
 						content={editorContent}
 						editorUri={editorUri}
@@ -424,7 +460,7 @@ export function MarkdownEditor({
 						onSelectionChange={() => {}}
 						onShortcut={handleShortcut}
 						renderBlockingView={() => (
-							<View style={styles.blockingView}>
+							<View style={blockingViewStyle}>
 								{editorLoadError ? (
 									<Text style={styles.blockingText}>{editorLoadError}</Text>
 								) : (
@@ -432,7 +468,7 @@ export function MarkdownEditor({
 								)}
 							</View>
 						)}
-						theme="githubLight"
+						theme={theme === 'dark' ? 'githubDark' : 'githubLight'}
 						viewport={{
 							intialScale: 1,
 							maximumScale: 1,
@@ -441,13 +477,24 @@ export function MarkdownEditor({
 							viewportWidth: 'device-width',
 						}}
 					/>
-				) : (
+				</View>
+				<View
+					pointerEvents={effectiveMode === 'preview' ? 'auto' : 'none'}
+					style={[
+						styles.modePane,
+						{
+							opacity: effectiveMode === 'preview' ? 1 : 0,
+							position: effectiveMode === 'preview' ? 'relative' : 'absolute',
+						},
+					]}
+				>
 					<MarkdownPreview
 						content={previewContent}
 						contentBottomPadding={contentBottomPadding}
 						contentTopPadding={contentTopPadding}
+						theme={theme}
 					/>
-				)}
+				</View>
 			</View>
 		</KeyboardAvoidingView>
 	);
@@ -545,8 +592,11 @@ function injectEditorStyle(
 	api: WebViewAPI,
 	fontSize: number,
 	contentTopPadding: number,
-	contentBottomPadding: number
+	contentBottomPadding: number,
+	theme: ResolvedThemePreference
 ) {
+	const backgroundColor = APP_THEME_BACKGROUND_COLORS[theme];
+
 	api.injectJavaScript(`
     (function() {
       var existing = document.getElementById('madora-codemirror-style');
@@ -554,9 +604,11 @@ function injectEditorStyle(
       var style = document.createElement('style');
       style.id = 'madora-codemirror-style';
       style.textContent = ${JSON.stringify(
-				getEditorCss(fontSize, contentTopPadding, contentBottomPadding)
+				getEditorCss(fontSize, contentTopPadding, contentBottomPadding, theme)
 			)};
       document.head.appendChild(style);
+      document.documentElement.style.backgroundColor = ${JSON.stringify(backgroundColor)};
+      document.body.style.backgroundColor = ${JSON.stringify(backgroundColor)};
       requestAnimationFrame(function() {
         (async function() {
           try {
@@ -754,28 +806,44 @@ function injectGhostTextSupport(api: WebViewAPI) {
 function getEditorCss(
 	fontSize: number,
 	contentTopPadding: number,
-	contentBottomPadding: number
+	contentBottomPadding: number,
+	theme: ResolvedThemePreference
 ) {
 	const safePaddingTop = Math.max(0, contentTopPadding);
 	const safePaddingBottom = Math.max(0, contentBottomPadding);
 	const contentPaddingTop = 14 + safePaddingTop;
 	const contentPaddingBottom = 14 + safePaddingBottom;
+	const isDark = theme === 'dark';
+	const backgroundColor = APP_THEME_BACKGROUND_COLORS[theme];
+	const textColor = isDark ? '#f5f5f5' : '#111827';
+	const gutterBackground = isDark
+		? 'rgba(255, 255, 255, 0.03)'
+		: 'rgba(37, 99, 235, 0.03)';
+	const gutterBorder = isDark
+		? 'rgba(255, 255, 255, 0.08)'
+		: 'rgba(17, 24, 39, 0.12)';
+	const gutterText = isDark ? '#737373' : '#9ca3af';
+	const activeLine = isDark
+		? 'rgba(37, 99, 235, 0.16)'
+		: 'rgba(37, 99, 235, 0.08)';
 
 	return `
     html, body {
-      background: transparent !important;
-      color: #111827;
+      background: ${backgroundColor} !important;
+      color: ${textColor};
       height: 100%;
+      margin: 0;
       overflow: hidden;
     }
     .cm-editor {
-      background: transparent !important;
-      color: #111827;
+      background: ${backgroundColor} !important;
+      color: ${textColor};
       font-size: ${fontSize}px;
       height: 100%;
       min-height: 100%;
     }
     .cm-scroller {
+      background: ${backgroundColor} !important;
       box-sizing: border-box;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
       line-height: 1.7;
@@ -796,15 +864,15 @@ function getEditorCss(
       overflow-wrap: anywhere;
     }
     .cm-gutters {
-      background: rgba(37, 99, 235, 0.03) !important;
-      border-right: 1px solid rgba(17, 24, 39, 0.12) !important;
-      color: #9ca3af !important;
+      background: ${gutterBackground} !important;
+      border-right: 1px solid ${gutterBorder} !important;
+      color: ${gutterText} !important;
     }
     .cm-activeLine {
-      background: rgba(37, 99, 235, 0.08) !important;
+      background: ${activeLine} !important;
     }
     .cm-activeLineGutter {
-      background: rgba(37, 99, 235, 0.08) !important;
+      background: ${activeLine} !important;
       color: #2563eb !important;
     }
     .cm-selectionBackground,
@@ -834,7 +902,6 @@ function getEditorCss(
 const styles = StyleSheet.create({
 	blockingView: {
 		alignItems: 'center',
-		backgroundColor: '#ffffff',
 		bottom: 0,
 		justifyContent: 'center',
 		left: 0,
@@ -850,12 +917,19 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 	},
 	container: {
-		backgroundColor: '#fbfcff',
 		flex: 1,
 	},
 	editorPane: {
 		flex: 1,
 		minHeight: 0,
+	},
+	modePane: {
+		bottom: 0,
+		flex: 1,
+		left: 0,
+		minHeight: 0,
+		right: 0,
+		top: 0,
 	},
 	formatGroup: {
 		alignItems: 'center',

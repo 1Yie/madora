@@ -52,16 +52,22 @@ const zhCN = {
 			description: '设置主题与界面、输入行为、同步配置和产品信息。',
 			detail: {
 				about: '产品版本、链接、更新与开源许可。',
-				appearance: '语言、标签页、编辑区、主题模式和主题颜色。',
-				editor: '输入行为、窗口行为和 AI 自动补全配置。',
+				appearance: '语言、主题模式和编辑区文字大小。',
+				editor: '自动保存和行内 AI 自动补全配置。',
 			},
 		},
 		openAria: '打开设置',
 		sections: {
 			about: { description: '产品与链接', label: '关于' },
 			appearance: { description: '主题与界面', label: '外观' },
+			ai: { description: 'Provider、模型和 API Key', label: 'AI' },
 			editor: { description: '输入与编辑', label: '编辑器' },
 			sync: { description: '同步与配置', label: '同步' },
+		},
+		ai: {
+			apiKeyMissing: '未保存 Key',
+			apiKeySaved: '已保存 Key',
+			description: '配置编辑器行内补全使用的 Provider，凭据只保存在当前设备。',
 		},
 		appearance: {
 			cards: {
@@ -87,8 +93,9 @@ const zhCN = {
 				system: '跟随系统',
 			},
 			editorTextSize: {
-				description: '控制 Markdown 编辑区文字大小和整体界面缩放。',
+				description: '控制 Markdown 编辑区文字大小。',
 				label: '文本大小',
+				reset: '重置',
 			},
 			tabBar: {
 				scroll: {
@@ -337,9 +344,14 @@ const zhCN = {
 		},
 	},
 	syncSettings: {
+		detail: '通过局域网配对 Madora 桌面端，并管理本地同步记录。',
+		eyebrow: '同步',
 		connection: {
 			detail: '连接到桌面端同步服务的 WebSocket 通道。',
+			lastSync: '上次同步',
+			neverSynced: '还未同步',
 			refreshFiles: '刷新文件',
+			state: '状态',
 			title: '连接',
 		},
 		emptyTrusted: '还没有配对设备。',
@@ -364,6 +376,7 @@ const zhCN = {
 			detail: '本地保存这些设备，用于后续重连。',
 			title: '信任设备',
 		},
+		title: '同步设置',
 	},
 	qrScanner: {
 		cancel: '取消',

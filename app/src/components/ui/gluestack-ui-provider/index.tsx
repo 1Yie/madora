@@ -16,6 +16,7 @@ export function GluestackUIProvider({
 }) {
 	useEffect(() => {
 		if (mode === 'system') {
+			Appearance.setColorScheme('unspecified');
 			return;
 		}
 		Appearance.setColorScheme(mode as ColorSchemeName);

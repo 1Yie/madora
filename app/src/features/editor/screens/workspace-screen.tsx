@@ -4,12 +4,14 @@ import {
 	Keyboard,
 	Pressable,
 	ScrollView,
+	StyleSheet,
 	Text,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
+	Folder,
 	ChevronDown,
 	ChevronRight,
 	FilePlus2,
@@ -20,18 +22,37 @@ import {
 
 import { MarkdownEditor } from '../components/markdown-editor';
 import { useEditorWorkspace } from '../providers/editor-provider';
-import type { EditorDocument, EditorNode } from '../types';
+import type {
+	EditorDocument,
+	EditorNode,
+	EditorWorkspaceSource,
+} from '../types';
 import {
 	WORKSPACE_TAB_REQUEST_EVENT,
 	WORKSPACE_TAB_STATE_EVENT,
 	type WorkspaceTab,
 } from '../lib/workspace-tab-events';
+import {
+	APP_THEME_BACKGROUND_COLORS,
+	useAppSettings,
+	useAppThemePalette,
+	useResolvedThemePreference,
+} from '@/features/settings';
 
 const EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING = 56;
 const EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING = 40;
+const TREE_INDENT_STEP = 14;
+const TREE_ROW_INSET = 8;
+const TREE_TOGGLE_SIZE = 20;
+const TREE_TOGGLE_GAP = 4;
+const TREE_FILE_START_OFFSET =
+	TREE_ROW_INSET + TREE_TOGGLE_SIZE + TREE_TOGGLE_GAP;
+const TREE_GUIDE_LEFT = TREE_ROW_INSET + TREE_TOGGLE_SIZE / 2;
 
 export function WorkspaceScreen() {
 	const insets = useSafeAreaInsets();
+	const resolvedTheme = useResolvedThemePreference();
+	const { editorFontSize } = useAppSettings();
 	const [activeTab, setActiveTab] = useState<WorkspaceTab>('editor');
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const {
@@ -114,12 +135,20 @@ export function WorkspaceScreen() {
 	};
 
 	return (
-		<View style={{ backgroundColor: '#fbfcff', flex: 1 }}>
+		<View
+			style={{
+				backgroundColor: APP_THEME_BACKGROUND_COLORS[resolvedTheme],
+				flex: 1,
+			}}
+		>
 			<View style={{ flex: 1 }}>
 				<View
 					style={{
-						display: activeTab === 'fileTree' ? 'flex' : 'none',
 						flex: 1,
+						opacity: activeTab === 'fileTree' ? 1 : 0,
+						pointerEvents: activeTab === 'fileTree' ? 'auto' : 'none',
+						position: activeTab === 'fileTree' ? 'relative' : 'absolute',
+						inset: 0,
 					}}
 				>
 					<FileTreeView
@@ -131,13 +160,17 @@ export function WorkspaceScreen() {
 						onOpenFolder={handleOpenFolder}
 						onSelectDocument={handleSelectDocument}
 						selectedDocumentId={selectedDocumentId}
+						workspaceSource={workspaceSource}
 					/>
 				</View>
 
 				<View
 					style={{
-						display: activeTab === 'editor' ? 'flex' : 'none',
 						flex: 1,
+						opacity: activeTab === 'editor' ? 1 : 0,
+						pointerEvents: activeTab === 'editor' ? 'auto' : 'none',
+						position: activeTab === 'editor' ? 'relative' : 'absolute',
+						inset: 0,
 					}}
 				>
 					{selectedDocument ? (
@@ -145,6 +178,8 @@ export function WorkspaceScreen() {
 							contentBottomPadding={editorBottomPadding}
 							contentTopPadding={editorTopPadding}
 							filePath={selectedDocument.path}
+							fontSize={editorFontSize}
+							theme={resolvedTheme}
 							title={selectedDocument.title}
 							value={selectedDocument.content}
 							onChange={updateSelectedDocumentContent}
@@ -173,6 +208,7 @@ function FileTreeView({
 	onOpenFolder,
 	onSelectDocument,
 	selectedDocumentId,
+	workspaceSource,
 }: {
 	canCreateFile: boolean;
 	documents: EditorDocument[];
@@ -182,42 +218,69 @@ function FileTreeView({
 	onOpenFolder: () => void;
 	onSelectDocument: (documentId: string) => void;
 	selectedDocumentId: string | null;
+	workspaceSource: EditorWorkspaceSource;
 }) {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
+	const palette = useAppThemePalette();
+	const workspaceTitle =
+		workspaceSource.kind === 'empty'
+			? t('fileTree.title')
+			: workspaceSource.name;
+	const workspaceSubtitle =
+		workspaceSource.kind === 'empty'
+			? t('fileTree.detail')
+			: workspaceSource.uri;
+	const showWorkspaceActions = workspaceSource.kind !== 'empty';
 
 	return (
 		<View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-			<View className="border-b border-border px-4 pb-3 pt-4">
-				<View className="gap-3">
-					<View>
-						<Text className="text-[18px] font-semibold text-foreground">
-							{t('fileTree.title')}
+			<View style={{ borderBottomColor: palette.border, borderBottomWidth: 1 }}>
+				<View className="flex-row items-center justify-between gap-3 px-4 py-3">
+					<View className="min-w-0 flex-1">
+						<Text
+							className="text-[12px] leading-4 text-muted-foreground"
+							numberOfLines={1}
+						>
+							{workspaceSubtitle}
 						</Text>
-						<Text className="mt-1 text-[12px] text-muted-foreground">
-							{t('fileTree.detail')}
+						<Text
+							className="mt-1 text-[18px] font-semibold text-foreground"
+							numberOfLines={1}
+						>
+							{workspaceTitle}
 						</Text>
 					</View>
-					<View className="flex-row gap-2">
+					{showWorkspaceActions ? (
+						<FileToolbarIconButton
+							icon={FolderOpen}
+							label={t('fileTree.actions.openFolder')}
+							onPress={onOpenFolder}
+							palette={palette}
+						/>
+					) : null}
+				</View>
+				{showWorkspaceActions ? (
+					<View
+						className="flex-row items-center gap-1 px-2 py-1.5"
+						style={{ borderTopColor: palette.border, borderTopWidth: 1 }}
+					>
 						{canCreateFile ? (
-							<FileActionButton
+							<FileToolbarIconButton
 								icon={FilePlus2}
 								label={t('fileTree.actions.newFile')}
 								onPress={onCreateFile}
+								palette={palette}
 							/>
 						) : null}
-						<FileActionButton
-							icon={FilePlus2}
+						<FileToolbarIconButton
+							icon={FileText}
 							label={t('fileTree.actions.openFile')}
 							onPress={onOpenFile}
-						/>
-						<FileActionButton
-							icon={FolderPlus}
-							label={t('fileTree.actions.openFolder')}
-							onPress={onOpenFolder}
+							palette={palette}
 						/>
 					</View>
-				</View>
+				) : null}
 			</View>
 			<ScrollView
 				keyboardShouldPersistTaps="handled"
@@ -245,7 +308,11 @@ function FileTreeView({
 							))}
 
 					{fileTree.length === 0 && documents.length === 0 ? (
-						<EmptyWorkspace />
+						<EmptyWorkspace
+							onOpenFile={onOpenFile}
+							onOpenFolder={onOpenFolder}
+							palette={palette}
+						/>
 					) : null}
 				</View>
 			</ScrollView>
@@ -264,12 +331,17 @@ function FileTreeNodeRow({
 	onSelectDocument: (documentId: string) => void;
 	selectedDocumentId: string | null;
 }) {
+	const palette = useAppThemePalette();
 	const [expanded, setExpanded] = useState(depth === 0);
 	const selectable =
 		node.kind === 'file' &&
 		(node.fileKind === 'markdown' || node.fileKind === 'text');
 	const selected = node.path === selectedDocumentId;
-	const iconColor = selected ? '#fbfcff' : selectable ? '#111827' : '#6b7280';
+	const iconColor = selected
+		? palette.accentForeground
+		: selectable
+			? palette.icon
+			: palette.iconMuted;
 	const Chevron = expanded ? ChevronDown : ChevronRight;
 
 	const handlePress = () => {
@@ -284,35 +356,66 @@ function FileTreeNodeRow({
 	};
 
 	return (
-		<View>
-			<Pressable
-				disabled={!selectable && node.kind !== 'directory'}
-				onPress={handlePress}
-				style={{ paddingLeft: 10 + depth * 14 }}
-				className={`min-h-10 justify-center rounded-md px-3
-					${selected ? 'bg-foreground' : 'bg-transparent'}`}
+		<View className="relative py-0.5">
+			<IndentGuides depth={depth} />
+			<View
+				className="flex-row items-center"
+				style={{ paddingLeft: depth * TREE_INDENT_STEP + TREE_ROW_INSET }}
 			>
-				<View className="flex-row items-center gap-2">
+				<View
+					className="items-start justify-center"
+					style={{ marginRight: TREE_TOGGLE_GAP, width: TREE_TOGGLE_SIZE }}
+				>
 					{node.kind === 'directory' ? (
-						<Chevron color={iconColor} size={14} strokeWidth={2.2} />
+						<Pressable
+							accessibilityLabel={
+								expanded ? 'Collapse folder' : 'Expand folder'
+							}
+							onPress={() => setExpanded((current) => !current)}
+							className="h-5 w-5 items-center justify-center rounded-sm"
+						>
+							<Chevron color={iconColor} size={14} strokeWidth={2.2} />
+						</Pressable>
 					) : (
-						<View style={{ width: 14 }} />
+						<View
+							style={{ height: TREE_TOGGLE_SIZE, width: TREE_TOGGLE_SIZE }}
+						/>
 					)}
+				</View>
+				<Pressable
+					disabled={!selectable && node.kind !== 'directory'}
+					onPress={handlePress}
+					className="min-h-9 flex-1 flex-row items-center gap-2 rounded-md px-2
+						py-1.5"
+					style={{
+						backgroundColor: selected ? palette.accentSurface : 'transparent',
+					}}
+				>
 					{node.kind === 'directory' ? (
-						<FolderOpen color={iconColor} size={16} strokeWidth={2} />
+						expanded ? (
+							<FolderOpen color={iconColor} size={16} strokeWidth={2} />
+						) : (
+							<Folder color={iconColor} size={16} strokeWidth={2} />
+						)
 					) : (
 						<FileText color={iconColor} size={16} strokeWidth={2} />
 					)}
 					<Text
 						numberOfLines={1}
-						className={`flex-1 text-[14px]
-							${selected ? 'font-semibold text-background' : 'text-foreground'}
-							${selectable ? '' : 'font-semibold text-muted-foreground'}`}
+						className="flex-1 text-[14px]"
+						style={{
+							color: selected
+								? palette.accentForeground
+								: selectable
+									? palette.foreground
+									: palette.mutedForeground,
+							fontWeight: selected || !selectable ? '600' : '400',
+						}}
 					>
 						{node.name}
 					</Text>
-				</View>
-			</Pressable>
+				</Pressable>
+			</View>
 			{expanded
 				? node.children.map((child) => (
 						<FileTreeNodeRow
@@ -337,28 +440,85 @@ function DocumentRow({
 	onSelectDocument: (documentId: string) => void;
 	selected: boolean;
 }) {
-	const iconColor = selected ? '#fbfcff' : '#111827';
+	const palette = useAppThemePalette();
+	const iconColor = selected ? palette.accentForeground : palette.icon;
 
 	return (
+		<View className="relative py-0.5">
+			<Pressable
+				onPress={() => onSelectDocument(document.id)}
+				className="min-h-9 flex-row items-center gap-2 rounded-md px-2 py-1.5"
+				style={{
+					backgroundColor: selected ? palette.accentSurface : 'transparent',
+					paddingLeft: TREE_FILE_START_OFFSET,
+				}}
+			>
+				<FileText color={iconColor} size={16} strokeWidth={2} />
+				<View className="flex-1">
+					<Text
+						numberOfLines={1}
+						className="text-[14px]"
+						style={{
+							color: selected ? palette.accentForeground : palette.foreground,
+							fontWeight: selected ? '600' : '400',
+						}}
+					>
+						{document.title}
+					</Text>
+					<Text numberOfLines={1} className="text-[11px] text-muted-foreground">
+						{document.path}
+					</Text>
+				</View>
+			</Pressable>
+		</View>
+	);
+}
+
+function IndentGuides({ depth }: { depth: number }) {
+	if (depth <= 0) return null;
+
+	return (
+		<>
+			{Array.from({ length: depth }, (_, index) => (
+				<View
+					key={`guide-${index}`}
+					pointerEvents="none"
+					style={{
+						backgroundColor: 'rgba(115, 115, 115, 0.28)',
+						bottom: 0,
+						left:
+							index * TREE_INDENT_STEP +
+							TREE_GUIDE_LEFT -
+							StyleSheet.hairlineWidth / 2,
+						position: 'absolute',
+						top: 0,
+						width: StyleSheet.hairlineWidth,
+					}}
+				/>
+			))}
+		</>
+	);
+}
+
+function FileToolbarIconButton({
+	icon: Icon,
+	label,
+	onPress,
+	palette,
+}: {
+	icon: typeof FilePlus2;
+	label: string;
+	onPress: () => void;
+	palette: ReturnType<typeof useAppThemePalette>;
+}) {
+	return (
 		<Pressable
-			onPress={() => onSelectDocument(document.id)}
-			className={`min-h-10 flex-row items-center gap-2 rounded-md px-3
-				${selected ? 'bg-foreground' : 'bg-transparent'}`}
+			accessibilityLabel={label}
+			onPress={onPress}
+			className="h-8 w-8 items-center justify-center rounded-md"
+			style={{ backgroundColor: 'transparent' }}
 		>
-			<View style={{ width: 14 }} />
-			<FileText color={iconColor} size={16} strokeWidth={2} />
-			<View className="flex-1">
-				<Text
-					numberOfLines={1}
-					className={`text-[14px]
-						${selected ? 'font-semibold text-background' : 'text-foreground'}`}
-				>
-					{document.title}
-				</Text>
-				<Text numberOfLines={1} className="text-[11px] text-muted-foreground">
-					{document.path}
-				</Text>
-			</View>
+			<Icon color={palette.icon} size={16} strokeWidth={2.2} />
 		</Pressable>
 	);
 }
@@ -367,19 +527,26 @@ function FileActionButton({
 	icon: Icon,
 	label,
 	onPress,
+	palette,
 }: {
 	icon: typeof FilePlus2;
 	label: string;
 	onPress: () => void;
+	palette: ReturnType<typeof useAppThemePalette>;
 }) {
 	return (
 		<Pressable
 			accessibilityLabel={label}
 			onPress={onPress}
 			className="min-h-9 flex-1 flex-row items-center justify-center gap-2
-				rounded-md border border-border bg-secondary px-3"
+				rounded-md px-3"
+			style={{
+				backgroundColor: palette.surfaceMuted,
+				borderColor: palette.border,
+				borderWidth: 1,
+			}}
 		>
-			<Icon color="#111827" size={16} strokeWidth={2.2} />
+			<Icon color={palette.icon} size={16} strokeWidth={2.2} />
 			<Text
 				numberOfLines={1}
 				className="text-[13px] font-semibold text-foreground"
@@ -390,7 +557,15 @@ function FileActionButton({
 	);
 }
 
-function EmptyWorkspace() {
+function EmptyWorkspace({
+	onOpenFile,
+	onOpenFolder,
+	palette,
+}: {
+	onOpenFile: () => void;
+	onOpenFolder: () => void;
+	palette: ReturnType<typeof useAppThemePalette>;
+}) {
 	const { t } = useTranslation();
 
 	return (
@@ -403,6 +578,20 @@ function EmptyWorkspace() {
 					<Text className="text-[13px] leading-5 text-muted-foreground">
 						{t('fileTree.empty.detail')}
 					</Text>
+				</View>
+				<View className="flex-row gap-2">
+					<FileActionButton
+						icon={FilePlus2}
+						label={t('fileTree.actions.openFile')}
+						onPress={onOpenFile}
+						palette={palette}
+					/>
+					<FileActionButton
+						icon={FolderPlus}
+						label={t('fileTree.actions.openFolder')}
+						onPress={onOpenFolder}
+						palette={palette}
+					/>
 				</View>
 			</View>
 		</View>
@@ -421,6 +610,7 @@ function EmptyEditorState({
 	topPadding: number;
 }) {
 	const { t } = useTranslation();
+	const palette = useAppThemePalette();
 
 	return (
 		<View
@@ -445,11 +635,13 @@ function EmptyEditorState({
 							icon={FilePlus2}
 							label={t('fileTree.actions.openFile')}
 							onPress={onOpenFile}
+							palette={palette}
 						/>
 						<FileActionButton
 							icon={FolderPlus}
 							label={t('fileTree.actions.openFolder')}
 							onPress={onOpenFolder}
+							palette={palette}
 						/>
 					</View>
 				</View>

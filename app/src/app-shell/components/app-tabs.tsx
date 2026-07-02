@@ -4,18 +4,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { MarkdownToolbarProvider } from '@/features/editor';
+import {
+	APP_THEME_BACKGROUND_COLORS,
+	useResolvedThemePreference,
+} from '@/features/settings';
 import CustomTabBar from './custom-tab-bar';
 
-const FADE_EXTRA_TOP = 40;
-const FADE_EXTRA_BOTTOM = 60;
+const FADE_EXTRA_TOP = 6;
+const FADE_EXTRA_BOTTOM = 18;
 
 export default function AppTabs() {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
+	const resolvedTheme = useResolvedThemePreference();
+	const backgroundColor = APP_THEME_BACKGROUND_COLORS[resolvedTheme];
 
 	return (
 		<MarkdownToolbarProvider>
-			<View className="relative flex-1 bg-[#fbfcff]">
+			<View className="relative flex-1" style={{ backgroundColor }}>
 				<Tabs
 					screenOptions={{ headerShown: false }}
 					tabBar={(props) => <CustomTabBar {...props} />}
@@ -26,8 +32,13 @@ export default function AppTabs() {
 						options={{ title: t('tabs.settings') }}
 					/>
 				</Tabs>
-				<AppEdgeFade height={insets.top + FADE_EXTRA_TOP} position="top" />
 				<AppEdgeFade
+					backgroundColor={backgroundColor}
+					height={insets.top + FADE_EXTRA_TOP}
+					position="top"
+				/>
+				<AppEdgeFade
+					backgroundColor={backgroundColor}
 					height={insets.bottom + FADE_EXTRA_BOTTOM}
 					position="bottom"
 				/>
@@ -37,9 +48,11 @@ export default function AppTabs() {
 }
 
 function AppEdgeFade({
+	backgroundColor,
 	height,
 	position,
 }: {
+	backgroundColor: string;
 	height: number;
 	position: 'top' | 'bottom';
 }) {
@@ -65,11 +78,15 @@ function AppEdgeFade({
 						y1={isTop ? '0' : '1'}
 						y2={isTop ? '1' : '0'}
 					>
-						<Stop offset="0" stopColor="#fbfcff" stopOpacity="0.95" />
-						<Stop offset="0.3" stopColor="#fbfcff" stopOpacity="0.75" />
-						<Stop offset="0.6" stopColor="#fbfcff" stopOpacity="0.4" />
-						<Stop offset="0.85" stopColor="#fbfcff" stopOpacity="0.12" />
-						<Stop offset="1" stopColor="#fbfcff" stopOpacity="0" />
+						<Stop offset="0" stopColor={backgroundColor} stopOpacity="0.95" />
+						<Stop offset="0.3" stopColor={backgroundColor} stopOpacity="0.75" />
+						<Stop offset="0.6" stopColor={backgroundColor} stopOpacity="0.4" />
+						<Stop
+							offset="0.85"
+							stopColor={backgroundColor}
+							stopOpacity="0.12"
+						/>
+						<Stop offset="1" stopColor={backgroundColor} stopOpacity="0" />
 					</LinearGradient>
 				</Defs>
 				<Rect fill={`url(#app-${position}-fade)`} height={height} width="100" />

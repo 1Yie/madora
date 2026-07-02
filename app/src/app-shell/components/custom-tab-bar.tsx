@@ -20,6 +20,10 @@ import {
 	type MarkdownCompletionControl,
 	type WorkspaceTab,
 } from '@/features/editor';
+import {
+	useResolvedThemePreference,
+	type ResolvedThemePreference,
+} from '@/features/settings';
 
 type TabBarProps = Parameters<
 	NonNullable<ComponentProps<typeof Tabs>['tabBar']>
@@ -29,9 +33,19 @@ type TabIcon = ComponentType<{
 	size?: number;
 	strokeWidth?: number;
 }>;
+type FloatingSurfacePalette = {
+	activeBackground: string;
+	borderColor: string;
+	iconColor: string;
+	mutedIconColor: string;
+	surfaceColor: string;
+	textColor: string;
+	mutedTextColor: string;
+};
 
 const KEYBOARD_TOOLBAR_GAP = 6;
 const FLOATING_TAB_BAR_GAP = 16;
+const FLOATING_STATUS_SLOT_SIZE = 40;
 
 export default function CustomTabBar({
 	state,
@@ -41,11 +55,24 @@ export default function CustomTabBar({
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
 	const toolbar = useMarkdownToolbar();
+	const resolvedTheme = useResolvedThemePreference();
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('editor');
+	const palette = getFloatingSurfacePalette(resolvedTheme);
 	const activeRoute = state.routes[state.index];
 	const keyboardVisible = keyboardHeight > 0;
 	const workspaceRouteFocused = activeRoute?.name === 'index';
+	const workspaceFocused = workspaceRouteFocused && workspaceTab === 'editor';
+	const fileTreeFocused = workspaceRouteFocused && workspaceTab === 'fileTree';
+	const settingsFocused = activeRoute?.name === 'settings';
+	const workspaceModeAction = workspaceFocused
+		? (toolbar.actions.find(
+				(action) => action.key === 'preview' || action.key === 'edit'
+			) ?? null)
+		: null;
+	const keyboardToolbarActions = toolbar.actions.filter(
+		(action) => action.key !== 'preview' && action.key !== 'edit'
+	);
 	const showMarkdownToolbar =
 		keyboardVisible && toolbar.visible && workspaceRouteFocused;
 	const liftForKeyboard = keyboardVisible && workspaceRouteFocused;
@@ -95,12 +122,22 @@ export default function CustomTabBar({
 				className="absolute z-20 flex-row items-center gap-2"
 				style={{ bottom, right }}
 			>
-				{showCompletion ? (
-					<CompletionPill completion={toolbar.completion} />
-				) : null}
 				<View
-					className="max-w-[92vw] rounded-full border border-white/10
-						bg-neutral-950 p-1 shadow-lg shadow-black/25"
+					pointerEvents={showCompletion ? 'auto' : 'none'}
+					className="items-start justify-center"
+					style={{ width: FLOATING_STATUS_SLOT_SIZE }}
+				>
+					{showCompletion ? (
+						<CompletionPill completion={toolbar.completion} palette={palette} />
+					) : null}
+				</View>
+				<View
+					className="max-w-[92vw] rounded-full p-1 shadow-lg shadow-black/25"
+					style={{
+						backgroundColor: palette.surfaceColor,
+						borderColor: palette.borderColor,
+						borderWidth: 1,
+					}}
 				>
 					<ScrollView
 						horizontal
@@ -108,8 +145,12 @@ export default function CustomTabBar({
 						showsHorizontalScrollIndicator={false}
 						contentContainerStyle={{ alignItems: 'center', gap: 4 }}
 					>
-						{toolbar.actions.map((action) => (
-							<MarkdownToolbarButton key={action.key} action={action} />
+						{keyboardToolbarActions.map((action) => (
+							<MarkdownToolbarButton
+								key={action.key}
+								action={action}
+								palette={palette}
+							/>
 						))}
 					</ScrollView>
 				</View>
@@ -119,9 +160,6 @@ export default function CustomTabBar({
 
 	const workspaceRoute = state.routes.find((route) => route.name === 'index');
 	const settingsRoute = state.routes.find((route) => route.name === 'settings');
-	const workspaceFocused = workspaceRouteFocused && workspaceTab === 'editor';
-	const fileTreeFocused = workspaceRouteFocused && workspaceTab === 'fileTree';
-	const settingsFocused = activeRoute?.name === 'settings';
 
 	const navigateToRoute = (routeName: string) => {
 		const route = state.routes.find((item) => item.name === routeName);
@@ -154,10 +192,13 @@ export default function CustomTabBar({
 	return (
 		<View
 			pointerEvents="box-none"
-			className="absolute z-20"
+			className="absolute z-20 flex-row items-center gap-2"
 			style={{ bottom, right }}
 		>
-			<FloatingCapsule>
+			{workspaceModeAction ? (
+				<FloatingModeButton action={workspaceModeAction} palette={palette} />
+			) : null}
+			<FloatingCapsule palette={palette}>
 				{workspaceRoute ? (
 					<FloatingButton
 						focused={workspaceFocused}
@@ -167,6 +208,7 @@ export default function CustomTabBar({
 							workspaceRoute.name
 						}
 						onPress={() => selectWorkspaceTab('editor')}
+						palette={palette}
 					/>
 				) : null}
 				<FloatingButton
@@ -174,6 +216,7 @@ export default function CustomTabBar({
 					icon={FolderTree}
 					label={t('tabs.fileTree')}
 					onPress={() => selectWorkspaceTab('fileTree')}
+					palette={palette}
 				/>
 				{settingsRoute ? (
 					<FloatingButton
@@ -183,6 +226,7 @@ export default function CustomTabBar({
 							descriptors[settingsRoute.key].options.title ?? settingsRoute.name
 						}
 						onPress={() => navigateToRoute('settings')}
+						palette={palette}
 					/>
 				) : null}
 			</FloatingCapsule>
@@ -192,31 +236,35 @@ export default function CustomTabBar({
 
 function CompletionPill({
 	completion,
+	palette,
 }: {
 	completion: MarkdownCompletionControl;
+	palette: FloatingSurfacePalette;
 }) {
 	if (completion.status === 'requesting') {
 		return (
-			<View
-				accessibilityLabel={completion.accessibilityLabel}
-				className="h-11 w-11 items-center justify-center rounded-full border
-					border-white/10 bg-neutral-950 px-3 shadow-lg shadow-black/25"
-			>
-				<ActivityIndicator color="#ffffff" size="small" />
-			</View>
+			<FloatingCapsule palette={palette}>
+				<View
+					accessibilityLabel={completion.accessibilityLabel}
+					className="h-8 w-8 items-center justify-center rounded-full"
+				>
+					<ActivityIndicator color={palette.iconColor} size="small" />
+				</View>
+			</FloatingCapsule>
 		);
 	}
 
 	if (completion.status === 'ready') {
 		return (
-			<Pressable
-				accessibilityLabel={completion.accessibilityLabel}
-				onPress={completion.onAccept}
-				className="h-11 w-11 items-center justify-center rounded-full border
-					border-white/10 bg-neutral-950 shadow-lg shadow-black/25"
-			>
-				<Check color="#ffffff" size={15} strokeWidth={2.4} />
-			</Pressable>
+			<FloatingCapsule palette={palette}>
+				<Pressable
+					accessibilityLabel={completion.accessibilityLabel}
+					onPress={completion.onAccept}
+					className="h-8 w-8 items-center justify-center rounded-full"
+				>
+					<Check color={palette.iconColor} size={15} strokeWidth={2.4} />
+				</Pressable>
+			</FloatingCapsule>
 		);
 	}
 
@@ -225,6 +273,7 @@ function CompletionPill({
 
 function MarkdownToolbarButton({
 	action,
+	palette,
 }: {
 	action: {
 		icon: TabIcon;
@@ -232,6 +281,7 @@ function MarkdownToolbarButton({
 		label: string;
 		onPress: () => void;
 	};
+	palette: FloatingSurfacePalette;
 }) {
 	const Icon = action.icon;
 
@@ -241,16 +291,27 @@ function MarkdownToolbarButton({
 			onPress={action.onPress}
 			className="min-h-9 min-w-9 items-center justify-center rounded-full px-2"
 		>
-			<Icon color="#ffffff" size={17} strokeWidth={2.2} />
+			<Icon color={palette.iconColor} size={17} strokeWidth={2.2} />
 		</Pressable>
 	);
 }
 
-function FloatingCapsule({ children }: { children: ReactNode }) {
+function FloatingCapsule({
+	children,
+	palette,
+}: {
+	children: ReactNode;
+	palette: FloatingSurfacePalette;
+}) {
 	return (
 		<View
-			className="flex-row items-center gap-0.5 rounded-full border
-				border-white/10 bg-neutral-950 p-1 shadow-lg shadow-black/25"
+			className="flex-row items-center gap-0.5 rounded-full p-1 shadow-lg
+				shadow-black/25"
+			style={{
+				backgroundColor: palette.surfaceColor,
+				borderColor: palette.borderColor,
+				borderWidth: 1,
+			}}
 		>
 			{children}
 		</View>
@@ -262,26 +323,84 @@ function FloatingButton({
 	icon: Icon,
 	label,
 	onPress,
+	palette,
 }: {
 	focused: boolean;
 	icon: TabIcon;
 	label: string;
 	onPress: () => void;
+	palette: FloatingSurfacePalette;
 }) {
-	const color = focused ? '#ffffff' : 'rgba(255, 255, 255, 0.6)';
+	const color = focused ? palette.textColor : palette.mutedIconColor;
 
 	return (
 		<Pressable
 			onPress={onPress}
-			className={`flex-row items-center gap-1.5 rounded-full px-3 py-2
-				${focused ? 'bg-white/15' : 'bg-transparent'}`}
+			className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
+			style={{
+				backgroundColor: focused ? palette.activeBackground : 'transparent',
+			}}
 		>
 			<Icon color={color} size={15} strokeWidth={2.2} />
 			<Text
-				className={`text-[13px] ${focused ? 'text-white' : 'text-white/60'}`}
+				className="text-[13px]"
+				style={{ color: focused ? palette.textColor : palette.mutedTextColor }}
 			>
 				{label}
 			</Text>
 		</Pressable>
 	);
+}
+
+function FloatingModeButton({
+	action,
+	palette,
+}: {
+	action: {
+		icon: TabIcon;
+		key: string;
+		label: string;
+		onPress: () => void;
+	};
+	palette: FloatingSurfacePalette;
+}) {
+	const Icon = action.icon;
+
+	return (
+		<FloatingCapsule palette={palette}>
+			<Pressable
+				accessibilityLabel={action.label}
+				onPress={action.onPress}
+				className="h-8 w-8 items-center justify-center rounded-full"
+			>
+				<Icon color={palette.textColor} size={15} strokeWidth={2.2} />
+			</Pressable>
+		</FloatingCapsule>
+	);
+}
+
+function getFloatingSurfacePalette(
+	theme: ResolvedThemePreference
+): FloatingSurfacePalette {
+	if (theme === 'dark') {
+		return {
+			activeBackground: 'rgba(255, 255, 255, 0.08)',
+			borderColor: 'rgba(255, 255, 255, 0.08)',
+			iconColor: '#f5f5f5',
+			mutedIconColor: 'rgba(245, 245, 245, 0.65)',
+			mutedTextColor: 'rgba(245, 245, 245, 0.65)',
+			surfaceColor: '#1a1a1a',
+			textColor: '#f5f5f5',
+		};
+	}
+
+	return {
+		activeBackground: 'rgba(17, 24, 39, 0.06)',
+		borderColor: 'rgba(17, 24, 39, 0.08)',
+		iconColor: '#111827',
+		mutedIconColor: 'rgba(17, 24, 39, 0.58)',
+		mutedTextColor: 'rgba(17, 24, 39, 0.58)',
+		surfaceColor: '#ffffff',
+		textColor: '#111827',
+	};
 }

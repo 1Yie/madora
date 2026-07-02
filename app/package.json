@@ -19,6 +19,7 @@
 		"@gluestack-ui/core": "^5.0.0-alpha.0",
 		"@gluestack-ui/utils": "^5.0.1-alpha.0",
 		"@legendapp/motion": "^2.4.0",
+		"@lobehub/icons": "^5.8.0",
 		"@react-navigation/bottom-tabs": "^7.18.4",
 		"expo": "~57.0.1",
 		"expo-camera": "~57.0.0",

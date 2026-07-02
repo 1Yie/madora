@@ -8,6 +8,7 @@ import {
 } from 'react';
 
 import { generateCompletion, useAiSettings } from '@/features/ai';
+import { useAppSettings } from '@/features/settings';
 import {
 	createLocalMarkdownFile,
 	pickLocalDirectory,
@@ -44,6 +45,7 @@ const EditorContext = createContext<EditorContextValue | null>(null);
 
 export function EditorProvider({ children }: { children: ReactNode }) {
 	const aiSettings = useAiSettings();
+	const { saveMode } = useAppSettings();
 	const [documents, setDocuments] = useState<EditorDocument[]>([]);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [fileTree, setFileTree] = useState<EditorNode[]>([]);
@@ -184,14 +186,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				)
 			);
 
-			try {
-				writeLocalFile(selectedDocumentId, content);
-				setErrorMessage(null);
-			} catch (error) {
-				setErrorMessage(getErrorMessage(error, 'Failed to save local file'));
+			if (saveMode === 'auto') {
+				try {
+					writeLocalFile(selectedDocumentId, content);
+					setErrorMessage(null);
+				} catch (error) {
+					setErrorMessage(getErrorMessage(error, 'Failed to save local file'));
+				}
 			}
 		},
-		[selectedDocumentId]
+		[saveMode, selectedDocumentId]
 	);
 
 	const requestInlineCompletion = useCallback(

@@ -1,27 +1,40 @@
 'use client';
-import { createSlider } from '@gluestack-ui/core/slider/creator';
+
+import React from 'react';
+import { styled } from 'nativewind';
+import { Pressable, View } from 'react-native';
 import type { VariantProps } from '@gluestack-ui/utils/nativewind-utils';
 import {
 	tva,
 	useStyleContext,
 	withStyleContext,
 } from '@gluestack-ui/utils/nativewind-utils';
-import { styled } from 'nativewind';
-import React from 'react';
-import { Pressable, View } from 'react-native';
+import { createSlider as createSliderFactory } from '@gluestack-ui/core/lib/esm/slider/creator/index.jsx';
 
 const SCOPE = 'SLIDER';
 const Root = withStyleContext(View, SCOPE);
+
+const createSlider =
+	typeof createSliderFactory === 'function'
+		? createSliderFactory
+		: (
+				createSliderFactory as unknown as {
+					default?: typeof createSliderFactory;
+				}
+			).default;
+
 export const UISlider = createSlider({
-	Root: Root,
+	Root,
 	Thumb: View,
 	Track: Pressable,
 	FilledTrack: View,
 	ThumbInteraction: View,
 });
+
 const StyledTrack = styled(UISlider.Track, {
 	className: 'style',
 });
+
 const sliderStyle = tva({
 	base: 'justify-center items-center data-[disabled=true]:opacity-40 data-[disabled=true]:web:pointer-events-none',
 	variants: {
@@ -37,14 +50,14 @@ const sliderStyle = tva({
 });
 
 const sliderThumbStyle = tva({
-	base: 'bg-white border border-primary ring-ring/50 absolute rounded-full shadow-sm transition-[color,box-shadow] data-[hover=true]:ring-4 data-[focus-visible=true]:ring-4 data-[focus-visible=true]:outline-hidden disabled:pointer-events-none disabled:opacity-50 web:cursor-pointer h-4 w-4',
+	base: 'absolute h-4 w-4 rounded-full border border-primary bg-white shadow-sm transition-[color,box-shadow] data-[hover=true]:ring-4 data-[focus-visible=true]:ring-4 data-[focus-visible=true]:outline-hidden disabled:pointer-events-none disabled:opacity-50 web:cursor-pointer',
 });
 
 const sliderTrackStyle = tva({
-	base: 'bg-muted rounded-full overflow-hidden',
+	base: 'overflow-hidden rounded-full bg-muted',
 	parentVariants: {
 		orientation: {
-			horizontal: 'w-full h-1.5 flex-row',
+			horizontal: 'h-1.5 w-full flex-row',
 			vertical: 'h-full w-1.5 flex-col-reverse',
 		},
 		isReversed: {
@@ -89,8 +102,6 @@ const Slider = React.forwardRef<
 	return (
 		<UISlider
 			ref={ref}
-			isReversed={isReversed}
-			orientation={orientation}
 			{...props}
 			className={sliderStyle({
 				orientation,
@@ -98,6 +109,8 @@ const Slider = React.forwardRef<
 				class: className,
 			})}
 			context={{ orientation, isReversed }}
+			isReversed={isReversed}
+			orientation={orientation}
 		/>
 	);
 });
@@ -131,7 +144,6 @@ const SliderTrack = React.forwardRef<
 
 	return (
 		<StyledTrack
-			hitSlop={20}
 			ref={ref}
 			{...props}
 			className={sliderTrackStyle({
@@ -141,6 +153,7 @@ const SliderTrack = React.forwardRef<
 				},
 				class: className,
 			})}
+			hitSlop={20}
 		/>
 	);
 });
@@ -169,5 +182,10 @@ const SliderFilledTrack = React.forwardRef<
 		/>
 	);
 });
+
+Slider.displayName = 'Slider';
+SliderTrack.displayName = 'SliderTrack';
+SliderFilledTrack.displayName = 'SliderFilledTrack';
+SliderThumb.displayName = 'SliderThumb';
 
 export { Slider, SliderFilledTrack, SliderThumb, SliderTrack };
