@@ -1,4 +1,4 @@
-import { WorkspaceScreen } from '../features/madora-sync/workspace-screen';
+import { WorkspaceScreen } from '@/features/editor';
 
 export default function HomeScreen() {
 	return <WorkspaceScreen />;

@@ -5,10 +5,11 @@ import { StatusBar, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
-import AppTabs from '../components/app-tabs';
 import { GluestackUIProvider } from '../components/ui/gluestack-ui-provider';
-import { AiSettingsProvider } from '../features/ai/settings-provider';
-import { MadoraSyncProvider } from '../features/madora-sync/provider';
+import { AppTabs } from '@/app-shell';
+import { AiSettingsProvider } from '@/features/ai';
+import { EditorProvider } from '@/features/editor';
+import { MadoraSyncProvider } from '@/features/madora-sync';
 import '@/i18n';
 import '../global.css';
 
@@ -40,7 +41,9 @@ export default function TabLayout() {
 					>
 						<AiSettingsProvider>
 							<MadoraSyncProvider>
-								<AppTabs />
+								<EditorProvider>
+									<AppTabs />
+								</EditorProvider>
 							</MadoraSyncProvider>
 						</AiSettingsProvider>
 					</ThemeProvider>

@@ -209,8 +209,24 @@ const zhCN = {
 		workspace: '工作区',
 	},
 	fileTree: {
-		detail: '当前工作区文档',
+		actions: {
+			newFile: '新建文件',
+			openFile: '打开文件',
+			openFolder: '打开文件夹',
+		},
+		detail: '本地文件和文件夹',
+		empty: {
+			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
+			title: '还未选择文件夹',
+		},
 		title: '文件树',
+	},
+	workspace: {
+		empty: {
+			detail:
+				'请先打开一个本地文件夹，然后在文件夹内新建或选择 Markdown 文件。',
+			title: '还未选择文件',
+		},
 	},
 	settingsHome: {
 		detail: '管理编辑器、外观、AI Provider 和应用信息。',
@@ -328,12 +344,10 @@ const zhCN = {
 		},
 		emptyTrusted: '还没有配对设备。',
 		localStore: {
-			detail: '使用 SQLite 保存草稿和信任设备状态。',
-			title: '本地存储',
+			detail: '使用 SQLite 保存配对状态和信任设备记录。',
+			title: '同步存储',
 		},
 		metrics: {
-			docs: '文档',
-			pending: '待同步',
 			trusted: '信任',
 		},
 		pairing: {

@@ -1,4 +1,4 @@
-import { SettingsDetailScreen } from '../../features/settings/settings-screen';
+import { SettingsDetailScreen } from '@/features/settings';
 
 export default function AboutSettingsRoute() {
 	return <SettingsDetailScreen section="about" />;

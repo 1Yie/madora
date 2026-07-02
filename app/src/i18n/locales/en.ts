@@ -241,8 +241,24 @@ const en = {
 		workspace: 'Workspace',
 	},
 	fileTree: {
-		detail: 'Current workspace documents',
+		actions: {
+			newFile: 'New file',
+			openFile: 'Open file',
+			openFolder: 'Open folder',
+		},
+		detail: 'Local files and folders',
+		empty: {
+			detail: 'Open a local folder to browse and create files here.',
+			title: 'No folder selected',
+		},
 		title: 'File tree',
+	},
+	workspace: {
+		empty: {
+			detail:
+				'Open a local folder first, then create or select a Markdown file inside it.',
+			title: 'No file selected',
+		},
 	},
 	settingsHome: {
 		detail:
@@ -369,12 +385,10 @@ const en = {
 		},
 		emptyTrusted: 'No paired devices yet.',
 		localStore: {
-			detail: 'SQLite-backed state for drafts and trusted devices.',
-			title: 'Local store',
+			detail: 'SQLite-backed pairing state and trusted device records.',
+			title: 'Sync store',
 		},
 		metrics: {
-			docs: 'Docs',
-			pending: 'Pending',
 			trusted: 'Trusted',
 		},
 		pairing: {

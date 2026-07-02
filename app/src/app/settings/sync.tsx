@@ -1,5 +1,5 @@
-import { SettingsBackButton } from '../../features/settings/settings-screen';
-import { SyncSettingsScreen } from '../../features/madora-sync/sync-settings-screen';
+import { SyncSettingsScreen } from '@/features/madora-sync';
+import { SettingsBackButton } from '@/features/settings';
 
 export default function SyncSettingsRoute() {
 	return (
