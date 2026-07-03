@@ -38,4 +38,9 @@ export type EditorWorkspaceSource =
 			kind: 'directory';
 			name: string;
 			uri: string;
+	  }
+	| {
+			kind: 'remote';
+			name: string;
+			uri: string;
 	  };

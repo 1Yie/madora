@@ -28,6 +28,8 @@ pub struct MadoraSyncPairedDevice {
     pub platform: Option<String>,
     pub last_seen_at: Option<String>,
     pub trusted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_token: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

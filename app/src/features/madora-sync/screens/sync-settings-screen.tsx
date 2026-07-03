@@ -1,15 +1,14 @@
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
 	CheckCircle2,
-	Cloud,
-	Database,
-	MonitorSmartphone,
 	RefreshCw,
-	ShieldCheck,
+	Trash2,
 	Unplug,
+	Wifi,
+	WifiOff,
 } from 'lucide-react-native';
 
 import {
@@ -51,11 +50,14 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 		lastSyncAt,
 		pairedHost,
 		pairFromQrPayload,
+		reconnect,
 		refreshRemoteFileTree,
 		storageStats,
 		trustedDevices,
+		removeTrustedDevice,
 	} = useMadoraSync();
 	const [scannerVisible, setScannerVisible] = useState(false);
+	const isConnected = connectionState === 'connected';
 
 	const handleScanned = async (raw: string) => {
 		setScannerVisible(false);
@@ -134,8 +136,9 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 
 				<SettingsCard title={t('syncSettings.connection.title')}>
 					<View className="gap-3">
-						<InfoRow
+						<ConnectionStateRow
 							label={t('syncSettings.connection.state')}
+							state={connectionState}
 							value={t(`common.status.${connectionState}`)}
 						/>
 						<InfoRow
@@ -145,8 +148,35 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 								t('syncSettings.connection.neverSynced')
 							}
 						/>
+						{errorMessage ? (
+							<View
+								className="rounded-md px-3 py-2"
+								style={{
+									backgroundColor: 'rgba(239, 68, 68, 0.12)',
+									borderColor: 'rgba(239, 68, 68, 0.35)',
+									borderWidth: 1,
+								}}
+							>
+								<Text className="text-[12px] leading-5 text-destructive">
+									{errorMessage}
+								</Text>
+							</View>
+						) : null}
+						{pairedHost && !isConnected ? (
+							<ActionButton
+								icon={
+									<Wifi
+										color={palette.accentForeground}
+										size={15}
+										strokeWidth={2.1}
+									/>
+								}
+								label={t('syncSettings.connection.reconnect')}
+								onPress={reconnect}
+							/>
+						) : null}
 						<ActionButton
-							disabled={!pairedHost}
+							disabled={!isConnected}
 							icon={
 								<RefreshCw
 									color={palette.accentForeground}
@@ -203,6 +233,36 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 											{formatLastSeen(device.lastSeen)}
 										</Text>
 									</View>
+									<Pressable
+										className="ml-2 items-center justify-center rounded-full
+											p-2"
+										style={({ pressed }) => ({
+											backgroundColor: pressed
+												? palette.surfaceMuted
+												: 'transparent',
+										})}
+										onPress={() => {
+											Alert.alert(
+												t('common.actions.delete'),
+												t('syncSettings.trustedDevices.removeConfirm', {
+													name: device.name,
+												}),
+												[
+													{
+														text: t('common.actions.cancel'),
+														style: 'cancel',
+													},
+													{
+														text: t('common.actions.delete'),
+														style: 'destructive',
+														onPress: () => void removeTrustedDevice(device.id),
+													},
+												]
+											);
+										}}
+									>
+										<Trash2 color={palette.iconMuted} size={16} />
+									</Pressable>
 								</View>
 							))
 						)}
@@ -249,6 +309,36 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 			>
 				{value}
 			</Text>
+		</View>
+	);
+}
+
+function ConnectionStateRow({
+	label,
+	state,
+	value,
+}: {
+	label: string;
+	state: string;
+	value: string;
+}) {
+	const color =
+		state === 'connected'
+			? '#059669'
+			: state === 'disconnected'
+				? '#71717a'
+				: '#0284c7';
+	const Icon = state === 'disconnected' ? WifiOff : Wifi;
+
+	return (
+		<View className="flex-row items-center justify-between gap-3">
+			<Text className="text-[13px] text-muted-foreground">{label}</Text>
+			<View className="flex-row items-center gap-1.5">
+				<Icon color={color} size={14} strokeWidth={2.2} />
+				<Text className="text-[13px] font-semibold" style={{ color }}>
+					{value}
+				</Text>
+			</View>
 		</View>
 	);
 }

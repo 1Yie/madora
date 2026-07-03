@@ -112,3 +112,7 @@ export async function madoraSyncPairDevice(
 		request,
 	});
 }
+
+export async function madoraSyncRestartServer(): Promise<boolean> {
+	return invoke<boolean>('madora_sync_restart_server');
+}

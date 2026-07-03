@@ -6,7 +6,8 @@
 //! [`MadoraSyncStore`].
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tauri::{AppHandle, Manager, Runtime};
@@ -30,8 +31,9 @@ use crate::services::madora_sync::MadoraSyncStore;
 /// via the shared shutdown flag.
 pub struct SyncServer;
 
-/// Shared shutdown signal for the accept loop.
-static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+/// Monotonic generation for sync-server listeners. Restarting increments the
+/// generation so older accept loops exit and release their port.
+static SERVER_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// Spawn the WebSocket server on the Tauri async runtime.
 ///
@@ -55,13 +57,13 @@ pub fn spawn<R: Runtime>(handle: AppHandle<R>) {
     }
 
     let port = config.port;
-    SHUTDOWN.store(false, Ordering::SeqCst);
+    let generation = SERVER_GENERATION.load(Ordering::SeqCst);
 
     tauri::async_runtime::spawn(async move {
         match TcpListener::bind(("0.0.0.0", port)).await {
             Ok(listener) => {
                 println!("[madora-sync] server listening on :{port}");
-                accept_loop(listener, handle).await;
+                accept_loop(listener, handle, generation).await;
             }
             Err(error) => {
                 eprintln!("[madora-sync] failed to bind port {port}: {error}");
@@ -73,41 +75,38 @@ pub fn spawn<R: Runtime>(handle: AppHandle<R>) {
 /// Signal the accept loop to stop. Existing connections are not forcibly
 /// closed — they finish their current request then drop on disconnect.
 pub fn stop() {
-    SHUTDOWN.store(true, Ordering::SeqCst);
+    SERVER_GENERATION.fetch_add(1, Ordering::SeqCst);
 }
 
-async fn accept_loop<R: Runtime>(listener: TcpListener, handle: AppHandle<R>) {
+async fn accept_loop<R: Runtime>(listener: TcpListener, handle: AppHandle<R>, generation: u64) {
     loop {
-        if SHUTDOWN.load(Ordering::SeqCst) {
+        if SERVER_GENERATION.load(Ordering::SeqCst) != generation {
             break;
         }
 
         // Accept with a short timeout so we can poll the shutdown flag.
-        let accept = listener.accept();
-        tokio::pin!(accept);
+        let accept = tokio::time::timeout(Duration::from_millis(250), listener.accept()).await;
+        let Ok(result) = accept else {
+            continue;
+        };
 
-        tokio::select! {
-            biased;
-            _ = tokio::signal::ctrl_c() => break,
-            result = &mut accept => {
-                let Ok((stream, peer)) = result else {
-                    continue;
-                };
-                let handle = handle.clone();
-                tauri::async_runtime::spawn(async move {
-                    match tokio_tungstenite::accept_async(stream).await {
-                        Ok(ws_stream) => {
-                            if let Err(error) = handle_connection(ws_stream, handle, peer).await {
-                                eprintln!("[madora-sync] connection error ({peer}): {error}");
-                            }
-                        }
-                        Err(error) => {
-                            eprintln!("[madora-sync] ws handshake failed ({peer}): {error}");
-                        }
+        let Ok((stream, peer)) = result else {
+            continue;
+        };
+
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            match tokio_tungstenite::accept_async(stream).await {
+                Ok(ws_stream) => {
+                    if let Err(error) = handle_connection(ws_stream, handle, peer).await {
+                        eprintln!("[madora-sync] connection error ({peer}): {error}");
                     }
-                });
+                }
+                Err(error) => {
+                    eprintln!("[madora-sync] ws handshake failed ({peer}): {error}");
+                }
             }
-        }
+        });
     }
 
     println!("[madora-sync] server stopped");
@@ -157,7 +156,7 @@ async fn handle_connection<R: Runtime>(
             pairing_token: auth.pairing_token.clone(),
             pairing_code: auth.code.clone(),
         };
-        store.pair_device(request).map(|result| result.device.name)
+        store.authenticate_device(request).map(|device| device.name)
     };
 
     match device_name_result {

@@ -262,6 +262,10 @@ const ko = {
 			title: '항목 삭제',
 		},
 		detail: '로컬 파일과 폴더',
+		tabs: {
+			local: '로컬 폴더',
+			remote: '원격 폴더',
+		},
 		empty: {
 			detail: '로컬 폴더를 열어 여기서 파일을 탐색하고 만들 수 있습니다.',
 			title: '선택된 폴더가 없습니다',
@@ -418,6 +422,7 @@ const ko = {
 			lastSync: '마지막 동기화',
 			neverSynced: '아직 동기화되지 않음',
 			refreshFiles: '파일 새로고침',
+			reconnect: '다시 연결',
 			state: '상태',
 			title: '연결',
 		},
@@ -441,6 +446,7 @@ const ko = {
 		},
 		trustedDevices: {
 			detail: '재연결을 위해 로컬에 저장됩니다.',
+			removeConfirm: '{{name}}을(를) 신뢰할 수 있는 기기에서 제거할까요?',
 			title: '신뢰할 수 있는 기기',
 		},
 		title: '동기화 설정',

@@ -237,6 +237,10 @@ const zhCN = {
 			title: '删除项目',
 		},
 		detail: '本地文件和文件夹',
+		tabs: {
+			local: '本地文件夹',
+			remote: '远程文件夹',
+		},
 		empty: {
 			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
 			title: '还未选择文件夹',
@@ -386,6 +390,7 @@ const zhCN = {
 			lastSync: '上次同步',
 			neverSynced: '还未同步',
 			refreshFiles: '刷新文件',
+			reconnect: '重新连接',
 			state: '状态',
 			title: '连接',
 		},
@@ -409,6 +414,7 @@ const zhCN = {
 		},
 		trustedDevices: {
 			detail: '本地保存这些设备，用于后续重连。',
+			removeConfirm: '从信任设备中移除 {{name}}？',
 			title: '信任设备',
 		},
 		title: '同步设置',

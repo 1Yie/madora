@@ -262,6 +262,10 @@ const ja = {
 			title: '項目を削除',
 		},
 		detail: 'ローカルのファイルとフォルダー',
+		tabs: {
+			local: 'ローカルフォルダー',
+			remote: 'リモートフォルダー',
+		},
 		empty: {
 			detail:
 				'ローカルフォルダーを開いて、ここでファイルを閲覧・作成できます。',
@@ -420,6 +424,7 @@ const ja = {
 			lastSync: '前回の同期',
 			neverSynced: 'まだ同期されていません',
 			refreshFiles: 'ファイルを更新',
+			reconnect: '再接続',
 			state: '状態',
 			title: '接続',
 		},
@@ -444,6 +449,7 @@ const ja = {
 		},
 		trustedDevices: {
 			detail: '再接続用にローカルに保存されています。',
+			removeConfirm: '{{name}} を信頼済みデバイスから削除しますか？',
 			title: '信頼済みデバイス',
 		},
 		title: '同期設定',

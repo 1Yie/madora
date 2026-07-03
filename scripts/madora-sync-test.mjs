@@ -71,11 +71,7 @@ function candidateStatePaths(identifier) {
 		process.env.XDG_DATA_HOME || path.join(homeDir, '.local', 'share');
 	const windowsAppData =
 		process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
-	const macosAppSupport = path.join(
-		homeDir,
-		'Library',
-		'Application Support'
-	);
+	const macosAppSupport = path.join(homeDir, 'Library', 'Application Support');
 
 	return [
 		path.join(xdgDataHome, identifier, STATE_FILE_NAME),
@@ -133,7 +129,9 @@ function normalizeState(state) {
 	return {
 		...defaultState(),
 		...state,
-		pairedDevices: Array.isArray(state?.pairedDevices) ? state.pairedDevices : [],
+		pairedDevices: Array.isArray(state?.pairedDevices)
+			? state.pairedDevices
+			: [],
 	};
 }
 
@@ -216,17 +214,20 @@ async function runPair(statePath, flags) {
 	}
 
 	if (!state.enabled) {
-		throw new Error('Madora Sync is disabled. Enable device collaboration first.');
+		throw new Error(
+			'Madora Sync is disabled. Enable device collaboration first.'
+		);
 	}
 	if (!state.activePairingId) {
-		throw new Error('No active pairing ticket. Generate a QR/code in Madora first.');
+		throw new Error(
+			'No active pairing ticket. Generate a QR/code in Madora first.'
+		);
 	}
 
 	const useCode = flags.get('use-code') === true;
 	const deviceId =
 		flags.get('device-id')?.toString() || `cli-test-${Date.now()}`;
-	const deviceName =
-		flags.get('device-name')?.toString() || 'CLI Test Device';
+	const deviceName = flags.get('device-name')?.toString() || 'CLI Test Device';
 	const platform = flags.get('platform')?.toString() || 'cli';
 
 	const tokenMatches = useCode
@@ -249,6 +250,7 @@ async function runPair(statePath, flags) {
 		platform,
 		lastSeenAt: pairedAt,
 		trusted: true,
+		authToken: state.activePairingToken,
 	};
 
 	state.pairedDevices = state.pairedDevices.filter(

@@ -268,6 +268,10 @@ const en = {
 			title: 'Delete item',
 		},
 		detail: 'Local files and folders',
+		tabs: {
+			local: 'Local folder',
+			remote: 'Remote folder',
+		},
 		empty: {
 			detail: 'Open a local folder to browse and create files here.',
 			title: 'No folder selected',
@@ -428,6 +432,7 @@ const en = {
 			lastSync: 'Last sync',
 			neverSynced: 'Not synced yet',
 			refreshFiles: 'Refresh files',
+			reconnect: 'Reconnect',
 			state: 'State',
 			title: 'Connection',
 		},
@@ -451,6 +456,7 @@ const en = {
 		},
 		trustedDevices: {
 			detail: 'Stored locally for reconnect.',
+			removeConfirm: 'Remove {{name}} from trusted devices?',
 			title: 'Trusted devices',
 		},
 		title: 'Sync settings',

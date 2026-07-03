@@ -26,6 +26,7 @@ import {
 	FolderOpen,
 	FolderPlus,
 	LocateFixed,
+	MonitorSmartphone,
 	RefreshCw,
 	Trash2,
 	X,
@@ -57,6 +58,7 @@ import {
 	useAppThemePalette,
 	useResolvedThemePreference,
 } from '@/features/settings';
+import { useMadoraSync } from '@/features/madora-sync';
 
 const EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING = 56;
 const EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING = 40;
@@ -85,6 +87,8 @@ export function WorkspaceScreen() {
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const {
 		bookmarkedDocumentIds,
+		workspaceMode,
+		switchWorkspaceMode,
 		cancelCopiedFile,
 		copySelectedFile,
 		copyState,
@@ -98,6 +102,7 @@ export function WorkspaceScreen() {
 		focusedTreeNode,
 		isFocusedTreeNodeBookmarked,
 		openLocalFolder,
+		openRemoteWorkspace,
 		pasteCopiedFile,
 		locateSelectedDocumentInTree,
 		renameSelectedFile,
@@ -112,6 +117,7 @@ export function WorkspaceScreen() {
 		updateSelectedDocumentContent,
 		workspaceSource,
 	} = useEditorWorkspace();
+	const { connectionState } = useMadoraSync();
 	const { showToast } = useNativeToast();
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [createValue, setCreateValue] = useState('');
@@ -204,6 +210,12 @@ export function WorkspaceScreen() {
 
 	const handleOpenFolder = () => {
 		void openLocalFolder().then((opened) => {
+			if (opened) setActiveTab('fileTree');
+		});
+	};
+
+	const handleOpenRemoteWorkspace = () => {
+		void openRemoteWorkspace().then((opened) => {
 			if (opened) setActiveTab('fileTree');
 		});
 	};
@@ -348,9 +360,9 @@ export function WorkspaceScreen() {
 							(fileTree.length === 0 && Boolean(selectedDocument))
 						}
 						canCreateFile={workspaceSource.kind === 'directory'}
+						connectionState={connectionState}
 						copyState={copyState}
 						documents={documents}
-						errorMessage={errorMessage}
 						expandedDirectoryPaths={expandedDirectoryPaths}
 						fileTree={fileTree}
 						focusedTreeNode={focusedTreeNode}
@@ -365,6 +377,7 @@ export function WorkspaceScreen() {
 						onLocateCurrent={handleLocateSelectedDocument}
 						onOpenDocument={handleOpenDocument}
 						onOpenFolder={handleOpenFolder}
+						onOpenRemote={handleOpenRemoteWorkspace}
 						onPasteFile={handlePasteFile}
 						onRenameFile={handleOpenRename}
 						onRefreshFileTree={handleRefreshFileTree}
@@ -378,6 +391,8 @@ export function WorkspaceScreen() {
 						}
 						selectedTreeNodePath={selectedTreeNodePath}
 						workspaceSource={workspaceSource}
+						workspaceMode={workspaceMode}
+						switchWorkspaceMode={switchWorkspaceMode}
 					/>
 				</View>
 
@@ -405,9 +420,10 @@ export function WorkspaceScreen() {
 					) : (
 						<EmptyEditorState
 							canCreateFile={workspaceSource.kind === 'directory'}
-							errorMessage={errorMessage}
+							connectionState={connectionState}
 							onCreateFile={handleOpenCreateFile}
 							onOpenFolder={handleOpenFolder}
+							onOpenRemote={handleOpenRemoteWorkspace}
 							topPadding={editorTopPadding}
 							workspaceSource={workspaceSource}
 						/>
@@ -459,9 +475,9 @@ function FileTreeView({
 	bookmarkedDocumentIds,
 	canCopyFile,
 	canCreateFile,
+	connectionState,
 	copyState,
 	documents,
-	errorMessage,
 	expandedDirectoryPaths,
 	fileTree,
 	focusedTreeNode,
@@ -476,6 +492,7 @@ function FileTreeView({
 	onLocateCurrent,
 	onOpenDocument,
 	onOpenFolder,
+	onOpenRemote,
 	onPasteFile,
 	onRenameFile,
 	onRefreshFileTree,
@@ -487,13 +504,15 @@ function FileTreeView({
 	selectedDocumentRelativePath,
 	selectedTreeNodePath,
 	workspaceSource,
+	workspaceMode,
+	switchWorkspaceMode,
 }: {
 	bookmarkedDocumentIds: string[];
 	canCopyFile: boolean;
 	canCreateFile: boolean;
+	connectionState?: string;
 	copyState: { documentId: string; title: string } | null;
 	documents: EditorDocument[];
-	errorMessage: string | null;
 	expandedDirectoryPaths: Set<string>;
 	fileTree: EditorNode[];
 	focusedTreeNode: EditorNode | null;
@@ -508,6 +527,7 @@ function FileTreeView({
 	onLocateCurrent: () => void;
 	onOpenDocument: (documentId: string) => void;
 	onOpenFolder: () => void;
+	onOpenRemote: () => void;
 	onPasteFile: () => void;
 	onRenameFile: () => void;
 	onRefreshFileTree: () => void;
@@ -519,6 +539,8 @@ function FileTreeView({
 	selectedDocumentRelativePath: string | null;
 	selectedTreeNodePath: string | null;
 	workspaceSource: EditorWorkspaceSource;
+	workspaceMode: 'local' | 'remote';
+	switchWorkspaceMode: (mode: 'local' | 'remote') => void;
 }) {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
@@ -570,8 +592,9 @@ function FileTreeView({
 	if (showUnselectedFolderState) {
 		return (
 			<EmptyFolderSelectionState
-				errorMessage={errorMessage}
+				connectionState={connectionState}
 				onOpenFolder={onOpenFolder}
+				onOpenRemote={onOpenRemote}
 				topPadding={insets.top}
 			/>
 		);
@@ -580,6 +603,35 @@ function FileTreeView({
 	return (
 		<View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
 			<View style={{ borderBottomColor: palette.border, borderBottomWidth: 1 }}>
+				<View className="flex-row items-center px-4 pt-3 pb-1 gap-2">
+					<Pressable
+						onPress={() => switchWorkspaceMode('local')}
+						className={`flex-1 items-center justify-center rounded-md py-1.5 ${
+							workspaceMode === 'local' ? 'bg-primary' : 'bg-muted'
+						}`}
+					>
+						<Text
+							className={`text-[13px] font-semibold
+								${workspaceMode === 'local' ? 'text-primary-foreground' : 'text-muted-foreground'}`}
+						>
+							{t('fileTree.tabs.local', '本地文件夹')}
+						</Text>
+					</Pressable>
+					<Pressable
+						onPress={() => switchWorkspaceMode('remote')}
+						className={`flex-1 items-center justify-center rounded-md py-1.5 ${
+							workspaceMode === 'remote' ? 'bg-primary' : 'bg-muted'
+						}`}
+					>
+						<Text
+							className={`text-[13px] font-semibold
+								${workspaceMode === 'remote' ? 'text-primary-foreground' : 'text-muted-foreground'}`}
+						>
+							{t('fileTree.tabs.remote', '远程文件夹')}
+						</Text>
+					</Pressable>
+				</View>
+
 				<View className="flex-row items-center justify-between gap-3 px-4 py-3">
 					<Text
 						className="min-w-0 flex-1 text-[15px] font-semibold text-foreground"
@@ -587,7 +639,7 @@ function FileTreeView({
 					>
 						{workspacePath}
 					</Text>
-					{showWorkspaceActions ? (
+					{showWorkspaceActions && workspaceSource.kind !== 'remote' ? (
 						<FileToolbarIconButton
 							icon={FolderOpen}
 							label={t('fileTree.actions.openFolder')}
@@ -756,8 +808,10 @@ function FileTreeView({
 					{fileTree.length === 0 && documents.length === 0 ? (
 						<EmptyWorkspace
 							canCreateFile={canCreateFile}
+							connectionState={connectionState}
 							onCreateFile={onCreateFile}
 							onOpenFolder={onOpenFolder}
+							onOpenRemote={onOpenRemote}
 							palette={palette}
 							workspaceSource={workspaceSource}
 						/>
@@ -1161,14 +1215,18 @@ function FileActionButton({
 
 function EmptyWorkspace({
 	canCreateFile,
+	connectionState,
 	onCreateFile,
 	onOpenFolder,
+	onOpenRemote,
 	palette,
 	workspaceSource,
 }: {
 	canCreateFile: boolean;
+	connectionState?: string;
 	onCreateFile: () => void;
 	onOpenFolder: () => void;
+	onOpenRemote: () => void;
 	palette: ReturnType<typeof useAppThemePalette>;
 	workspaceSource: EditorWorkspaceSource;
 }) {
@@ -1202,6 +1260,18 @@ function EmptyWorkspace({
 						onPress={onOpenFolder}
 						palette={palette}
 					/>
+					{workspaceSource.kind !== 'remote' ? (
+						<FileActionButton
+							icon={MonitorSmartphone}
+							label={
+								connectionState === 'connected'
+									? 'Open Remote'
+									: 'Connect Desktop'
+							}
+							onPress={onOpenRemote}
+							palette={palette}
+						/>
+					) : null}
 				</View>
 			</View>
 		</View>
@@ -1209,12 +1279,14 @@ function EmptyWorkspace({
 }
 
 function EmptyFolderSelectionState({
-	errorMessage,
+	connectionState,
 	onOpenFolder,
+	onOpenRemote,
 	topPadding,
 }: {
-	errorMessage: string | null;
+	connectionState?: string;
 	onOpenFolder: () => void;
+	onOpenRemote: () => void;
 	topPadding: number;
 }) {
 	const { t } = useTranslation();
@@ -1234,15 +1306,22 @@ function EmptyFolderSelectionState({
 						{t('fileTree.empty.detail')}
 					</Text>
 				</View>
-				{errorMessage ? (
-					<Text className="text-[12px] text-destructive">{errorMessage}</Text>
-				) : null}
 				<View className="gap-2">
 					<View className="flex-row gap-2">
 						<FileActionButton
 							icon={FolderPlus}
 							label={t('fileTree.actions.openFolder')}
 							onPress={onOpenFolder}
+							palette={palette}
+						/>
+						<FileActionButton
+							icon={MonitorSmartphone}
+							label={
+								connectionState === 'connected'
+									? 'Open Remote'
+									: 'Connect Desktop'
+							}
+							onPress={onOpenRemote}
 							palette={palette}
 						/>
 					</View>
@@ -1254,16 +1333,18 @@ function EmptyFolderSelectionState({
 
 function EmptyEditorState({
 	canCreateFile,
-	errorMessage,
+	connectionState,
 	onCreateFile,
 	onOpenFolder,
+	onOpenRemote,
 	topPadding,
 	workspaceSource,
 }: {
 	canCreateFile: boolean;
-	errorMessage: string | null;
+	connectionState?: string;
 	onCreateFile: () => void;
 	onOpenFolder: () => void;
+	onOpenRemote: () => void;
 	topPadding: number;
 	workspaceSource: EditorWorkspaceSource;
 }) {
@@ -1292,9 +1373,6 @@ function EmptyEditorState({
 						{detail}
 					</Text>
 				</View>
-				{errorMessage ? (
-					<Text className="text-[12px] text-destructive">{errorMessage}</Text>
-				) : null}
 				<View className="gap-2">
 					<View className="flex-row gap-2">
 						{hasOpenFolder ? (
@@ -1307,12 +1385,26 @@ function EmptyEditorState({
 								/>
 							) : null
 						) : (
-							<FileActionButton
-								icon={FolderPlus}
-								label={t('fileTree.actions.openFolder')}
-								onPress={onOpenFolder}
-								palette={palette}
-							/>
+							<>
+								<FileActionButton
+									icon={FolderPlus}
+									label={t('fileTree.actions.openFolder')}
+									onPress={onOpenFolder}
+									palette={palette}
+								/>
+								{workspaceSource.kind !== 'remote' ? (
+									<FileActionButton
+										icon={MonitorSmartphone}
+										label={
+											connectionState === 'connected'
+												? 'Open Remote'
+												: 'Connect Desktop'
+										}
+										onPress={onOpenRemote}
+										palette={palette}
+									/>
+								) : null}
+							</>
 						)}
 					</View>
 				</View>
@@ -1329,6 +1421,12 @@ function getWorkspaceDisplayPath(
 		return selectedDocumentRelativePath
 			? `${workspaceSource.name}/${selectedDocumentRelativePath}`
 			: workspaceSource.name;
+	}
+
+	if (workspaceSource.kind === 'remote') {
+		return selectedDocumentRelativePath
+			? `${workspaceSource.uri}/${selectedDocumentRelativePath}`
+			: workspaceSource.uri;
 	}
 
 	if (workspaceSource.kind === 'file') {

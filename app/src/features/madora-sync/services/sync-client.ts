@@ -145,6 +145,14 @@ export class SyncClient {
 		}
 	}
 
+	resolveAllPending(message: ServerMessage): void {
+		for (const [, entry] of this.pending) {
+			clearTimeout(entry.timer);
+			entry.resolve(message);
+		}
+		this.pending.clear();
+	}
+
 	// ─── Internal ──────────────────────────────────────────────────────────
 
 	private openSocket(): void {
@@ -197,9 +205,16 @@ export class SyncClient {
 			if (message.type === 'auth_error') {
 				// Auth failed — do not reconnect (credentials are wrong, not a transient failure).
 				this.intentionallyClosed = true;
+				this.resolveAllPending(message);
 				this.emitMessage(message);
 				this.cleanupSocket();
 				this.setState('disconnected');
+				return;
+			}
+
+			if (message.type === 'error') {
+				this.resolveAllPending(message);
+				this.emitMessage(message);
 				return;
 			}
 
@@ -267,7 +282,6 @@ export class SyncClient {
 	}
 
 	private failAllPending(reason: string): void {
-		const error = new Error(reason);
 		for (const [, entry] of this.pending) {
 			clearTimeout(entry.timer);
 			entry.resolve({
@@ -276,7 +290,6 @@ export class SyncClient {
 			} as ServerMessage);
 		}
 		this.pending.clear();
-		void error;
 	}
 
 	private setState(state: SyncConnectionState): void {

@@ -17,6 +17,7 @@ import {
 	madoraSyncGetPairingQr,
 	madoraSyncIssuePairingCode,
 	madoraSyncRemovePairedDevice,
+	madoraSyncRestartServer,
 	madoraSyncSaveSettings,
 	type MadoraSyncConfig,
 	type MadoraSyncConnectionState,
@@ -114,6 +115,17 @@ export function MadoraSyncSettings() {
 		}
 	}
 
+	async function restartSyncServer() {
+		try {
+			await madoraSyncRestartServer();
+		} catch (error) {
+			showErrorToast(
+				t('settings.sync.madora.toasts.saveFailed'),
+				String(error)
+			);
+		}
+	}
+
 	useEffect(() => {
 		if (!config?.enabled) return;
 
@@ -176,6 +188,7 @@ export function MadoraSyncSettings() {
 			setConfig(nextConfig);
 			setDeviceName(nextConfig.deviceName);
 			setPort(String(nextConfig.port));
+			await restartSyncServer();
 			if (nextConfig.enabled) {
 				void refreshPairingQr();
 			} else {
@@ -209,6 +222,9 @@ export function MadoraSyncSettings() {
 				shareAiCompletions: optimistic.shareAiCompletions,
 			});
 			setConfig(nextConfig);
+			if (key === 'autoStartServer') {
+				await restartSyncServer();
+			}
 			if (nextConfig.enabled) {
 				void refreshPairingQr();
 			}
@@ -235,6 +251,7 @@ export function MadoraSyncSettings() {
 				shareAiCompletions: optimistic.shareAiCompletions,
 			});
 			setConfig(nextConfig);
+			await restartSyncServer();
 			if (nextConfig.enabled) {
 				void refreshPairingQr();
 			} else {

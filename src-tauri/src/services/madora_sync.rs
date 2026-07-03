@@ -5,8 +5,8 @@ use chrono::{Duration, Utc};
 
 use crate::models::madora_sync::{
     MadoraSyncConfig, MadoraSyncConnectionState, MadoraSyncPairDeviceInput,
-    MadoraSyncPairDeviceResult, MadoraSyncPairedDevice, MadoraSyncPairingCode,
-    MadoraSyncPairingQr, MadoraSyncSettingsInput,
+    MadoraSyncPairDeviceResult, MadoraSyncPairedDevice, MadoraSyncPairingCode, MadoraSyncPairingQr,
+    MadoraSyncSettingsInput,
 };
 
 const CONFIG_FILE_NAME: &str = "madora_sync_state.json";
@@ -135,9 +135,11 @@ impl MadoraSyncStore {
             config.active_pairing_id.clone(),
             config.active_pairing_token.clone(),
         ) {
-            (Some(code), Some(expires_at), Some(pairing_id), Some(pairing_token)) => {
-                (MadoraSyncPairingCode { code, expires_at }, pairing_id, pairing_token)
-            }
+            (Some(code), Some(expires_at), Some(pairing_id), Some(pairing_token)) => (
+                MadoraSyncPairingCode { code, expires_at },
+                pairing_id,
+                pairing_token,
+            ),
             _ => return Err("No active pairing ticket".to_string()),
         };
 
@@ -241,9 +243,12 @@ impl MadoraSyncStore {
             }),
             last_seen_at: Some(paired_at.clone()),
             trusted: true,
+            auth_token: Some(expected_pairing_token.to_string()),
         };
 
-        guard.paired_devices.retain(|existing| existing.id != device.id);
+        guard
+            .paired_devices
+            .retain(|existing| existing.id != device.id);
         guard.paired_devices.push(device.clone());
         Self::clear_active_pairing(&mut guard);
         guard.connection_state = MadoraSyncConnectionState::Connected;
@@ -255,9 +260,90 @@ impl MadoraSyncStore {
         Ok(MadoraSyncPairDeviceResult { device, paired_at })
     }
 
+    pub fn authenticate_device(
+        &self,
+        request: MadoraSyncPairDeviceInput,
+    ) -> Result<MadoraSyncPairedDevice, String> {
+        match self.touch_paired_device(&request) {
+            Ok(device) => Ok(device),
+            Err(trusted_error) => match self.pair_device(request) {
+                Ok(result) => Ok(result.device),
+                Err(pairing_error) => Err(if trusted_error == "Device is not paired" {
+                    pairing_error
+                } else {
+                    trusted_error
+                }),
+            },
+        }
+    }
+
+    fn touch_paired_device(
+        &self,
+        request: &MadoraSyncPairDeviceInput,
+    ) -> Result<MadoraSyncPairedDevice, String> {
+        let mut guard = self.config.lock().map_err(|e| e.to_string())?;
+        let device_id = request.device_id.trim();
+        if device_id.is_empty() {
+            return Err("deviceId is required".to_string());
+        }
+
+        let Some(index) = guard
+            .paired_devices
+            .iter()
+            .position(|device| device.id == device_id)
+        else {
+            return Err("Device is not paired".to_string());
+        };
+
+        let device = &mut guard.paired_devices[index];
+        if !device.trusted {
+            return Err("Device is not trusted".to_string());
+        }
+
+        let Some(stored_token) = device.auth_token.as_deref() else {
+            return Err("Device needs to be paired again".to_string());
+        };
+
+        let token_matches = request
+            .pairing_token
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|token| token == stored_token);
+        if !token_matches {
+            return Err("Device credentials are invalid".to_string());
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let device_name = request.device_name.trim();
+        if !device_name.is_empty() {
+            device.name = device_name.to_string();
+        }
+        device.platform = request.platform.as_ref().and_then(|platform| {
+            let trimmed = platform.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+        device.last_seen_at = Some(now.clone());
+
+        let snapshot_device = device.clone();
+        guard.connection_state = MadoraSyncConnectionState::Connected;
+        guard.last_sync_at = Some(now);
+        guard.last_error = None;
+        let snapshot = guard.clone();
+        Self::save_config_inner(&self.app_data_dir, &snapshot);
+
+        Ok(snapshot_device)
+    }
+
     pub fn remove_paired_device(&self, device_id: &str) -> Result<MadoraSyncConfig, String> {
         let mut guard = self.config.lock().map_err(|e| e.to_string())?;
         guard.paired_devices.retain(|device| device.id != device_id);
+        if guard.paired_devices.is_empty() {
+            guard.connection_state = MadoraSyncConnectionState::Disconnected;
+        }
         let snapshot = guard.clone();
         Self::save_config_inner(&self.app_data_dir, &snapshot);
         Ok(snapshot)
@@ -345,9 +431,7 @@ mod tests {
             active_pairing_id: Some("pairing-id".to_string()),
             active_pairing_token: Some("pairing-token".to_string()),
             active_pairing_code: Some("123456".to_string()),
-            pairing_code_expires_at: Some(
-                (Utc::now() - Duration::minutes(1)).to_rfc3339(),
-            ),
+            pairing_code_expires_at: Some((Utc::now() - Duration::minutes(1)).to_rfc3339()),
             ..Default::default()
         };
 
@@ -364,9 +448,7 @@ mod tests {
             active_pairing_id: Some("pairing-id".to_string()),
             active_pairing_token: Some("pairing-token".to_string()),
             active_pairing_code: Some("123456".to_string()),
-            pairing_code_expires_at: Some(
-                (Utc::now() + Duration::minutes(1)).to_rfc3339(),
-            ),
+            pairing_code_expires_at: Some((Utc::now() + Duration::minutes(1)).to_rfc3339()),
             ..Default::default()
         };
 
@@ -393,5 +475,61 @@ mod tests {
         assert!(payload.contains("pairingToken=pairing-token"));
         assert!(payload.contains("code=123456"));
         assert!(payload.contains("deviceName=Madora%20Desktop"));
+    }
+
+    #[test]
+    fn authenticates_previously_paired_device_with_saved_token() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let store = MadoraSyncStore::new(temp_dir.path().to_path_buf());
+        let issued = store.issue_pairing_code().expect("pairing code");
+        let config = store.get_config().expect("config");
+        let pairing_id = config.active_pairing_id.clone().expect("active pairing id");
+        let pairing_token = config
+            .active_pairing_token
+            .clone()
+            .expect("active pairing token");
+
+        let paired = store
+            .pair_device(MadoraSyncPairDeviceInput {
+                device_id: "phone-1".to_string(),
+                device_name: "Phone".to_string(),
+                platform: Some("ios".to_string()),
+                pairing_id: Some(pairing_id.clone()),
+                pairing_token: Some(pairing_token.clone()),
+                pairing_code: Some(issued.code),
+            })
+            .expect("initial pairing");
+
+        assert_eq!(
+            paired.device.auth_token.as_deref(),
+            Some(pairing_token.as_str())
+        );
+        assert_eq!(
+            store
+                .get_config()
+                .expect("config after pairing")
+                .active_pairing_id,
+            None
+        );
+
+        let authenticated = store
+            .authenticate_device(MadoraSyncPairDeviceInput {
+                device_id: "phone-1".to_string(),
+                device_name: "Phone Renamed".to_string(),
+                platform: Some("ios".to_string()),
+                pairing_id: Some(pairing_id),
+                pairing_token: Some(pairing_token),
+                pairing_code: None,
+            })
+            .expect("re-authentication");
+
+        assert_eq!(authenticated.name, "Phone Renamed");
+        assert_eq!(
+            store
+                .get_config()
+                .expect("config after auth")
+                .connection_state,
+            MadoraSyncConnectionState::Connected
+        );
     }
 }

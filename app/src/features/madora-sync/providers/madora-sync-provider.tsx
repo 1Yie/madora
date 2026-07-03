@@ -42,11 +42,19 @@ interface MadoraSyncContextValue {
 	pairedHost: PairedHost | null;
 	pairFromQrPayload: (raw: string) => Promise<boolean>;
 	pairWithPayload: (payload: PairingPayload) => Promise<boolean>;
+	reconnect: () => void;
 	disconnect: () => void;
 	ready: boolean;
-	refreshRemoteFileTree: () => Promise<ExplorerNode[]>;
+	refreshRemoteFileTree: (path?: string) => Promise<ExplorerNode[]>;
+	readRemoteFile: (path: string) => Promise<{
+		content: string | null;
+		encoding: string | null;
+		truncated: boolean;
+	}>;
+	writeRemoteFile: (path: string, content: string) => Promise<boolean>;
 	storageStats: StorageStats;
 	trustedDevices: TrustedDevice[];
+	removeTrustedDevice: (id: string) => Promise<void>;
 }
 
 const MadoraSyncContext = createContext<MadoraSyncContextValue | null>(null);
@@ -74,12 +82,6 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (!errorMessage) return;
 		showErrorToast(errorMessage);
-
-		const timeoutId = setTimeout(() => {
-			setErrorMessage(null);
-		}, 0);
-
-		return () => clearTimeout(timeoutId);
 	}, [errorMessage, showErrorToast]);
 
 	useEffect(() => {
@@ -159,6 +161,11 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			}
 
 			if (message.type === 'error') {
+				setErrorMessage(message.message);
+				return;
+			}
+
+			if (message.type === 'auth_error') {
 				setErrorMessage(message.message);
 			}
 		},
@@ -294,29 +301,121 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		clientRef.current = null;
 		setPairedHost(null);
 		setConnectionState('disconnected');
+		setErrorMessage(null);
 		void persistPairedHost(null);
 	}, [persistPairedHost]);
 
-	const refreshRemoteFileTree = useCallback(async () => {
+	const reconnect = useCallback(() => {
+		if (!pairedHost) return;
+		setErrorMessage(null);
+		connectToHost(pairedHost);
+	}, [connectToHost, pairedHost]);
+
+	const removeTrustedDevice = useCallback(
+		async (id: string) => {
+			if (!db) return;
+			try {
+				await db.runAsync('DELETE FROM devices WHERE id = ?', id);
+				setTrustedDevices((current) => current.filter((d) => d.id !== id));
+				if (pairedHost?.id === id) {
+					clientRef.current?.disconnect();
+					clientRef.current = null;
+					setPairedHost(null);
+					setConnectionState('disconnected');
+					setErrorMessage(null);
+					await persistPairedHost(null);
+				}
+			} catch (error) {
+				showErrorToast(
+					error instanceof Error
+						? error.message
+						: 'Failed to remove trusted device'
+				);
+			}
+		},
+		[db, pairedHost?.id, persistPairedHost, showErrorToast]
+	);
+
+	const refreshRemoteFileTree = useCallback(
+		async (path?: string) => {
+			const client = clientRef.current;
+			if (!client || !client.isConnected) {
+				const message = 'Not connected';
+				setErrorMessage(message);
+				throw new Error(message);
+			}
+
+			try {
+				const reqPath = path ?? '';
+				const response = await client.request(
+					{ type: 'file_list', path: reqPath },
+					`file_list:${reqPath}`
+				);
+				if (response.type !== 'file_list_result') {
+					if (response.type === 'error' || response.type === 'auth_error') {
+						setErrorMessage(response.message);
+						throw new Error(response.message);
+					}
+					throw new Error('Unexpected response type');
+				}
+
+				handleServerMessage(response);
+				return response.tree;
+			} catch (error) {
+				const message =
+					error instanceof Error ? error.message : 'Failed to refresh files';
+				setErrorMessage(message);
+				throw new Error(message);
+			}
+		},
+		[handleServerMessage]
+	);
+
+	const readRemoteFile = useCallback(async (path: string) => {
 		const client = clientRef.current;
-		if (!client || !client.isConnected) return [];
+		if (!client || !client.isConnected) throw new Error('Not connected');
 
-		try {
-			const response = await client.request(
-				{ type: 'file_list' },
-				'file_list:'
-			);
-			if (response.type !== 'file_list_result') return [];
+		const response = await client.request(
+			{ type: 'file_read', path },
+			`file_read:${path}`
+		);
 
-			handleServerMessage(response);
-			return response.tree;
-		} catch (error) {
-			setErrorMessage(
-				error instanceof Error ? error.message : 'Failed to refresh files'
-			);
-			return [];
+		if (response.type !== 'file_read_result') {
+			if (response.type === 'error') {
+				throw new Error(response.message);
+			}
+			throw new Error('Unexpected response type');
 		}
-	}, [handleServerMessage]);
+
+		return {
+			content: response.content,
+			encoding: response.encoding,
+			truncated: response.truncated,
+		};
+	}, []);
+
+	const writeRemoteFile = useCallback(async (path: string, content: string) => {
+		const client = clientRef.current;
+		if (!client || !client.isConnected) throw new Error('Not connected');
+
+		const response = await client.request(
+			{ type: 'file_write', path, content },
+			`file_write:${path}`
+		);
+
+		if (response.type !== 'file_write_result') {
+			if (response.type === 'error') {
+				throw new Error(response.message);
+			}
+			throw new Error('Unexpected response type');
+		}
+
+		if (!response.ok) {
+			throw new Error(response.error ?? 'Write failed');
+		}
+
+		return true;
+	}, []);
 
 	const value = useMemo<MadoraSyncContextValue>(
 		() => ({
@@ -326,11 +425,15 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			pairedHost,
 			pairFromQrPayload,
 			pairWithPayload,
+			reconnect,
 			disconnect,
 			ready,
 			refreshRemoteFileTree,
+			readRemoteFile,
+			writeRemoteFile,
 			storageStats,
 			trustedDevices,
+			removeTrustedDevice,
 		}),
 		[
 			connectionState,
@@ -339,11 +442,15 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			pairedHost,
 			pairFromQrPayload,
 			pairWithPayload,
+			reconnect,
 			disconnect,
 			ready,
 			refreshRemoteFileTree,
+			readRemoteFile,
+			writeRemoteFile,
 			storageStats,
 			trustedDevices,
+			removeTrustedDevice,
 		]
 	);
 

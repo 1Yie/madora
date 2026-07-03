@@ -2,8 +2,8 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::models::madora_sync::{
-    MadoraSyncConfig, MadoraSyncPairDeviceInput, MadoraSyncPairDeviceResult,
-    MadoraSyncPairingCode, MadoraSyncPairingQr, MadoraSyncSettingsInput,
+    MadoraSyncConfig, MadoraSyncPairDeviceInput, MadoraSyncPairDeviceResult, MadoraSyncPairingCode,
+    MadoraSyncPairingQr, MadoraSyncSettingsInput,
 };
 use crate::services::madora_sync::MadoraSyncStore;
 use crate::services::sync_server;
@@ -91,7 +91,7 @@ pub async fn madora_sync_restart_server<R: tauri::Runtime>(
 ) -> Result<bool, String> {
     sync_server::stop();
     // Give the accept loop a moment to observe the shutdown flag.
-    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
     sync_server::spawn(app_handle);
     Ok(true)
 }
