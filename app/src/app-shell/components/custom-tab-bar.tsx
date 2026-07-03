@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
 	ActivityIndicator,
 	DeviceEventEmitter,
 	Keyboard,
+	Platform,
 	Pressable,
 	ScrollView,
 	Text,
@@ -11,6 +12,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ComponentProps, ComponentType, ReactNode } from 'react';
 import type { Tabs } from 'expo-router';
+import Animated, {
+	useSharedValue,
+	useAnimatedStyle,
+	withTiming,
+	Easing,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import { Check, FolderTree, PenLine, Settings } from 'lucide-react-native';
 import {
@@ -48,6 +56,7 @@ type FloatingSurfacePalette = {
 const KEYBOARD_TOOLBAR_GAP = 6;
 const FLOATING_TAB_BAR_GAP = 16;
 const FLOATING_STATUS_SLOT_SIZE = 40;
+const TIMING_CONFIG = { duration: 180, easing: Easing.out(Easing.quad) };
 
 export default function CustomTabBar({
 	state,
@@ -62,6 +71,22 @@ export default function CustomTabBar({
 	const [editorOverlayActive, setEditorOverlayActive] = useState(false);
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('editor');
+
+	interface LayoutData {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	}
+
+	const [layouts, setLayouts] = useState<Record<string, LayoutData>>({});
+	const prevActiveTabKeyRef = useRef<string | null>(null);
+
+	const indicatorX = useSharedValue(0);
+	const indicatorY = useSharedValue(0);
+	const indicatorWidth = useSharedValue(0);
+	const indicatorHeight = useSharedValue(0);
+
 	const palette = getFloatingSurfacePalette(resolvedTheme);
 	const activeRoute = state.routes[state.index];
 	const keyboardVisible = keyboardHeight > 0;
@@ -69,6 +94,150 @@ export default function CustomTabBar({
 	const workspaceFocused = workspaceRouteFocused && workspaceTab === 'editor';
 	const fileTreeFocused = workspaceRouteFocused && workspaceTab === 'fileTree';
 	const settingsFocused = activeRoute?.name === 'settings';
+
+	const workspaceRoute = state.routes.find((route) => route.name === 'index');
+	const settingsRoute = state.routes.find((route) => route.name === 'settings');
+
+	const navigateToRoute = (routeName: string) => {
+		const route = state.routes.find((item) => item.name === routeName);
+		if (!route) return;
+
+		const event = navigation.emit({
+			type: 'tabPress',
+			target: route.key,
+			canPreventDefault: true,
+		});
+
+		if (!event.defaultPrevented && activeRoute?.name !== routeName) {
+			navigation.navigate(route.name);
+		}
+	};
+
+	const selectWorkspaceTab = (tab: WorkspaceTab) => {
+		setWorkspaceTab(tab);
+		if (activeRoute?.name !== 'index') {
+			navigateToRoute('index');
+			setTimeout(
+				() => DeviceEventEmitter.emit(WORKSPACE_TAB_REQUEST_EVENT, tab),
+				80
+			);
+			return;
+		}
+		DeviceEventEmitter.emit(WORKSPACE_TAB_REQUEST_EVENT, tab);
+	};
+
+	let activeTabKey: 'editor' | 'fileTree' | 'settings' = 'fileTree';
+	if (workspaceFocused) {
+		activeTabKey = 'editor';
+	} else if (fileTreeFocused) {
+		activeTabKey = 'fileTree';
+	} else if (settingsFocused) {
+		activeTabKey = 'settings';
+	}
+
+	useEffect(() => {
+		const activeLayout = layouts[activeTabKey];
+		if (activeLayout) {
+			const wasTabChanged =
+				prevActiveTabKeyRef.current !== null &&
+				prevActiveTabKeyRef.current !== activeTabKey;
+
+			if (!wasTabChanged) {
+				indicatorX.value = activeLayout.x;
+				indicatorY.value = activeLayout.y;
+				indicatorWidth.value = activeLayout.width;
+				indicatorHeight.value = activeLayout.height;
+			} else {
+				indicatorX.value = withTiming(activeLayout.x, TIMING_CONFIG);
+				indicatorY.value = withTiming(activeLayout.y, TIMING_CONFIG);
+				indicatorWidth.value = withTiming(activeLayout.width, TIMING_CONFIG);
+				indicatorHeight.value = withTiming(activeLayout.height, TIMING_CONFIG);
+			}
+			prevActiveTabKeyRef.current = activeTabKey;
+		}
+	}, [
+		activeTabKey,
+		layouts,
+		indicatorX,
+		indicatorY,
+		indicatorWidth,
+		indicatorHeight,
+	]);
+
+	const isWeb = Platform.OS === 'web';
+	const indicatorStyle = useAnimatedStyle(() => {
+		if (isWeb) {
+			return {
+				left: indicatorX.value,
+				top: indicatorY.value,
+				width: indicatorWidth.value,
+				height: indicatorHeight.value,
+			};
+		}
+		return {
+			transform: [
+				{ translateX: indicatorX.value },
+				{ translateY: indicatorY.value },
+			],
+			width: indicatorWidth.value,
+			height: indicatorHeight.value,
+		};
+	});
+
+	const handleLayout = (id: string, layout: LayoutData) => {
+		setLayouts((prev) => {
+			if (
+				prev[id]?.x === layout.x &&
+				prev[id]?.y === layout.y &&
+				prev[id]?.width === layout.width &&
+				prev[id]?.height === layout.height
+			) {
+				return prev;
+			}
+			return { ...prev, [id]: layout };
+		});
+	};
+
+	const findTabAtX = (x: number) => {
+		let closestTab: 'editor' | 'fileTree' | 'settings' | null = null;
+		let minDistance = Infinity;
+
+		for (const [key, layout] of Object.entries(layouts)) {
+			if (x >= layout.x && x <= layout.x + layout.width) {
+				return key as 'editor' | 'fileTree' | 'settings';
+			}
+			const tabCenter = layout.x + layout.width / 2;
+			const distance = Math.abs(x - tabCenter);
+			if (distance < minDistance) {
+				minDistance = distance;
+				closestTab = key as 'editor' | 'fileTree' | 'settings';
+			}
+		}
+		return closestTab;
+	};
+
+	const onTouchAction = (x: number) => {
+		const targetTab = findTabAtX(x);
+		if (targetTab && targetTab !== activeTabKey) {
+			if (targetTab === 'editor') {
+				selectWorkspaceTab('editor');
+			} else if (targetTab === 'fileTree') {
+				selectWorkspaceTab('fileTree');
+			} else if (targetTab === 'settings') {
+				navigateToRoute('settings');
+			}
+		}
+	};
+
+	const panGesture = Gesture.Pan()
+		.runOnJS(true)
+		.onStart((event) => {
+			onTouchAction(event.x);
+		})
+		.onUpdate((event) => {
+			onTouchAction(event.x);
+		});
+
 	const workspaceModeAction = workspaceFocused
 		? (toolbar.actions.find(
 				(action) => action.key === 'preview' || action.key === 'edit'
@@ -189,37 +358,6 @@ export default function CustomTabBar({
 		);
 	}
 
-	const workspaceRoute = state.routes.find((route) => route.name === 'index');
-	const settingsRoute = state.routes.find((route) => route.name === 'settings');
-
-	const navigateToRoute = (routeName: string) => {
-		const route = state.routes.find((item) => item.name === routeName);
-		if (!route) return;
-
-		const event = navigation.emit({
-			type: 'tabPress',
-			target: route.key,
-			canPreventDefault: true,
-		});
-
-		if (!event.defaultPrevented && activeRoute?.name !== routeName) {
-			navigation.navigate(route.name);
-		}
-	};
-
-	const selectWorkspaceTab = (tab: WorkspaceTab) => {
-		setWorkspaceTab(tab);
-		if (activeRoute?.name !== 'index') {
-			navigateToRoute('index');
-			setTimeout(
-				() => DeviceEventEmitter.emit(WORKSPACE_TAB_REQUEST_EVENT, tab),
-				80
-			);
-			return;
-		}
-		DeviceEventEmitter.emit(WORKSPACE_TAB_REQUEST_EVENT, tab);
-	};
-
 	return (
 		<View
 			pointerEvents="box-none"
@@ -229,38 +367,67 @@ export default function CustomTabBar({
 			{workspaceModeAction ? (
 				<FloatingModeButton action={workspaceModeAction} palette={palette} />
 			) : null}
-			<FloatingCapsule palette={palette}>
-				{workspaceRoute ? (
-					<FloatingButton
-						focused={workspaceFocused}
-						icon={PenLine}
-						label={
-							descriptors[workspaceRoute.key].options.title ??
-							workspaceRoute.name
-						}
-						onPress={() => selectWorkspaceTab('editor')}
-						palette={palette}
-					/>
-				) : null}
-				<FloatingButton
-					focused={fileTreeFocused}
-					icon={FolderTree}
-					label={t('tabs.fileTree')}
-					onPress={() => selectWorkspaceTab('fileTree')}
-					palette={palette}
-				/>
-				{settingsRoute ? (
-					<FloatingButton
-						focused={settingsFocused}
-						icon={Settings}
-						label={
-							descriptors[settingsRoute.key].options.title ?? settingsRoute.name
-						}
-						onPress={() => navigateToRoute('settings')}
-						palette={palette}
-					/>
-				) : null}
-			</FloatingCapsule>
+			<GestureDetector gesture={panGesture}>
+				<View>
+					<FloatingCapsule palette={palette}>
+						{layouts[activeTabKey] !== undefined && (
+							<Animated.View
+								style={[
+									indicatorStyle,
+									{
+										position: 'absolute',
+										top: 0,
+										left: 0,
+										backgroundColor: palette.activeBackground,
+										borderRadius: 9999,
+										zIndex: 1,
+									},
+								]}
+							/>
+						)}
+						{workspaceRoute ? (
+							<FloatingButton
+								id="editor"
+								focused={workspaceFocused}
+								icon={PenLine}
+								label={
+									descriptors[workspaceRoute.key].options.title ??
+									workspaceRoute.name
+								}
+								onPress={() => selectWorkspaceTab('editor')}
+								palette={palette}
+								onLayout={handleLayout}
+								hasLayout={layouts[activeTabKey] !== undefined}
+							/>
+						) : null}
+						<FloatingButton
+							id="fileTree"
+							focused={fileTreeFocused}
+							icon={FolderTree}
+							label={t('tabs.fileTree')}
+							onPress={() => selectWorkspaceTab('fileTree')}
+							palette={palette}
+							onLayout={handleLayout}
+							hasLayout={layouts[activeTabKey] !== undefined}
+						/>
+						{settingsRoute ? (
+							<FloatingButton
+								id="settings"
+								focused={settingsFocused}
+								icon={Settings}
+								label={
+									descriptors[settingsRoute.key].options.title ??
+									settingsRoute.name
+								}
+								onPress={() => navigateToRoute('settings')}
+								palette={palette}
+								onLayout={handleLayout}
+								hasLayout={layouts[activeTabKey] !== undefined}
+							/>
+						) : null}
+					</FloatingCapsule>
+				</View>
+			</GestureDetector>
 		</View>
 	);
 }
@@ -336,40 +503,54 @@ function FloatingCapsule({
 }) {
 	return (
 		<View
-			className="flex-row items-center gap-0.5 rounded-full p-1 shadow-lg
-				shadow-black/25"
+			className="rounded-full p-1 shadow-lg shadow-black/25"
 			style={{
 				backgroundColor: palette.surfaceColor,
 				borderColor: palette.borderColor,
 				borderWidth: 1,
 			}}
 		>
-			{children}
+			<View className="flex-row items-center gap-0.5 relative">{children}</View>
 		</View>
 	);
 }
 
 function FloatingButton({
+	id,
 	focused,
 	icon: Icon,
 	label,
 	onPress,
 	palette,
+	onLayout,
+	hasLayout,
 }: {
+	id: string;
 	focused: boolean;
 	icon: TabIcon;
 	label: string;
 	onPress: () => void;
 	palette: FloatingSurfacePalette;
+	onLayout?: (
+		id: string,
+		layout: { x: number; y: number; width: number; height: number }
+	) => void;
+	hasLayout: boolean;
 }) {
 	const color = focused ? palette.textColor : palette.mutedIconColor;
 
 	return (
 		<Pressable
 			onPress={onPress}
+			onLayout={(e) => {
+				onLayout?.(id, e.nativeEvent.layout);
+			}}
 			className="flex-row items-center gap-1.5 rounded-full px-3 py-2"
 			style={{
-				backgroundColor: focused ? palette.activeBackground : 'transparent',
+				backgroundColor:
+					!hasLayout && focused ? palette.activeBackground : 'transparent',
+				zIndex: 2,
+				position: 'relative',
 			}}
 		>
 			<Icon color={color} size={15} strokeWidth={2.2} />
