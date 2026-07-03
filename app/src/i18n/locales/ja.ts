@@ -243,14 +243,20 @@ const ja = {
 	fileTree: {
 		actions: {
 			bookmark: 'ブックマーク',
+			cancelCopy: 'コピーをキャンセル',
 			delete: '削除',
+			locateCurrent: '現在のファイルへ移動',
 			newFolder: '新規フォルダー',
 			newFile: '新規ファイル',
 			openFile: 'ファイルを開く',
 			openFolder: 'フォルダーを開く',
+			refresh: 'ファイルを更新',
 			removeBookmark: 'ブックマークを解除',
 		},
 		bookmarks: 'ブックマーク',
+		copyBanner: {
+			title: '「{{name}}」を貼り付けできます',
+		},
 		delete: {
 			detail: 'このワークスペースから「{{name}}」を削除しますか？',
 			title: '項目を削除',
@@ -260,6 +266,20 @@ const ja = {
 			detail:
 				'ローカルフォルダーを開いて、ここでファイルを閲覧・作成できます。',
 			title: 'フォルダーが選択されていません',
+		},
+		feedback: {
+			copyCanceledDetail: 'コピー中のファイルをクリアしました。',
+			copyCanceledTitle: 'コピーをキャンセルしました',
+			copyReadyDetail: '「{{name}}」をフォルダーに貼り付けできます。',
+			copyReadyTitle: 'ファイルをコピーしました',
+			locatedDetail: 'ファイルツリーで現在のファイルを表示しました。',
+			locatedTitle: '現在のファイルを表示しました',
+			locateUnavailableDetail: '先にファイルを開くか選択してください。',
+			locateUnavailableTitle: '移動先がありません',
+			pastedDetail: 'コピーしたファイルを選択中のフォルダーに追加しました。',
+			pastedTitle: 'ファイルを貼り付けました',
+			refreshedDetail: '表示中のファイルツリーを再読み込みしました。',
+			refreshedTitle: 'ファイルを更新しました',
 		},
 		title: 'ファイルツリー',
 	},

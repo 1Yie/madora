@@ -1,27 +1,21 @@
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback } from 'react';
 
-import { Toast, ToastDescription, useToast } from './';
+import { useNativeToast } from '@/components/ui/native-toast';
 
-/**
- * Show an error toast anchored to the top of the screen, respecting the
- * status-bar safe-area inset so it isn't hidden behind the notch / status bar.
- */
+const ERROR_TOAST_DURATION_MS = 3000;
+
 export function useErrorToast() {
-	const toast = useToast();
-	const insets = useSafeAreaInsets();
+	const { showToast } = useNativeToast();
 
-	return (message: string) => {
-		toast.show({
-			placement: 'top',
-			duration: 3000,
-			containerStyle: { marginTop: Math.max(insets.top, 8) },
-			render: () => (
-				<Toast action="error" variant="solid">
-					<ToastDescription className="text-destructive">
-						{message}
-					</ToastDescription>
-				</Toast>
-			),
-		});
-	};
+	return useCallback(
+		(message: string) => {
+			showToast({
+				description: message,
+				durationMs: ERROR_TOAST_DURATION_MS,
+				title: 'Error',
+				tone: 'error',
+			});
+		},
+		[showToast]
+	);
 }

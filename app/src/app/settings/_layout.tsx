@@ -12,7 +12,7 @@ export default function SettingsLayout() {
 	return (
 		<Stack
 			screenOptions={{
-				animation: 'slide_from_right',
+				animation: 'default',
 				contentStyle: {
 					backgroundColor: APP_THEME_BACKGROUND_COLORS[resolvedTheme],
 				},

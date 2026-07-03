@@ -4,6 +4,7 @@ import {
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 	type ReactNode,
 } from 'react';
@@ -34,6 +35,7 @@ import type {
 
 type EditorContextValue = {
 	bookmarkedDocumentIds: string[];
+	cancelCopiedFile: () => void;
 	copySelectedFile: () => Promise<boolean>;
 	copyState: {
 		documentId: string;
@@ -55,7 +57,9 @@ type EditorContextValue = {
 		fullText: string,
 		cursorPos: number
 	) => Promise<string>;
+	locateSelectedDocumentInTree: () => boolean;
 	renameSelectedFile: (nextName: string) => Promise<boolean>;
+	refreshFileTree: () => Promise<boolean>;
 	selectDocument: (documentId: string) => Promise<void>;
 	selectTreeNode: (nodePath: string) => void;
 	selectedDocument: EditorDocument | null;
@@ -115,6 +119,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		}
 	);
 	const [didHydrateWorkspace, setDidHydrateWorkspace] = useState(false);
+	const loadingDirectoryPathsRef = useRef(new Set<string>());
 
 	const selectedDocument = useMemo(
 		() =>
@@ -189,18 +194,35 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	 */
 	const loadDirectoryIntoTree = useCallback(
 		async (directoryPath: string, rootUri: string) => {
-			const { children } = await readLocalDirectoryChildren(
-				directoryPath,
-				rootUri
-			);
-			setFileTree((current) =>
-				updateNodeInTree(current, directoryPath, (node) => ({
-					...node,
-					children,
-					hasChildren: children.length > 0,
-					loaded: true,
-				}))
-			);
+			if (loadingDirectoryPathsRef.current.has(directoryPath)) return;
+
+			loadingDirectoryPathsRef.current.add(directoryPath);
+			try {
+				const { children } = await readLocalDirectoryChildren(
+					directoryPath,
+					rootUri
+				);
+				setFileTree((current) =>
+					updateNodeInTree(current, directoryPath, (node) => ({
+						...node,
+						children,
+						hasChildren: children.length > 0,
+						loaded: true,
+					}))
+				);
+			} catch (error) {
+				setFileTree((current) =>
+					updateNodeInTree(current, directoryPath, (node) => ({
+						...node,
+						children: [],
+						hasChildren: false,
+						loaded: true,
+					}))
+				);
+				setErrorMessage(getErrorMessage(error, 'Failed to open folder'));
+			} finally {
+				loadingDirectoryPathsRef.current.delete(directoryPath);
+			}
 		},
 		[]
 	);
@@ -487,33 +509,37 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		[persistDirectoryWorkspace, persistWorkspace, workspaceSource]
 	);
 
-	const toggleDirectoryExpanded = useCallback(
-		(directoryPath: string) => {
-			let willExpand = false;
-			setExpandedDirectoryPaths((current) => {
-				const next = new Set(current);
-				if (next.has(directoryPath)) {
-					next.delete(directoryPath);
-				} else {
-					next.add(directoryPath);
-					willExpand = true;
-				}
-				return next;
-			});
-
-			if (
-				willExpand &&
-				workspaceSource.kind === 'directory' &&
-				directoryPath !== workspaceSource.uri
-			) {
-				const node = findNodeByPath(fileTree, directoryPath);
-				if (node?.kind === 'directory' && !node.loaded) {
-					void loadDirectoryIntoTree(directoryPath, workspaceSource.uri);
-				}
+	const toggleDirectoryExpanded = useCallback((directoryPath: string) => {
+		setExpandedDirectoryPaths((current) => {
+			const next = new Set(current);
+			if (next.has(directoryPath)) {
+				next.delete(directoryPath);
+			} else {
+				next.add(directoryPath);
 			}
-		},
-		[fileTree, loadDirectoryIntoTree, workspaceSource]
-	);
+			return next;
+		});
+	}, []);
+
+	useEffect(() => {
+		if (workspaceSource.kind !== 'directory') return;
+
+		for (const directoryPath of expandedDirectoryPaths) {
+			const node = findNodeByPath(fileTree, directoryPath);
+			if (
+				node?.kind === 'directory' &&
+				!node.loaded &&
+				!loadingDirectoryPathsRef.current.has(directoryPath)
+			) {
+				void loadDirectoryIntoTree(directoryPath, workspaceSource.uri);
+			}
+		}
+	}, [
+		expandedDirectoryPaths,
+		fileTree,
+		loadDirectoryIntoTree,
+		workspaceSource,
+	]);
 
 	useEffect(() => {
 		if (!didHydrateWorkspace) return;
@@ -652,6 +678,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		return true;
 	}, [activeFileTarget]);
 
+	const cancelCopiedFile = useCallback(() => {
+		setCopyState(null);
+		setErrorMessage(null);
+	}, []);
+
 	const pasteCopiedFile = useCallback(async () => {
 		if (!copyState || workspaceSource.kind !== 'directory') {
 			return false;
@@ -676,6 +707,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			]);
 			setSelectedDocumentId(pastedDocument.id);
 			setSelectedTreeNodePath(pastedDocument.id);
+			setCopyState(null);
 			await refreshDirectoryInTree(targetDirectoryUri, workspaceSource.uri);
 			await persistDirectoryWorkspace({
 				nextSelectedDocumentId: pastedDocument.id,
@@ -692,6 +724,101 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		getCurrentTargetDirectoryUri,
 		persistDirectoryWorkspace,
 		refreshDirectoryInTree,
+		workspaceSource,
+	]);
+
+	const refreshFileTree = useCallback(async () => {
+		try {
+			if (workspaceSource.kind === 'empty') return false;
+
+			if (workspaceSource.kind === 'file') {
+				const document = await readLocalFile(workspaceSource.uri);
+				setDocuments([document]);
+				setSelectedDocumentId(document.id);
+				setSelectedTreeNodePath(document.id);
+				await persistWorkspace({
+					kind: 'file',
+					uri: document.path,
+					selectedTreeNodePath: document.id,
+				});
+				setErrorMessage(null);
+				return true;
+			}
+
+			const targetDirectoryUri =
+				focusedTreeNode?.kind === 'directory'
+					? focusedTreeNode.path
+					: focusedTreeNode?.kind === 'file'
+						? (getParentDirectoryUriForFile(fileTree, focusedTreeNode.path) ??
+							workspaceSource.uri)
+						: selectedDocumentId
+							? (getParentDirectoryUriForFile(fileTree, selectedDocumentId) ??
+								workspaceSource.uri)
+							: workspaceSource.uri;
+
+			await refreshDirectoryInTree(targetDirectoryUri, workspaceSource.uri);
+			setExpandedDirectoryPaths((current) => {
+				if (current.has(targetDirectoryUri)) return current;
+				const next = new Set(current);
+				next.add(targetDirectoryUri);
+				return next;
+			});
+			setErrorMessage(null);
+			return true;
+		} catch (error) {
+			setErrorMessage(getErrorMessage(error, 'Failed to refresh files'));
+			return false;
+		}
+	}, [
+		fileTree,
+		focusedTreeNode,
+		persistWorkspace,
+		refreshDirectoryInTree,
+		selectedDocumentId,
+		workspaceSource,
+	]);
+
+	const locateSelectedDocumentInTree = useCallback(() => {
+		if (!selectedDocumentId) return false;
+
+		setSelectedTreeNodePath(selectedDocumentId);
+
+		if (workspaceSource.kind === 'directory') {
+			const ancestorDirectoryPaths = findAncestorDirectoryPaths(
+				fileTree,
+				selectedDocumentId
+			);
+			if (!ancestorDirectoryPaths) return false;
+
+			setExpandedDirectoryPaths((current) => {
+				const next = new Set(current);
+				for (const path of ancestorDirectoryPaths) {
+					next.add(path);
+				}
+				return next;
+			});
+			void persistDirectoryWorkspace({
+				nextSelectedDocumentId: selectedDocumentId,
+				nextSelectedTreeNodePath: selectedDocumentId,
+			});
+			return true;
+		}
+
+		if (workspaceSource.kind === 'file') {
+			void persistWorkspace({
+				kind: 'file',
+				uri: workspaceSource.uri,
+				selectedTreeNodePath: selectedDocumentId,
+			});
+			return true;
+		}
+
+		return fileTree.length === 0;
+	}, [
+		fileTree,
+		persistDirectoryWorkspace,
+		persistWorkspace,
+		selectedDocumentId,
 		workspaceSource,
 	]);
 
@@ -936,6 +1063,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	const value = useMemo<EditorContextValue>(
 		() => ({
 			bookmarkedDocumentIds,
+			cancelCopiedFile,
 			copySelectedFile,
 			copyState,
 			createLocalDirectory: createDirectoryInWorkspace,
@@ -951,7 +1079,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			openLocalFolder,
 			pasteCopiedFile,
 			requestInlineCompletion,
+			locateSelectedDocumentInTree,
 			renameSelectedFile,
+			refreshFileTree,
 			selectDocument,
 			selectTreeNode,
 			selectedDocument,
@@ -964,6 +1094,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		}),
 		[
 			bookmarkedDocumentIds,
+			cancelCopiedFile,
 			copySelectedFile,
 			copyState,
 			createDirectoryInWorkspace,
@@ -979,7 +1110,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			openLocalFolder,
 			pasteCopiedFile,
 			requestInlineCompletion,
+			locateSelectedDocumentInTree,
 			renameSelectedFile,
+			refreshFileTree,
 			selectDocument,
 			selectTreeNode,
 			selectedDocument,
@@ -1039,6 +1172,29 @@ function findNodeByPath(
 		if (node.kind === 'directory') {
 			const nestedNode = findNodeByPath(node.children, path);
 			if (nestedNode) return nestedNode;
+		}
+	}
+
+	return null;
+}
+
+function findAncestorDirectoryPaths(
+	nodes: EditorNode[],
+	targetPath: string,
+	ancestors: string[] = []
+): string[] | null {
+	for (const node of nodes) {
+		if (node.path === targetPath) {
+			return ancestors;
+		}
+
+		if (node.kind === 'directory') {
+			const nestedAncestors = findAncestorDirectoryPaths(
+				node.children,
+				targetPath,
+				[...ancestors, node.path]
+			);
+			if (nestedAncestors) return nestedAncestors;
 		}
 	}
 

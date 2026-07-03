@@ -165,7 +165,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 			if (cancelled) return;
 
 			const parsedFontSize = Number(storedFontSize);
-			if (Number.isFinite(parsedFontSize)) {
+			if (storedFontSize !== null && Number.isFinite(parsedFontSize)) {
 				setEditorFontSizeState(clampEditorFontSize(parsedFontSize));
 			}
 			if (isLocalePreference(storedLocale)) {

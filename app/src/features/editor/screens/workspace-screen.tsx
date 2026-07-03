@@ -4,6 +4,7 @@ import {
 	Keyboard,
 	PressableProps,
 	Pressable,
+	type ScrollView as ScrollViewType,
 	ScrollView,
 	Text,
 	View,
@@ -24,29 +25,20 @@ import {
 	FileText,
 	FolderOpen,
 	FolderPlus,
+	LocateFixed,
+	RefreshCw,
 	Trash2,
+	X,
 } from 'lucide-react-native';
 
 import { MarkdownEditor } from '../components/markdown-editor';
 import { useEditorWorkspace } from '../providers/editor-provider';
-import { Button, ButtonText } from '@/components/ui/button';
 import {
-	AlertDialog,
-	AlertDialogBackdrop,
-	AlertDialogBody,
-	AlertDialogContent,
-	AlertDialogFooter,
-	AlertDialogHeader,
-} from '@/components/ui/alert-dialog';
-import { Input, InputField } from '@/components/ui/input';
-import {
-	Modal,
-	ModalBackdrop,
-	ModalBody,
-	ModalContent,
-	ModalFooter,
-	ModalHeader,
-} from '@/components/ui/modal';
+	NativeModal,
+	NativeModalActions,
+	NativeModalTextInput,
+} from '@/components/ui/native-modal';
+import { useNativeToast } from '@/components/ui/native-toast';
 import { Spinner } from '@/components/ui/spinner';
 import type {
 	EditorDocument,
@@ -68,24 +60,32 @@ import {
 
 const EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING = 56;
 const EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING = 40;
-const TREE_INDENT_STEP = 14;
+const TREE_INDENT_STEP = 16;
 const TREE_ROW_INSET = 8;
-const TREE_TOGGLE_SIZE = 20;
+const TREE_TOGGLE_SIZE = 22;
 const TREE_TOGGLE_GAP = 4;
 const TREE_FILE_START_OFFSET =
 	TREE_ROW_INSET + TREE_TOGGLE_SIZE + TREE_TOGGLE_GAP;
-const TREE_GUIDE_LEFT = TREE_ROW_INSET + TREE_TOGGLE_SIZE / 2;
 const TREE_GUIDE_WIDTH = 1.5;
+const TREE_ROW_RADIUS = 10;
+const TREE_CHEVRON_SIZE = 15;
+const TREE_NODE_ICON_SIZE = 18;
+const TREE_ROW_ESTIMATED_HEIGHT = 44;
+const TREE_LOCATE_SCROLL_OFFSET = 96;
 const DOUBLE_PRESS_DELAY = 260;
+const WORKSPACE_TOAST_ID = 'madora-workspace-toast';
+const WORKSPACE_TOAST_DURATION_MS = 2200;
 
 export function WorkspaceScreen() {
 	const insets = useSafeAreaInsets();
+	const { t } = useTranslation();
 	const resolvedTheme = useResolvedThemePreference();
 	const { editorFontSize } = useAppSettings();
 	const [activeTab, setActiveTab] = useState<WorkspaceTab>('editor');
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const {
 		bookmarkedDocumentIds,
+		cancelCopiedFile,
 		copySelectedFile,
 		copyState,
 		createLocalDirectory,
@@ -99,7 +99,9 @@ export function WorkspaceScreen() {
 		isFocusedTreeNodeBookmarked,
 		openLocalFolder,
 		pasteCopiedFile,
+		locateSelectedDocumentInTree,
 		renameSelectedFile,
+		refreshFileTree,
 		requestInlineCompletion,
 		selectDocument,
 		selectTreeNode,
@@ -110,6 +112,7 @@ export function WorkspaceScreen() {
 		updateSelectedDocumentContent,
 		workspaceSource,
 	} = useEditorWorkspace();
+	const { showToast } = useNativeToast();
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [createValue, setCreateValue] = useState('');
 	const [createFolderModalOpen, setCreateFolderModalOpen] = useState(false);
@@ -117,6 +120,8 @@ export function WorkspaceScreen() {
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 	const [renameModalOpen, setRenameModalOpen] = useState(false);
 	const [renameValue, setRenameValue] = useState('');
+	const [refreshingFileTree, setRefreshingFileTree] = useState(false);
+	const [locateRequestId, setLocateRequestId] = useState(0);
 
 	const editorTopPadding = insets.top;
 	const editorBottomPadding =
@@ -237,15 +242,74 @@ export function WorkspaceScreen() {
 	};
 
 	const handleCopyFile = () => {
-		void copySelectedFile();
+		void copySelectedFile().then((copied) => {
+			if (copied) {
+				showWorkspaceToast(
+					showToast,
+					t('fileTree.feedback.copyReadyTitle'),
+					t('fileTree.feedback.copyReadyDetail', {
+						name: focusedTreeNode?.name ?? selectedDocument?.title ?? '',
+					})
+				);
+			}
+		});
 	};
 
 	const handlePasteFile = () => {
 		void pasteCopiedFile().then((pasted) => {
 			if (pasted) {
 				setActiveTab('editor');
+				showWorkspaceToast(
+					showToast,
+					t('fileTree.feedback.pastedTitle'),
+					t('fileTree.feedback.pastedDetail')
+				);
 			}
 		});
+	};
+
+	const handleCancelCopy = () => {
+		cancelCopiedFile();
+		showWorkspaceToast(
+			showToast,
+			t('fileTree.feedback.copyCanceledTitle'),
+			t('fileTree.feedback.copyCanceledDetail')
+		);
+	};
+
+	const handleRefreshFileTree = () => {
+		setRefreshingFileTree(true);
+		void refreshFileTree()
+			.then((refreshed) => {
+				if (refreshed) {
+					showWorkspaceToast(
+						showToast,
+						t('fileTree.feedback.refreshedTitle'),
+						t('fileTree.feedback.refreshedDetail')
+					);
+				}
+			})
+			.finally(() => setRefreshingFileTree(false));
+	};
+
+	const handleLocateSelectedDocument = () => {
+		const located = locateSelectedDocumentInTree();
+		if (located) {
+			setActiveTab('fileTree');
+			setLocateRequestId((current) => current + 1);
+			showWorkspaceToast(
+				showToast,
+				t('fileTree.feedback.locatedTitle'),
+				t('fileTree.feedback.locatedDetail')
+			);
+			return;
+		}
+
+		showWorkspaceToast(
+			showToast,
+			t('fileTree.feedback.locateUnavailableTitle'),
+			t('fileTree.feedback.locateUnavailableDetail')
+		);
 	};
 
 	const handleToggleBookmark = () => {
@@ -279,7 +343,12 @@ export function WorkspaceScreen() {
 				>
 					<FileTreeView
 						bookmarkedDocumentIds={bookmarkedDocumentIds}
+						canCopyFile={
+							focusedTreeNode?.kind === 'file' ||
+							(fileTree.length === 0 && Boolean(selectedDocument))
+						}
 						canCreateFile={workspaceSource.kind === 'directory'}
+						copyState={copyState}
 						documents={documents}
 						errorMessage={errorMessage}
 						expandedDirectoryPaths={expandedDirectoryPaths}
@@ -287,17 +356,23 @@ export function WorkspaceScreen() {
 						focusedTreeNode={focusedTreeNode}
 						hasCopiedFile={Boolean(copyState)}
 						isFocusedTreeNodeBookmarked={isFocusedTreeNodeBookmarked}
+						locateRequestId={locateRequestId}
+						onCancelCopy={handleCancelCopy}
 						onCopyFile={handleCopyFile}
 						onCreateFolder={handleOpenCreateFolder}
 						onCreateFile={handleOpenCreateFile}
 						onDeleteEntry={() => setDeleteDialogOpen(true)}
+						onLocateCurrent={handleLocateSelectedDocument}
 						onOpenDocument={handleOpenDocument}
 						onOpenFolder={handleOpenFolder}
 						onPasteFile={handlePasteFile}
 						onRenameFile={handleOpenRename}
+						onRefreshFileTree={handleRefreshFileTree}
 						onSelectTreeNode={handleSelectTreeNode}
 						onToggleBookmark={handleToggleBookmark}
 						onToggleDirectoryExpanded={toggleDirectoryExpanded}
+						refreshing={refreshingFileTree}
+						selectedDocumentId={selectedDocument?.id ?? null}
 						selectedDocumentRelativePath={
 							selectedDocument?.relativePath ?? null
 						}
@@ -382,7 +457,9 @@ export function WorkspaceScreen() {
 
 function FileTreeView({
 	bookmarkedDocumentIds,
+	canCopyFile,
 	canCreateFile,
+	copyState,
 	documents,
 	errorMessage,
 	expandedDirectoryPaths,
@@ -390,23 +467,31 @@ function FileTreeView({
 	focusedTreeNode,
 	hasCopiedFile,
 	isFocusedTreeNodeBookmarked,
+	locateRequestId,
+	onCancelCopy,
 	onCopyFile,
 	onCreateFolder,
 	onCreateFile,
 	onDeleteEntry,
+	onLocateCurrent,
 	onOpenDocument,
 	onOpenFolder,
 	onPasteFile,
 	onRenameFile,
+	onRefreshFileTree,
 	onSelectTreeNode,
 	onToggleBookmark,
 	onToggleDirectoryExpanded,
+	refreshing,
+	selectedDocumentId,
 	selectedDocumentRelativePath,
 	selectedTreeNodePath,
 	workspaceSource,
 }: {
 	bookmarkedDocumentIds: string[];
+	canCopyFile: boolean;
 	canCreateFile: boolean;
+	copyState: { documentId: string; title: string } | null;
 	documents: EditorDocument[];
 	errorMessage: string | null;
 	expandedDirectoryPaths: Set<string>;
@@ -414,17 +499,23 @@ function FileTreeView({
 	focusedTreeNode: EditorNode | null;
 	hasCopiedFile: boolean;
 	isFocusedTreeNodeBookmarked: boolean;
+	locateRequestId: number;
+	onCancelCopy: () => void;
 	onCopyFile: () => void;
 	onCreateFolder: () => void;
 	onCreateFile: () => void;
 	onDeleteEntry: () => void;
+	onLocateCurrent: () => void;
 	onOpenDocument: (documentId: string) => void;
 	onOpenFolder: () => void;
 	onPasteFile: () => void;
 	onRenameFile: () => void;
+	onRefreshFileTree: () => void;
 	onSelectTreeNode: (documentId: string) => void;
 	onToggleBookmark: () => void;
 	onToggleDirectoryExpanded: (directoryPath: string) => void;
+	refreshing: boolean;
+	selectedDocumentId: string | null;
 	selectedDocumentRelativePath: string | null;
 	selectedTreeNodePath: string | null;
 	workspaceSource: EditorWorkspaceSource;
@@ -432,6 +523,7 @@ function FileTreeView({
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
 	const palette = useAppThemePalette();
+	const scrollViewRef = useRef<ScrollViewType>(null);
 	const showUnselectedFolderState =
 		workspaceSource.kind === 'empty' &&
 		fileTree.length === 0 &&
@@ -453,6 +545,27 @@ function FileTreeView({
 				),
 		[bookmarkedDocumentIds, fileTree]
 	);
+	const visiblePaths = useMemo(
+		() => flattenVisibleTreePaths(fileTree, expandedDirectoryPaths),
+		[fileTree, expandedDirectoryPaths]
+	);
+	const selectedVisibleIndex = selectedTreeNodePath
+		? visiblePaths.indexOf(selectedTreeNodePath)
+		: -1;
+	const canLocateCurrent = Boolean(selectedDocumentId);
+
+	useEffect(() => {
+		if (locateRequestId === 0 || selectedVisibleIndex < 0) return;
+
+		scrollViewRef.current?.scrollTo({
+			animated: true,
+			y: Math.max(
+				0,
+				selectedVisibleIndex * TREE_ROW_ESTIMATED_HEIGHT -
+					TREE_LOCATE_SCROLL_OFFSET
+			),
+		});
+	}, [locateRequestId, selectedVisibleIndex]);
 
 	if (showUnselectedFolderState) {
 		return (
@@ -485,7 +598,7 @@ function FileTreeView({
 				</View>
 				{showWorkspaceActions ? (
 					<View
-						className="flex-row items-center gap-1 px-2 py-1.5"
+						className="flex-row flex-wrap items-center gap-1 px-2 py-1.5"
 						style={{ borderTopColor: palette.border, borderTopWidth: 1 }}
 					>
 						{canCreateFile ? (
@@ -508,9 +621,25 @@ function FileTreeView({
 									onPress={onPasteFile}
 									palette={palette}
 									disabled={!hasCopiedFile}
+									active={hasCopiedFile}
 								/>
 							</>
 						) : null}
+						<FileToolbarIconButton
+							icon={RefreshCw}
+							label={t('fileTree.actions.refresh')}
+							onPress={onRefreshFileTree}
+							palette={palette}
+							disabled={refreshing}
+							loading={refreshing}
+						/>
+						<FileToolbarIconButton
+							icon={LocateFixed}
+							label={t('fileTree.actions.locateCurrent')}
+							onPress={onLocateCurrent}
+							palette={palette}
+							disabled={!canLocateCurrent}
+						/>
 						<FileToolbarIconButton
 							icon={Edit3}
 							label={t('markdownEditor.toolbar.renameFile')}
@@ -523,7 +652,12 @@ function FileTreeView({
 							label={t('markdownEditor.toolbar.copyFile')}
 							onPress={onCopyFile}
 							palette={palette}
-							disabled={!focusedTreeNode || focusedTreeNode.kind !== 'file'}
+							disabled={!canCopyFile}
+							active={Boolean(
+								copyState &&
+								(focusedTreeNode?.path === copyState.documentId ||
+									selectedDocumentId === copyState.documentId)
+							)}
 						/>
 						<FileToolbarIconButton
 							icon={isFocusedTreeNodeBookmarked ? BookmarkCheck : Bookmark}
@@ -547,6 +681,37 @@ function FileTreeView({
 						/>
 					</View>
 				) : null}
+				{copyState ? (
+					<View
+						className="flex-row items-center gap-2 px-3 py-2"
+						style={{
+							backgroundColor: palette.surfaceMuted,
+							borderTopColor: palette.border,
+							borderTopWidth: 1,
+						}}
+					>
+						<Copy color={palette.icon} size={15} strokeWidth={2.2} />
+						<Text
+							className="min-w-0 flex-1 text-[12px] font-medium text-foreground"
+							numberOfLines={1}
+						>
+							{t('fileTree.copyBanner.title', { name: copyState.title })}
+						</Text>
+						<FileToolbarIconButton
+							icon={ClipboardPaste}
+							label={t('markdownEditor.toolbar.pasteFile')}
+							onPress={onPasteFile}
+							palette={palette}
+							active
+						/>
+						<FileToolbarIconButton
+							icon={X}
+							label={t('fileTree.actions.cancelCopy')}
+							onPress={onCancelCopy}
+							palette={palette}
+						/>
+					</View>
+				) : null}
 			</View>
 			{bookmarkedNodes.length > 0 ? (
 				<View className="px-2 pt-2">
@@ -559,6 +724,7 @@ function FileTreeView({
 				</View>
 			) : null}
 			<ScrollView
+				ref={scrollViewRef}
 				keyboardShouldPersistTaps="handled"
 				showsVerticalScrollIndicator={false}
 				className="flex-1 px-2 py-2"
@@ -634,15 +800,14 @@ function FileTreeNodeRow({
 			: palette.iconMuted;
 	const Chevron = expanded ? ChevronDown : ChevronRight;
 
-	const handlePress = () => {
+	const handlePress: PressableProps['onPress'] = (event) => {
 		if (node.kind === 'directory') {
-			onSelectTreeNode(node.path);
-			onToggleDirectoryExpanded(node.path);
+			handleToggleDirectory();
 			return;
 		}
 
 		if (selectable) {
-			const now = Date.now();
+			const now = event.nativeEvent.timestamp;
 			if (
 				lastPressRef.current &&
 				now - lastPressRef.current <= DOUBLE_PRESS_DELAY
@@ -657,6 +822,11 @@ function FileTreeNodeRow({
 		}
 	};
 
+	const handleToggleDirectory = () => {
+		onSelectTreeNode(node.path);
+		onToggleDirectoryExpanded(node.path);
+	};
+
 	return (
 		<View>
 			<View className="py-0.5">
@@ -667,43 +837,75 @@ function FileTreeNodeRow({
 					<Pressable
 						disabled={!actionable}
 						onPress={handlePress}
-						className="min-h-9 flex-1 flex-row items-center rounded-md py-1.5
+						className="min-h-10 flex-1 flex-row items-center rounded-md py-2
 							pl-0 pr-2"
 						style={{
 							backgroundColor: selected ? palette.accentSurface : 'transparent',
+							borderRadius: TREE_ROW_RADIUS,
+							overflow: 'hidden',
 						}}
 					>
-						<View
-							className="h-5 w-5 items-center justify-center"
-							style={{ marginRight: TREE_TOGGLE_GAP }}
-						>
-							{node.kind === 'directory' ? (
-								<Chevron color={iconColor} size={14} strokeWidth={2.2} />
-							) : null}
-						</View>
 						{node.kind === 'directory' ? (
-							expanded ? (
-								<FolderOpen color={iconColor} size={16} strokeWidth={2} />
-							) : (
-								<Folder color={iconColor} size={16} strokeWidth={2} />
-							)
+							<View
+								className="items-center justify-center"
+								style={{
+									height: TREE_TOGGLE_SIZE,
+									marginRight: TREE_TOGGLE_GAP,
+									width: TREE_TOGGLE_SIZE,
+								}}
+							>
+								<Chevron
+									color={iconColor}
+									size={TREE_CHEVRON_SIZE}
+									strokeWidth={2.2}
+								/>
+							</View>
 						) : (
-							<FileText color={iconColor} size={16} strokeWidth={2} />
+							<View
+								style={{
+									height: TREE_TOGGLE_SIZE,
+									marginRight: TREE_TOGGLE_GAP,
+									width: TREE_TOGGLE_SIZE,
+								}}
+							/>
 						)}
-						<Text
-							numberOfLines={1}
-							className="ml-2 flex-1 text-[14px]"
-							style={{
-								color: selected
-									? palette.accentForeground
-									: actionable
-										? palette.foreground
-										: palette.mutedForeground,
-								fontWeight: selected ? '600' : '400',
-							}}
-						>
-							{node.name}
-						</Text>
+						<View className="min-w-0 flex-1 flex-row items-center">
+							{node.kind === 'directory' ? (
+								expanded ? (
+									<FolderOpen
+										color={iconColor}
+										size={TREE_NODE_ICON_SIZE}
+										strokeWidth={2}
+									/>
+								) : (
+									<Folder
+										color={iconColor}
+										size={TREE_NODE_ICON_SIZE}
+										strokeWidth={2}
+									/>
+								)
+							) : (
+								<FileText
+									color={iconColor}
+									size={TREE_NODE_ICON_SIZE}
+									strokeWidth={2}
+								/>
+							)}
+							<Text
+								numberOfLines={1}
+								className="ml-2 flex-1 text-[15px]"
+								style={{
+									color: selected
+										? palette.accentForeground
+										: actionable
+											? palette.foreground
+											: palette.mutedForeground,
+									fontWeight: selected ? '600' : '400',
+								}}
+							>
+								{node.name}
+							</Text>
+						</View>
 					</Pressable>
 				</View>
 			</View>
@@ -754,8 +956,8 @@ function DocumentRow({
 	const iconColor = selected ? palette.accentForeground : palette.icon;
 	const lastPressRef = useRef(0);
 
-	const handlePress: PressableProps['onPress'] = () => {
-		const now = Date.now();
+	const handlePress: PressableProps['onPress'] = (event) => {
+		const now = event.nativeEvent.timestamp;
 		if (
 			lastPressRef.current &&
 			now - lastPressRef.current <= DOUBLE_PRESS_DELAY
@@ -773,17 +975,23 @@ function DocumentRow({
 		<View className="relative py-0.5">
 			<Pressable
 				onPress={handlePress}
-				className="min-h-9 flex-row items-center gap-2 rounded-md px-2 py-1.5"
+				className="min-h-10 flex-row items-center gap-2 rounded-md px-2 py-2"
 				style={{
 					backgroundColor: selected ? palette.accentSurface : 'transparent',
+					borderRadius: TREE_ROW_RADIUS,
+					overflow: 'hidden',
 					paddingLeft: TREE_FILE_START_OFFSET,
 				}}
 			>
-				<FileText color={iconColor} size={16} strokeWidth={2} />
+				<FileText
+					color={iconColor}
+					size={TREE_NODE_ICON_SIZE}
+					strokeWidth={2}
+				/>
 				<View className="flex-1">
 					<Text
 						numberOfLines={1}
-						className="text-[14px]"
+						className="text-[15px]"
 						style={{
 							color: selected ? palette.accentForeground : palette.foreground,
 							fontWeight: selected ? '600' : '400',
@@ -859,14 +1067,22 @@ function IndentGuides({ depth }: { depth: number }) {
 		<View
 			pointerEvents="none"
 			style={{
-				backgroundColor: 'rgba(115, 115, 115, 0.28)',
+				alignItems: 'center',
 				bottom: 0,
-				left: depth * TREE_INDENT_STEP + TREE_GUIDE_LEFT - TREE_GUIDE_WIDTH / 2,
+				left: depth * TREE_INDENT_STEP + TREE_ROW_INSET,
 				position: 'absolute',
 				top: 0,
-				width: TREE_GUIDE_WIDTH,
+				width: TREE_TOGGLE_SIZE,
 			}}
-		/>
+		>
+			<View
+				style={{
+					backgroundColor: 'rgba(115, 115, 115, 0.28)',
+					flex: 1,
+					width: TREE_GUIDE_WIDTH,
+				}}
+			/>
+		</View>
 	);
 }
 
@@ -875,23 +1091,36 @@ function FileToolbarIconButton({
 	label,
 	onPress,
 	palette,
+	active = false,
 	disabled = false,
+	loading = false,
 }: {
 	icon: typeof FilePlus2;
 	label: string;
 	onPress: () => void;
 	palette: ReturnType<typeof useAppThemePalette>;
+	active?: boolean;
 	disabled?: boolean;
+	loading?: boolean;
 }) {
+	const foregroundColor = active ? palette.accentForeground : palette.icon;
+
 	return (
 		<Pressable
 			accessibilityLabel={label}
 			disabled={disabled}
 			onPress={onPress}
 			className="h-8 w-8 items-center justify-center rounded-md"
-			style={{ backgroundColor: 'transparent', opacity: disabled ? 0.45 : 1 }}
+			style={{
+				backgroundColor: active ? palette.accentSurface : 'transparent',
+				opacity: disabled ? 0.45 : 1,
+			}}
 		>
-			<Icon color={palette.icon} size={16} strokeWidth={2.2} />
+			{loading ? (
+				<Spinner color={foregroundColor} size="small" />
+			) : (
+				<Icon color={foregroundColor} size={16} strokeWidth={2.2} />
+			)}
 		</Pressable>
 	);
 }
@@ -1127,44 +1356,34 @@ function RenameFileModal({
 	const { t } = useTranslation();
 
 	return (
-		<Modal isOpen={isOpen} onClose={onClose} size="md">
-			<ModalBackdrop />
-			<ModalContent
-				className="w-[82%] max-w-[392px] rounded-lg border-border/70 px-4 py-4"
-			>
-				<ModalHeader>
-					<Text className="text-[16px] font-semibold text-foreground">
-						{t('markdownEditor.toolbar.renameFile')}
-					</Text>
-				</ModalHeader>
-				<ModalBody>
-					<View className="gap-3">
-						<Text className="text-[13px] leading-5 text-muted-foreground">
-							{title}
-						</Text>
-						<Input>
-							<InputField
-								autoCapitalize="none"
-								autoCorrect={false}
-								autoFocus
-								value={value}
-								onChangeText={onChangeValue}
-								onSubmitEditing={onConfirm}
-								returnKeyType="done"
-							/>
-						</Input>
-					</View>
-				</ModalBody>
-				<ModalFooter>
-					<Button variant="outline" action="secondary" onPress={onClose}>
-						<ButtonText>{t('common.actions.cancel')}</ButtonText>
-					</Button>
-					<Button onPress={onConfirm}>
-						<ButtonText>{t('common.actions.save')}</ButtonText>
-					</Button>
-				</ModalFooter>
-			</ModalContent>
-		</Modal>
+		<NativeModal
+			isOpen={isOpen}
+			title={t('markdownEditor.toolbar.renameFile')}
+			onClose={onClose}
+			footer={
+				<NativeModalActions
+					cancelLabel={t('common.actions.cancel')}
+					confirmLabel={t('common.actions.save')}
+					onCancel={onClose}
+					onConfirm={onConfirm}
+				/>
+			}
+		>
+			<View className="gap-3">
+				<Text className="text-[13px] leading-5 text-muted-foreground">
+					{title}
+				</Text>
+				<NativeModalTextInput
+					autoCapitalize="none"
+					autoCorrect={false}
+					autoFocus
+					value={value}
+					onChangeText={onChangeValue}
+					onSubmitEditing={onConfirm}
+					returnKeyType="done"
+				/>
+			</View>
+		</NativeModal>
 	);
 }
 
@@ -1184,40 +1403,30 @@ function CreateFileModal({
 	const { t } = useTranslation();
 
 	return (
-		<Modal isOpen={isOpen} onClose={onClose} size="md">
-			<ModalBackdrop />
-			<ModalContent
-				className="w-[82%] max-w-[392px] rounded-lg border-border/70 px-4 py-4"
-			>
-				<ModalHeader>
-					<Text className="text-[16px] font-semibold text-foreground">
-						{t('fileTree.actions.newFile')}
-					</Text>
-				</ModalHeader>
-				<ModalBody>
-					<Input>
-						<InputField
-							autoCapitalize="none"
-							autoCorrect={false}
-							autoFocus
-							value={value}
-							onChangeText={onChangeValue}
-							onSubmitEditing={onConfirm}
-							placeholder="note.md"
-							returnKeyType="done"
-						/>
-					</Input>
-				</ModalBody>
-				<ModalFooter>
-					<Button variant="outline" action="secondary" onPress={onClose}>
-						<ButtonText>{t('common.actions.cancel')}</ButtonText>
-					</Button>
-					<Button onPress={onConfirm}>
-						<ButtonText>{t('common.actions.save')}</ButtonText>
-					</Button>
-				</ModalFooter>
-			</ModalContent>
-		</Modal>
+		<NativeModal
+			isOpen={isOpen}
+			title={t('fileTree.actions.newFile')}
+			onClose={onClose}
+			footer={
+				<NativeModalActions
+					cancelLabel={t('common.actions.cancel')}
+					confirmLabel={t('common.actions.save')}
+					onCancel={onClose}
+					onConfirm={onConfirm}
+				/>
+			}
+		>
+			<NativeModalTextInput
+				autoCapitalize="none"
+				autoCorrect={false}
+				autoFocus
+				value={value}
+				onChangeText={onChangeValue}
+				onSubmitEditing={onConfirm}
+				placeholder="note.md"
+				returnKeyType="done"
+			/>
+		</NativeModal>
 	);
 }
 
@@ -1237,40 +1446,30 @@ function CreateFolderModal({
 	const { t } = useTranslation();
 
 	return (
-		<Modal isOpen={isOpen} onClose={onClose} size="md">
-			<ModalBackdrop />
-			<ModalContent
-				className="w-[82%] max-w-[392px] rounded-lg border-border/70 px-4 py-4"
-			>
-				<ModalHeader>
-					<Text className="text-[16px] font-semibold text-foreground">
-						{t('fileTree.actions.newFolder')}
-					</Text>
-				</ModalHeader>
-				<ModalBody>
-					<Input>
-						<InputField
-							autoCapitalize="none"
-							autoCorrect={false}
-							autoFocus
-							value={value}
-							onChangeText={onChangeValue}
-							onSubmitEditing={onConfirm}
-							placeholder="notes"
-							returnKeyType="done"
-						/>
-					</Input>
-				</ModalBody>
-				<ModalFooter>
-					<Button variant="outline" action="secondary" onPress={onClose}>
-						<ButtonText>{t('common.actions.cancel')}</ButtonText>
-					</Button>
-					<Button onPress={onConfirm}>
-						<ButtonText>{t('common.actions.save')}</ButtonText>
-					</Button>
-				</ModalFooter>
-			</ModalContent>
-		</Modal>
+		<NativeModal
+			isOpen={isOpen}
+			title={t('fileTree.actions.newFolder')}
+			onClose={onClose}
+			footer={
+				<NativeModalActions
+					cancelLabel={t('common.actions.cancel')}
+					confirmLabel={t('common.actions.save')}
+					onCancel={onClose}
+					onConfirm={onConfirm}
+				/>
+			}
+		>
+			<NativeModalTextInput
+				autoCapitalize="none"
+				autoCorrect={false}
+				autoFocus
+				value={value}
+				onChangeText={onChangeValue}
+				onSubmitEditing={onConfirm}
+				placeholder="notes"
+				returnKeyType="done"
+			/>
+		</NativeModal>
 	);
 }
 
@@ -1288,29 +1487,24 @@ function DeleteEntryDialog({
 	const { t } = useTranslation();
 
 	return (
-		<AlertDialog isOpen={isOpen} onClose={onClose} size="sm">
-			<AlertDialogBackdrop />
-			<AlertDialogContent className="rounded-lg border-border/70 px-4 py-4">
-				<AlertDialogHeader>
-					<Text className="text-[16px] font-semibold text-foreground">
-						{t('fileTree.delete.title')}
-					</Text>
-				</AlertDialogHeader>
-				<AlertDialogBody className="mt-3">
-					<Text className="text-[13px] leading-5 text-muted-foreground">
-						{t('fileTree.delete.detail', { name: entryName })}
-					</Text>
-				</AlertDialogBody>
-				<AlertDialogFooter className="mt-4">
-					<Button variant="outline" action="secondary" onPress={onClose}>
-						<ButtonText>{t('common.actions.cancel')}</ButtonText>
-					</Button>
-					<Button variant="destructive" onPress={onConfirm}>
-						<ButtonText>{t('common.actions.delete')}</ButtonText>
-					</Button>
-				</AlertDialogFooter>
-			</AlertDialogContent>
-		</AlertDialog>
+		<NativeModal
+			isOpen={isOpen}
+			title={t('fileTree.delete.title')}
+			onClose={onClose}
+			footer={
+				<NativeModalActions
+					cancelLabel={t('common.actions.cancel')}
+					confirmLabel={t('common.actions.delete')}
+					destructive
+					onCancel={onClose}
+					onConfirm={onConfirm}
+				/>
+			}
+		>
+			<Text className="text-[13px] leading-5 text-muted-foreground">
+				{t('fileTree.delete.detail', { name: entryName })}
+			</Text>
+		</NativeModal>
 	);
 }
 
@@ -1325,4 +1519,37 @@ function findTreeNode(nodes: EditorNode[], path: string): EditorNode | null {
 	}
 
 	return null;
+}
+
+function flattenVisibleTreePaths(
+	nodes: EditorNode[],
+	expandedDirectoryPaths: Set<string>
+): string[] {
+	const paths: string[] = [];
+
+	for (const node of nodes) {
+		paths.push(node.path);
+
+		if (node.kind === 'directory' && expandedDirectoryPaths.has(node.path)) {
+			paths.push(
+				...flattenVisibleTreePaths(node.children, expandedDirectoryPaths)
+			);
+		}
+	}
+
+	return paths;
+}
+
+function showWorkspaceToast(
+	showToast: ReturnType<typeof useNativeToast>['showToast'],
+	title: string,
+	description: string
+) {
+	showToast({
+		description,
+		durationMs: WORKSPACE_TOAST_DURATION_MS,
+		id: WORKSPACE_TOAST_ID,
+		title,
+		tone: 'info',
+	});
 }

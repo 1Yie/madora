@@ -243,14 +243,20 @@ const ko = {
 	fileTree: {
 		actions: {
 			bookmark: '북마크',
+			cancelCopy: '복사 취소',
 			delete: '삭제',
+			locateCurrent: '현재 파일 찾기',
 			newFolder: '새 폴더',
 			newFile: '새 파일',
 			openFile: '파일 열기',
 			openFolder: '폴더 열기',
+			refresh: '파일 새로고침',
 			removeBookmark: '북마크 해제',
 		},
 		bookmarks: '북마크',
+		copyBanner: {
+			title: '"{{name}}" 붙여넣기 준비됨',
+		},
 		delete: {
 			detail: '이 워크스페이스에서 "{{name}}"을(를) 삭제하시겠습니까?',
 			title: '항목 삭제',
@@ -259,6 +265,20 @@ const ko = {
 		empty: {
 			detail: '로컬 폴더를 열어 여기서 파일을 탐색하고 만들 수 있습니다.',
 			title: '선택된 폴더가 없습니다',
+		},
+		feedback: {
+			copyCanceledDetail: '복사한 파일을 지웠습니다.',
+			copyCanceledTitle: '복사를 취소했습니다',
+			copyReadyDetail: '"{{name}}"을(를) 폴더에 붙여넣을 수 있습니다.',
+			copyReadyTitle: '파일을 복사했습니다',
+			locatedDetail: '파일 트리가 현재 파일로 이동했습니다.',
+			locatedTitle: '현재 파일을 찾았습니다',
+			locateUnavailableDetail: '먼저 파일을 열거나 선택하세요.',
+			locateUnavailableTitle: '찾을 파일이 없습니다',
+			pastedDetail: '복사한 파일을 선택한 폴더에 추가했습니다.',
+			pastedTitle: '파일을 붙여넣었습니다',
+			refreshedDetail: '현재 파일 트리를 다시 불러왔습니다.',
+			refreshedTitle: '파일을 새로고침했습니다',
 		},
 		title: '파일 트리',
 	},

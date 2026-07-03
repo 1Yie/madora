@@ -218,14 +218,20 @@ const zhCN = {
 	fileTree: {
 		actions: {
 			bookmark: '收藏',
+			cancelCopy: '取消复制',
 			delete: '删除',
+			locateCurrent: '定位当前文件',
 			newFolder: '新建文件夹',
 			newFile: '新建文件',
 			openFile: '打开文件',
 			openFolder: '打开文件夹',
+			refresh: '刷新文件',
 			removeBookmark: '取消收藏',
 		},
 		bookmarks: '书签',
+		copyBanner: {
+			title: '已复制“{{name}}”，可粘贴',
+		},
 		delete: {
 			detail: '确认从当前工作区删除“{{name}}”？',
 			title: '删除项目',
@@ -234,6 +240,20 @@ const zhCN = {
 		empty: {
 			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
 			title: '还未选择文件夹',
+		},
+		feedback: {
+			copyCanceledDetail: '已清除待粘贴文件。',
+			copyCanceledTitle: '已取消复制',
+			copyReadyDetail: '现在可以把“{{name}}”粘贴到文件夹中。',
+			copyReadyTitle: '文件已复制',
+			locatedDetail: '文件树已定位到当前文件。',
+			locatedTitle: '已定位当前文件',
+			locateUnavailableDetail: '请先打开或选择一个文件。',
+			locateUnavailableTitle: '没有可定位的文件',
+			pastedDetail: '复制的文件已添加到目标文件夹。',
+			pastedTitle: '文件已粘贴',
+			refreshedDetail: '当前文件树已重新加载。',
+			refreshedTitle: '文件已刷新',
 		},
 		title: '文件树',
 	},
@@ -341,10 +361,13 @@ const zhCN = {
 			loading: '正在补全',
 		},
 		toolbar: {
+			copyFile: '复制文件',
 			edit: '编辑',
 			image: '图片',
 			link: '链接',
+			pasteFile: '粘贴文件',
 			preview: '预览',
+			renameFile: '重命名文件',
 		},
 		placeholder: {
 			bold: '加粗文本',

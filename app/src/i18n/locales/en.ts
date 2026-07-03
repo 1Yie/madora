@@ -249,14 +249,20 @@ const en = {
 	fileTree: {
 		actions: {
 			bookmark: 'Bookmark',
+			cancelCopy: 'Cancel copy',
 			delete: 'Delete',
+			locateCurrent: 'Locate current file',
 			newFolder: 'New folder',
 			newFile: 'New file',
 			openFile: 'Open file',
 			openFolder: 'Open folder',
+			refresh: 'Refresh files',
 			removeBookmark: 'Remove bookmark',
 		},
 		bookmarks: 'Bookmarks',
+		copyBanner: {
+			title: 'Ready to paste "{{name}}"',
+		},
 		delete: {
 			detail: 'Delete "{{name}}" from this workspace?',
 			title: 'Delete item',
@@ -265,6 +271,20 @@ const en = {
 		empty: {
 			detail: 'Open a local folder to browse and create files here.',
 			title: 'No folder selected',
+		},
+		feedback: {
+			copyCanceledDetail: 'The copied file was cleared.',
+			copyCanceledTitle: 'Copy canceled',
+			copyReadyDetail: '"{{name}}" can now be pasted into a folder.',
+			copyReadyTitle: 'File copied',
+			locatedDetail: 'The file tree is focused on the current file.',
+			locatedTitle: 'Current file located',
+			locateUnavailableDetail: 'Open or select a file first.',
+			locateUnavailableTitle: 'Nothing to locate',
+			pastedDetail: 'The copied file was added to the selected folder.',
+			pastedTitle: 'File pasted',
+			refreshedDetail: 'The visible file tree has been reloaded.',
+			refreshedTitle: 'Files refreshed',
 		},
 		title: 'File tree',
 	},
