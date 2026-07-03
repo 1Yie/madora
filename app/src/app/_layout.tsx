@@ -7,6 +7,8 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { GluestackUIProvider } from '../components/ui/gluestack-ui-provider';
 import { useErrorToast } from '@/components/ui/toast';
+import { KeyboardDismissView } from '@/components/ui/keyboard-dismiss-view';
+import { NativeToastProvider } from '@/components/ui/native-toast';
 import { AppTabs } from '@/app-shell';
 import { AiSettingsProvider } from '@/features/ai';
 import { EditorProvider } from '@/features/editor';
@@ -32,7 +34,6 @@ export default function TabLayout() {
 			<KeyboardProvider>
 				<AppSettingsProvider>
 					<ThemedAppProviders>
-						<GlobalErrorHandler />
 						<AiSettingsProvider>
 							<MadoraSyncProvider>
 								<EditorProvider>
@@ -57,7 +58,7 @@ function GlobalErrorHandler() {
 	const showErrorToast = useErrorToast();
 
 	useEffect(() => {
-		const ErrorUtils = global as { ErrorUtils?: unknown } as {
+		const ErrorUtils = globalThis as unknown as {
 			ErrorUtils?: {
 				getGlobalHandler?: () => (error: unknown, isFatal?: boolean) => void;
 				setGlobalHandler?: (
@@ -110,7 +111,12 @@ function ThemedAppProviders({ children }: { children: ReactNode }) {
 			<ThemeProvider
 				value={effectiveColorScheme === 'dark' ? DarkTheme : DefaultTheme}
 			>
-				{children}
+				<NativeToastProvider>
+					<GlobalErrorHandler />
+					<KeyboardDismissView style={{ flex: 1 }}>
+						{children}
+					</KeyboardDismissView>
+				</NativeToastProvider>
 			</ThemeProvider>
 		</GluestackUIProvider>
 	);
