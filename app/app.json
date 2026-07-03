@@ -2,10 +2,8 @@
 	"expo": {
 		"android": {
 			"adaptiveIcon": {
-				"backgroundColor": "#E6F4FE",
-				"backgroundImage": "./assets/images/android-icon-background.png",
-				"foregroundImage": "./assets/images/android-icon-foreground.png",
-				"monochromeImage": "./assets/images/android-icon-monochrome.png"
+				"backgroundColor": "#0a0a0a",
+				"foregroundImage": "./assets/images/android-icon-foreground.png"
 			},
 			"package": "im.ingstar.madora",
 			"permissions": [
@@ -21,19 +19,18 @@
 		"icon": "./assets/images/icon.png",
 		"ios": {
 			"bundleIdentifier": "im.ingstar.madora",
-			"icon": "./assets/expo.icon",
 			"infoPlist": {
 				"NSCameraUsageDescription": "Madora uses the camera to scan the pairing QR code shown by the desktop app."
 			}
 		},
-		"name": "app",
+		"name": "Madora",
 		"orientation": "portrait",
 		"plugins": [
 			"expo-router",
 			[
 				"expo-splash-screen",
 				{
-					"backgroundColor": "#208AEF",
+					"backgroundColor": "#0a0a0a",
 					"image": "./assets/images/splash-icon.png",
 					"imageWidth": 76
 				}
@@ -48,8 +45,8 @@
 			"@actualwave/react-native-codeditor",
 			"expo-secure-store"
 		],
-		"scheme": "app",
-		"slug": "app",
+		"scheme": "madora",
+		"slug": "madora",
 		"userInterfaceStyle": "automatic",
 		"version": "1.0.0",
 		"web": {
