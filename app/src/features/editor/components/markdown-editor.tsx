@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+	DeviceEventEmitter,
 	KeyboardAvoidingView,
 	Platform,
 	StyleSheet,
@@ -25,6 +26,7 @@ import {
 	APP_THEME_BACKGROUND_COLORS,
 	type ResolvedThemePreference,
 } from '@/features/settings';
+import { WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT } from '../lib/workspace-tab-events';
 import { useSetMarkdownToolbar } from '../providers/markdown-toolbar-provider';
 import { MarkdownPreview } from './markdown-preview';
 import type {
@@ -87,6 +89,7 @@ export function MarkdownEditor({
 	const apiRef = useRef<WebViewAPI | null>(null);
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const requestSequenceRef = useRef(0);
+	const completionAnchorRef = useRef<number | null>(null);
 	const lastLocalValueRef = useRef(value);
 	const emittedValuesRef = useRef(new Set<string>());
 	const documentKeyRef = useRef(getDocumentKey(filePath, title));
@@ -101,6 +104,7 @@ export function MarkdownEditor({
 
 	const clearCompletion = useCallback(() => {
 		requestSequenceRef.current += 1;
+		completionAnchorRef.current = null;
 		setCompletionStatus('idle');
 		apiRef.current?.injectJavaScript(
 			'window.__madoraClearGhost && window.__madoraClearGhost(); true;'
@@ -109,6 +113,7 @@ export function MarkdownEditor({
 
 	const acceptCompletion = useCallback(() => {
 		requestSequenceRef.current += 1;
+		completionAnchorRef.current = null;
 		const api = apiRef.current;
 		if (!api) {
 			setCompletionStatus('idle');
@@ -127,6 +132,17 @@ export function MarkdownEditor({
 			if (debounceRef.current) clearTimeout(debounceRef.current);
 		};
 	}, []);
+
+	useEffect(() => {
+		DeviceEventEmitter.emit(
+			WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT,
+			effectiveMode === 'edit'
+		);
+
+		return () => {
+			DeviceEventEmitter.emit(WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT, false);
+		};
+	}, [effectiveMode]);
 
 	useEffect(() => {
 		if (effectiveMode !== 'edit' || editorReady) return;
@@ -201,12 +217,14 @@ export function MarkdownEditor({
 
 					const selection = await api.editor.getSelection();
 					if (selection.length > 0) {
+						completionAnchorRef.current = null;
 						setCompletionStatus('idle');
 						return;
 					}
 
 					const cursor = await api.editor.getCursor('head');
 					const snapshot = { cursor: cursor.index, value: nextValue };
+					completionAnchorRef.current = snapshot.cursor;
 					api.injectJavaScript(
 						'window.__madoraClearGhost && window.__madoraClearGhost(); true;'
 					);
@@ -222,11 +240,15 @@ export function MarkdownEditor({
 						requestSequenceRef.current !== sequence ||
 						lastLocalValueRef.current !== snapshot.value
 					) {
+						if (requestSequenceRef.current === sequence) {
+							completionAnchorRef.current = null;
+						}
 						return;
 					}
 
 					const latestCursor = await api.editor.getCursor('head');
 					if (latestCursor.index !== snapshot.cursor) {
+						completionAnchorRef.current = null;
 						setCompletionStatus('idle');
 						return;
 					}
@@ -239,6 +261,7 @@ export function MarkdownEditor({
 						return;
 					}
 
+					completionAnchorRef.current = null;
 					setCompletionStatus('idle');
 				})();
 			}, 80);
@@ -256,6 +279,32 @@ export function MarkdownEditor({
 		},
 		[clearCompletion, onChange, scheduleCompletion]
 	);
+
+	const handleSelectionChange = useCallback(() => {
+		const anchor = completionAnchorRef.current;
+		if (anchor === null) return;
+
+		const api = apiRef.current;
+		if (!api) {
+			clearCompletion();
+			return;
+		}
+
+		void (async () => {
+			try {
+				const selection = await api.editor.getSelection();
+				const cursor = await api.editor.getCursor('head');
+				if (
+					completionAnchorRef.current !== null &&
+					(selection.length > 0 || cursor.index !== completionAnchorRef.current)
+				) {
+					clearCompletion();
+				}
+			} catch {
+				clearCompletion();
+			}
+		})();
+	}, [clearCompletion]);
 
 	const handleInitialized = useCallback(
 		(api: WebViewAPI) => {
@@ -457,7 +506,7 @@ export function MarkdownEditor({
 						onHistorySizeUpdate={() => {}}
 						onInitialized={handleInitialized}
 						onLog={() => {}}
-						onSelectionChange={() => {}}
+						onSelectionChange={handleSelectionChange}
 						onShortcut={handleShortcut}
 						renderBlockingView={() => (
 							<View style={blockingViewStyle}>

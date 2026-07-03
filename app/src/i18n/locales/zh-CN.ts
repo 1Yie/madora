@@ -217,9 +217,18 @@ const zhCN = {
 	},
 	fileTree: {
 		actions: {
+			bookmark: '收藏',
+			delete: '删除',
+			newFolder: '新建文件夹',
 			newFile: '新建文件',
 			openFile: '打开文件',
 			openFolder: '打开文件夹',
+			removeBookmark: '取消收藏',
+		},
+		bookmarks: '书签',
+		delete: {
+			detail: '确认从当前工作区删除“{{name}}”？',
+			title: '删除项目',
 		},
 		detail: '本地文件和文件夹',
 		empty: {
@@ -230,8 +239,11 @@ const zhCN = {
 	},
 	workspace: {
 		empty: {
-			detail:
-				'请先打开一个本地文件夹，然后在文件夹内新建或选择 Markdown 文件。',
+			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
+			title: '还未选择文件夹',
+		},
+		noSelection: {
+			detail: '请前往 文件树 选择或创建文件。',
 			title: '还未选择文件',
 		},
 	},

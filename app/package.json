@@ -49,6 +49,7 @@
 		"react-i18next": "^17.0.8",
 		"react-native": "0.86.0",
 		"react-native-css": "^3.0.4",
+		"react-native-file-access": "^4.0.3",
 		"react-native-gesture-handler": "~2.32.0",
 		"react-native-keyboard-controller": "1.21.9",
 		"react-native-reanimated": "4.5.0",

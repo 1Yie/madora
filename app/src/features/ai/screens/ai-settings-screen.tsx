@@ -13,7 +13,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
-	ArrowLeft,
 	Check,
 	ChevronDown,
 	KeyRound,
@@ -26,10 +25,12 @@ import modelsByProvider from '@/assets/models.json';
 import { Switch } from '@/components/ui/switch';
 import {
 	APP_THEME_BACKGROUND_COLORS,
+	SettingsCard,
 	useAppThemePalette,
 	useResolvedThemePreference,
 	type AppThemePalette,
 } from '@/features/settings';
+import { BackButton } from '@/shared/components';
 import { ProviderGlyph } from '../components/provider-glyph';
 import { getProviderDefinitions } from '../lib/provider-definitions';
 import { useAiSettings } from '../providers/settings-provider';
@@ -102,17 +103,7 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					className="absolute left-4 z-10"
 					style={{ top: insets.top + 12 }}
 				>
-					<Pressable
-						onPress={onBack}
-						className="h-9 flex-row items-center gap-1.5 self-start rounded-full
-							px-4"
-						style={{ backgroundColor: palette.surfaceMuted }}
-					>
-						<ArrowLeft color={palette.icon} size={16} strokeWidth={2.2} />
-						<Text className="text-[13px] font-semibold text-foreground">
-							{t('common.actions.back')}
-						</Text>
-					</Pressable>
+					<BackButton onPress={onBack} />
 				</View>
 			) : null}
 
@@ -128,20 +119,9 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					paddingTop: insets.top + (onBack ? 64 : 12),
 				}}
 			>
-				<View className="gap-1">
-					<Text
-						className="text-[12px] font-semibold uppercase
-							text-muted-foreground"
-					>
-						{t('settings.sections.ai.label')}
-					</Text>
-					<Text className="text-[24px] font-semibold text-foreground">
-						{t('settings.editor.cards.ai.title')}
-					</Text>
-					<Text className="text-[13px] leading-5 text-muted-foreground">
-						{t('settings.ai.description')}
-					</Text>
-				</View>
+				<Text className="text-[24px] font-semibold text-foreground">
+					{t('settings.editor.cards.ai.title')}
+				</Text>
 
 				<SettingsCard>
 					<View className="flex-row items-center justify-between gap-4">
@@ -169,10 +149,7 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</View>
 				</SettingsCard>
 
-				<SettingsCard
-					detail={t('settings.editor.providerHint')}
-					title={t('common.labels.provider')}
-				>
+				<SettingsCard title={t('common.labels.provider')}>
 					<View className="gap-2">
 						{providers.map((provider) => (
 							<ProviderOption
@@ -187,10 +164,7 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 				</SettingsCard>
 
 				{isCustomProvider ? (
-					<SettingsCard
-						detail={t('settings.editor.apiUrlHint')}
-						title={t('settings.editor.customConfigTitle')}
-					>
+					<SettingsCard title={t('settings.editor.customConfigTitle')}>
 						<View className="gap-3">
 							<View className="flex-row flex-wrap gap-2">
 								{CUSTOM_PROTOCOLS.map((protocol) => (
@@ -250,12 +224,7 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</SettingsCard>
 				) : null}
 
-				<SettingsCard
-					detail={
-						isCustomProvider ? t('settings.editor.modelHintCustom') : undefined
-					}
-					title={t('common.labels.model')}
-				>
+				<SettingsCard title={t('common.labels.model')}>
 					{isCustomProvider || modelOptions.length === 0 ? (
 						<TextInput
 							autoCapitalize="none"
@@ -278,14 +247,7 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					)}
 				</SettingsCard>
 
-				<SettingsCard
-					detail={`${
-						settings.hasApiKey
-							? t('settings.editor.apiKeyHint.existing')
-							: t('settings.editor.apiKeyHint.missing')
-					} ${t('settings.editor.apiKeyHint.storage')}`}
-					title={t('common.labels.apiKey')}
-				>
+				<SettingsCard title={t('common.labels.apiKey')}>
 					<FieldLabel
 						icon={
 							<KeyRound color={palette.iconMuted} size={15} strokeWidth={2.1} />
@@ -544,45 +506,6 @@ function ModelDropdown({
 				</View>
 			</Modal>
 		</>
-	);
-}
-
-function SettingsCard({
-	children,
-	detail,
-	title,
-}: {
-	children: ReactNode;
-	detail?: string;
-	title?: string;
-}) {
-	const palette = useAppThemePalette();
-
-	return (
-		<View
-			className="gap-3 rounded-lg p-4"
-			style={{
-				backgroundColor: palette.surface,
-				borderColor: palette.border,
-				borderWidth: 1,
-			}}
-		>
-			{title || detail ? (
-				<View className="gap-1">
-					{title ? (
-						<Text className="text-[16px] font-semibold text-foreground">
-							{title}
-						</Text>
-					) : null}
-					{detail ? (
-						<Text className="text-[13px] leading-5 text-muted-foreground">
-							{detail}
-						</Text>
-					) : null}
-				</View>
-			) : null}
-			{children}
-		</View>
 	);
 }
 

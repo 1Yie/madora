@@ -248,9 +248,18 @@ const en = {
 	},
 	fileTree: {
 		actions: {
+			bookmark: 'Bookmark',
+			delete: 'Delete',
+			newFolder: 'New folder',
 			newFile: 'New file',
 			openFile: 'Open file',
 			openFolder: 'Open folder',
+			removeBookmark: 'Remove bookmark',
+		},
+		bookmarks: 'Bookmarks',
+		delete: {
+			detail: 'Delete "{{name}}" from this workspace?',
+			title: 'Delete item',
 		},
 		detail: 'Local files and folders',
 		empty: {
@@ -263,6 +272,10 @@ const en = {
 		empty: {
 			detail:
 				'Open a local folder first, then create or select a Markdown file inside it.',
+			title: 'No file selected',
+		},
+		noSelection: {
+			detail: 'Go to the Files tab to pick or create a file.',
 			title: 'No file selected',
 		},
 	},
@@ -369,10 +382,13 @@ const en = {
 			loading: 'Completing',
 		},
 		toolbar: {
+			copyFile: 'Copy file',
 			edit: 'Edit',
 			image: 'Image',
 			link: 'Link',
+			pasteFile: 'Paste file',
 			preview: 'Preview',
+			renameFile: 'Rename file',
 		},
 		placeholder: {
 			bold: 'bold text',

@@ -3,6 +3,7 @@ export {
 	SettingsDetailScreen,
 	SettingsHomeScreen,
 } from './screens/settings-screen';
+export { SettingsCard } from './components/settings-card';
 export {
 	APP_THEME_BACKGROUND_COLORS,
 	AppSettingsProvider,

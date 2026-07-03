@@ -7,7 +7,7 @@
 				"foregroundImage": "./assets/images/android-icon-foreground.png",
 				"monochromeImage": "./assets/images/android-icon-monochrome.png"
 			},
-			"package": "com.anonymous.app",
+			"package": "im.ingstar.madora",
 			"permissions": [
 				"android.permission.CAMERA",
 				"android.permission.RECORD_AUDIO"
@@ -20,6 +20,7 @@
 		},
 		"icon": "./assets/images/icon.png",
 		"ios": {
+			"bundleIdentifier": "im.ingstar.madora",
 			"icon": "./assets/expo.icon",
 			"infoPlist": {
 				"NSCameraUsageDescription": "Madora uses the camera to scan the pairing QR code shown by the desktop app."

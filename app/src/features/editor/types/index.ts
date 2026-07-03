@@ -20,6 +20,7 @@ export interface EditorDocument {
 	id: string;
 	path: string;
 	readOnly: boolean;
+	relativePath: string;
 	title: string;
 	updatedAt: number;
 }

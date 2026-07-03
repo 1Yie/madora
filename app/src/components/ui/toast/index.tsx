@@ -253,3 +253,4 @@ ToastTitle.displayName = 'ToastTitle';
 ToastDescription.displayName = 'ToastDescription';
 
 export { Toast, ToastDescription, ToastTitle, useToast };
+export { useErrorToast } from './use-error-toast';

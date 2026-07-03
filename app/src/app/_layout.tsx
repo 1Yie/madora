@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { GluestackUIProvider } from '../components/ui/gluestack-ui-provider';
+import { useErrorToast } from '@/components/ui/toast';
 import { AppTabs } from '@/app-shell';
 import { AiSettingsProvider } from '@/features/ai';
 import { EditorProvider } from '@/features/editor';
@@ -31,6 +32,7 @@ export default function TabLayout() {
 			<KeyboardProvider>
 				<AppSettingsProvider>
 					<ThemedAppProviders>
+						<GlobalErrorHandler />
 						<AiSettingsProvider>
 							<MadoraSyncProvider>
 								<EditorProvider>
@@ -45,6 +47,49 @@ export default function TabLayout() {
 	);
 }
 
+/**
+ * Surfaces unhandled promise rejections (e.g. native WebSocket handshake
+ * timeouts, SQLite errors) as a top toast instead of leaving them only in the
+ * console as "Uncaught (in promise)". Wraps the existing global handler so
+ * default RN behaviour (LogBox reporting) is preserved.
+ */
+function GlobalErrorHandler() {
+	const showErrorToast = useErrorToast();
+
+	useEffect(() => {
+		const ErrorUtils = global as { ErrorUtils?: unknown } as {
+			ErrorUtils?: {
+				getGlobalHandler?: () => (error: unknown, isFatal?: boolean) => void;
+				setGlobalHandler?: (
+					handler: (error: unknown, isFatal?: boolean) => void
+				) => void;
+			};
+		};
+
+		const previousHandler =
+			ErrorUtils.ErrorUtils?.getGlobalHandler?.() ?? (() => {});
+
+		const handler = (error: unknown, isFatal?: boolean) => {
+			previousHandler(error, isFatal);
+
+			const message =
+				typeof error === 'string'
+					? error
+					: error instanceof Error
+						? error.message
+						: null;
+			if (message) showErrorToast(message);
+		};
+
+		ErrorUtils.ErrorUtils?.setGlobalHandler?.(handler);
+		return () => {
+			ErrorUtils.ErrorUtils?.setGlobalHandler?.(previousHandler);
+		};
+	}, [showErrorToast]);
+
+	return null;
+}
+
 function ThemedAppProviders({ children }: { children: ReactNode }) {
 	const systemColorScheme = useColorScheme();
 	const { themePreference } = useAppSettings();
@@ -54,7 +99,7 @@ function ThemedAppProviders({ children }: { children: ReactNode }) {
 	);
 
 	return (
-		<GluestackUIProvider mode={effectiveColorScheme}>
+		<GluestackUIProvider mode={themePreference}>
 			<StatusBar
 				animated
 				backgroundColor="transparent"

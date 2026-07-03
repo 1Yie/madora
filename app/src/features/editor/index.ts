@@ -14,6 +14,8 @@ export {
 } from './providers/markdown-toolbar-provider';
 export { WorkspaceScreen } from './screens/workspace-screen';
 export {
+	WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT,
+	WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
 	WORKSPACE_TAB_REQUEST_EVENT,
 	WORKSPACE_TAB_STATE_EVENT,
 	type WorkspaceTab,

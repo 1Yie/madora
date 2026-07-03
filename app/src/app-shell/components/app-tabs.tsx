@@ -1,23 +1,40 @@
+import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
-import { MarkdownToolbarProvider } from '@/features/editor';
+import {
+	MarkdownToolbarProvider,
+	WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
+} from '@/features/editor';
 import {
 	APP_THEME_BACKGROUND_COLORS,
 	useResolvedThemePreference,
 } from '@/features/settings';
 import CustomTabBar from './custom-tab-bar';
 
-const FADE_EXTRA_TOP = 6;
-const FADE_EXTRA_BOTTOM = 18;
+const FADE_EXTRA_TOP = 28;
+const FADE_EXTRA_BOTTOM = 32;
 
 export default function AppTabs() {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
 	const resolvedTheme = useResolvedThemePreference();
 	const backgroundColor = APP_THEME_BACKGROUND_COLORS[resolvedTheme];
+	const [workspaceOverlayActive, setWorkspaceOverlayActive] = useState(false);
+
+	useEffect(() => {
+		const { DeviceEventEmitter } = require('react-native');
+		const subscription = DeviceEventEmitter.addListener(
+			WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
+			(active: unknown) => {
+				setWorkspaceOverlayActive(Boolean(active));
+			}
+		);
+
+		return () => subscription.remove();
+	}, []);
 
 	return (
 		<MarkdownToolbarProvider>
@@ -32,16 +49,20 @@ export default function AppTabs() {
 						options={{ title: t('tabs.settings') }}
 					/>
 				</Tabs>
-				<AppEdgeFade
-					backgroundColor={backgroundColor}
-					height={insets.top + FADE_EXTRA_TOP}
-					position="top"
-				/>
-				<AppEdgeFade
-					backgroundColor={backgroundColor}
-					height={insets.bottom + FADE_EXTRA_BOTTOM}
-					position="bottom"
-				/>
+				{workspaceOverlayActive ? null : (
+					<>
+						<AppEdgeFade
+							backgroundColor={backgroundColor}
+							height={insets.top + FADE_EXTRA_TOP}
+							position="top"
+						/>
+						<AppEdgeFade
+							backgroundColor={backgroundColor}
+							height={insets.bottom + FADE_EXTRA_BOTTOM}
+							position="bottom"
+						/>
+					</>
+				)}
 			</View>
 		</MarkdownToolbarProvider>
 	);

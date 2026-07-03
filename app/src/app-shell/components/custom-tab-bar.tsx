@@ -15,6 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { Check, FolderTree, PenLine, Settings } from 'lucide-react-native';
 import {
 	useMarkdownToolbar,
+	WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT,
+	WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
 	WORKSPACE_TAB_REQUEST_EVENT,
 	WORKSPACE_TAB_STATE_EVENT,
 	type MarkdownCompletionControl,
@@ -56,6 +58,8 @@ export default function CustomTabBar({
 	const insets = useSafeAreaInsets();
 	const toolbar = useMarkdownToolbar();
 	const resolvedTheme = useResolvedThemePreference();
+	const [editorInputActive, setEditorInputActive] = useState(true);
+	const [editorOverlayActive, setEditorOverlayActive] = useState(false);
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('editor');
 	const palette = getFloatingSurfacePalette(resolvedTheme);
@@ -74,8 +78,13 @@ export default function CustomTabBar({
 		(action) => action.key !== 'preview' && action.key !== 'edit'
 	);
 	const showMarkdownToolbar =
-		keyboardVisible && toolbar.visible && workspaceRouteFocused;
-	const liftForKeyboard = keyboardVisible && workspaceRouteFocused;
+		keyboardVisible &&
+		workspaceTab === 'editor' &&
+		editorInputActive &&
+		!editorOverlayActive &&
+		toolbar.visible &&
+		workspaceRouteFocused;
+	const liftForKeyboard = showMarkdownToolbar;
 	const bottom = liftForKeyboard
 		? keyboardHeight + insets.bottom + KEYBOARD_TOOLBAR_GAP
 		: FLOATING_TAB_BAR_GAP + insets.bottom;
@@ -105,6 +114,28 @@ export default function CustomTabBar({
 				if (tab === 'editor' || tab === 'fileTree') {
 					setWorkspaceTab(tab);
 				}
+			}
+		);
+
+		return () => subscription.remove();
+	}, []);
+
+	useEffect(() => {
+		const subscription = DeviceEventEmitter.addListener(
+			WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT,
+			(active) => {
+				setEditorInputActive(Boolean(active));
+			}
+		);
+
+		return () => subscription.remove();
+	}, []);
+
+	useEffect(() => {
+		const subscription = DeviceEventEmitter.addListener(
+			WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
+			(active) => {
+				setEditorOverlayActive(Boolean(active));
 			}
 		);
 

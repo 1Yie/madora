@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import type { ComponentType, ReactNode } from 'react';
 import {
-	ArrowLeft,
 	Check,
 	ChevronRight,
 	Cloud,
@@ -26,7 +25,8 @@ import {
 	SliderTrack,
 } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { useAiSettings } from '@/features/ai';
+import { BackButton } from '@/shared/components';
+import { SettingsCard } from '../components/settings-card';
 import {
 	APP_THEME_BACKGROUND_COLORS,
 	DEFAULT_EDITOR_FONT_SIZE,
@@ -126,11 +126,7 @@ export function SettingsHomeScreen() {
 
 	return (
 		<SettingsShell>
-			<SettingsHeader
-				detail={t('settings.mobileHome.description')}
-				eyebrow={t('tabs.settings')}
-				title={t('tabs.settings')}
-			/>
+			<SettingsHeader title={t('tabs.settings')} />
 
 			<View className="gap-2">
 				{SETTINGS_SECTIONS.map((item) => (
@@ -176,16 +172,9 @@ function AppearanceSettingsScreen() {
 
 	return (
 		<SettingsShell header={<BackButton />}>
-			<SettingsHeader
-				detail={t('settings.mobileHome.detail.appearance')}
-				eyebrow={t('settings.sections.appearance.label')}
-				title={t('settings.sections.appearance.description')}
-			/>
+			<SettingsHeader title={t('settings.sections.appearance.label')} />
 
-			<SettingsCard
-				detail={t('settings.appearance.cards.language.description')}
-				title={t('settings.appearance.cards.language.title')}
-			>
+			<SettingsCard title={t('settings.appearance.cards.language.title')}>
 				<View className="flex-row flex-wrap gap-2">
 					{getLocalePreferenceOptions().map((locale) => (
 						<OptionChip
@@ -214,10 +203,7 @@ function AppearanceSettingsScreen() {
 				</View>
 			</SettingsCard>
 
-			<SettingsCard
-				detail={t('settings.appearance.editorTextSize.description')}
-				title={t('settings.appearance.editorTextSize.label')}
-			>
+			<SettingsCard title={t('settings.appearance.editorTextSize.label')}>
 				<View className="gap-3">
 					<View className="flex-row items-center justify-between gap-3">
 						<Text
@@ -267,16 +253,11 @@ function AppearanceSettingsScreen() {
 
 function EditorSettingsScreen() {
 	const { t } = useTranslation();
-	const aiSettings = useAiSettings();
 	const { saveMode, setSaveMode } = useAppSettings();
 
 	return (
 		<SettingsShell header={<BackButton />}>
-			<SettingsHeader
-				detail={t('settings.mobileHome.detail.editor')}
-				eyebrow={t('settings.sections.editor.label')}
-				title={t('settings.sections.editor.description')}
-			/>
+			<SettingsHeader title={t('settings.sections.editor.label')} />
 
 			<SettingsCard title={t('settings.editor.cards.input.title')}>
 				<SettingSwitchRow
@@ -284,13 +265,6 @@ function EditorSettingsScreen() {
 					onValueChange={(enabled) => setSaveMode(enabled ? 'auto' : 'manual')}
 					title={t('settings.editor.rows.autoSave.title')}
 					value={saveMode === 'auto'}
-				/>
-				<View className="mt-3 h-px bg-border" />
-				<SettingSwitchRow
-					description={t('settings.editor.rows.enableAi.description')}
-					onValueChange={aiSettings.setEnabled}
-					title={t('settings.editor.rows.enableAi.title')}
-					value={aiSettings.enabled}
 				/>
 			</SettingsCard>
 		</SettingsShell>
@@ -303,11 +277,7 @@ function AboutSettingsScreen() {
 
 	return (
 		<SettingsShell header={<BackButton />}>
-			<SettingsHeader
-				detail={t('settings.mobileHome.detail.about')}
-				eyebrow={t('settings.sections.about.label')}
-				title={t('settings.sections.about.description')}
-			/>
+			<SettingsHeader title={t('settings.sections.about.label')} />
 
 			<SettingsCard title="Madora Mobile">
 				<SettingsInfoRow
@@ -387,90 +357,9 @@ function SettingsShell({
 	);
 }
 
-function SettingsHeader({
-	detail,
-	eyebrow,
-	title,
-}: {
-	detail: string;
-	eyebrow: string;
-	title: string;
-}) {
+function SettingsHeader({ title }: { title: string }) {
 	return (
-		<View className="gap-1">
-			<Text
-				className="text-[12px] font-semibold uppercase text-muted-foreground"
-			>
-				{eyebrow}
-			</Text>
-			<Text className="text-[24px] font-semibold text-foreground">{title}</Text>
-			<Text className="text-[13px] leading-5 text-muted-foreground">
-				{detail}
-			</Text>
-		</View>
-	);
-}
-
-function BackButton() {
-	const { t } = useTranslation();
-	const palette = useAppThemePalette();
-
-	return (
-		<Pressable
-			onPress={() => router.back()}
-			className="h-9 flex-row items-center gap-1.5 self-start rounded-full px-4"
-			style={{ backgroundColor: palette.surfaceMuted }}
-		>
-			<ArrowLeft color={palette.icon} size={16} strokeWidth={2.2} />
-			<Text className="text-[13px] font-semibold text-foreground">
-				{t('common.actions.back')}
-			</Text>
-		</Pressable>
-	);
-}
-
-function SettingsCard({
-	children,
-	detail,
-	title,
-}: {
-	children: ReactNode;
-	detail?: string;
-	title: string;
-}) {
-	return (
-		<ThemedSurfaceCard>
-			{title || detail ? (
-				<View className="gap-1">
-					<Text className="text-[16px] font-semibold text-foreground">
-						{title}
-					</Text>
-					{detail ? (
-						<Text className="text-[13px] leading-5 text-muted-foreground">
-							{detail}
-						</Text>
-					) : null}
-				</View>
-			) : null}
-			{children}
-		</ThemedSurfaceCard>
-	);
-}
-
-function ThemedSurfaceCard({ children }: { children: ReactNode }) {
-	const palette = useAppThemePalette();
-
-	return (
-		<View
-			className="gap-3 rounded-lg p-4"
-			style={{
-				backgroundColor: palette.surface,
-				borderColor: palette.border,
-				borderWidth: 1,
-			}}
-		>
-			{children}
-		</View>
+		<Text className="text-[24px] font-semibold text-foreground">{title}</Text>
 	);
 }
 

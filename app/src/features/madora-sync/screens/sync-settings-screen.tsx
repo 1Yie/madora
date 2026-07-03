@@ -1,10 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
-	ArrowLeft,
 	CheckCircle2,
 	Cloud,
 	Database,
@@ -16,12 +14,13 @@ import {
 
 import {
 	APP_THEME_BACKGROUND_COLORS,
+	SettingsCard,
 	useAppThemePalette,
 	useResolvedThemePreference,
 } from '@/features/settings';
+import { BackButton } from '@/shared/components';
 import { QrScanner } from '../components/qr-scanner';
 import { useMadoraSync } from '../providers/madora-sync-provider';
-import type { SyncConnectionState } from '../types';
 
 function formatLastSeen(timestamp: number) {
 	return new Date(timestamp).toLocaleTimeString([], {
@@ -75,17 +74,7 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 				className="absolute left-4 z-10"
 				style={{ top: insets.top + 12 }}
 			>
-				<Pressable
-					onPress={onBack ?? (() => router.back())}
-					className="h-9 flex-row items-center gap-1.5 self-start rounded-full
-						px-4"
-					style={{ backgroundColor: palette.surfaceMuted }}
-				>
-					<ArrowLeft color={palette.icon} size={16} strokeWidth={2.2} />
-					<Text className="text-[13px] font-semibold text-foreground">
-						{t('common.actions.back')}
-					</Text>
-				</Pressable>
+				<BackButton onPress={onBack} />
 			</View>
 
 			<ScrollView
@@ -97,45 +86,21 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 					paddingTop: insets.top + 64,
 				}}
 			>
-				<View className="gap-1">
-					<Text
-						className="text-[12px] font-semibold uppercase
-							text-muted-foreground"
-					>
-						{t('syncSettings.eyebrow')}
-					</Text>
-					<Text className="text-[24px] font-semibold text-foreground">
-						{t('syncSettings.title')}
-					</Text>
-					<Text className="text-[13px] leading-5 text-muted-foreground">
-						{t('syncSettings.detail')}
-					</Text>
-				</View>
+				<Text className="text-[24px] font-semibold text-foreground">
+					{t('syncSettings.title')}
+				</Text>
 
-				<SettingsCard
-					detail={t('syncSettings.pairing.detail')}
-					icon={
-						<MonitorSmartphone
-							color={palette.icon}
-							size={18}
-							strokeWidth={2.1}
-						/>
-					}
-					title={t('syncSettings.pairing.title')}
-				>
+				<SettingsCard title={t('syncSettings.pairing.title')}>
 					<View className="gap-3">
-						<View className="flex-row items-center justify-between gap-3">
-							<View className="flex-1 gap-1">
-								<Text className="text-[17px] font-semibold text-foreground">
-									{pairedHost?.name ?? t('syncSettings.pairing.ready')}
-								</Text>
-								<Text className="text-[13px] leading-5 text-muted-foreground">
-									{pairedHost
-										? `${pairedHost.host}:${pairedHost.port}`
-										: t('syncSettings.pairing.instructions')}
-								</Text>
-							</View>
-							<ConnectionBadge state={connectionState} />
+						<View className="flex-1 gap-1">
+							<Text className="text-[17px] font-semibold text-foreground">
+								{pairedHost?.name ?? t('syncSettings.pairing.ready')}
+							</Text>
+							<Text className="text-[13px] leading-5 text-muted-foreground">
+								{pairedHost
+									? `${pairedHost.host}:${pairedHost.port}`
+									: t('syncSettings.pairing.instructions')}
+							</Text>
 						</View>
 
 						<View className="flex-row gap-3">
@@ -167,11 +132,7 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</View>
 				</SettingsCard>
 
-				<SettingsCard
-					detail={t('syncSettings.connection.detail')}
-					icon={<Cloud color={palette.icon} size={18} strokeWidth={2.1} />}
-					title={t('syncSettings.connection.title')}
-				>
+				<SettingsCard title={t('syncSettings.connection.title')}>
 					<View className="gap-3">
 						<InfoRow
 							label={t('syncSettings.connection.state')}
@@ -199,13 +160,7 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</View>
 				</SettingsCard>
 
-				<SettingsCard
-					detail={t('syncSettings.trustedDevices.detail')}
-					icon={
-						<ShieldCheck color={palette.icon} size={18} strokeWidth={2.1} />
-					}
-					title={t('syncSettings.trustedDevices.title')}
-				>
+				<SettingsCard title={t('syncSettings.trustedDevices.title')}>
 					<View className="gap-2">
 						{trustedDevices.length === 0 ? (
 							<Text className="text-[13px] leading-5 text-muted-foreground">
@@ -254,11 +209,7 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</View>
 				</SettingsCard>
 
-				<SettingsCard
-					detail={t('syncSettings.localStore.detail')}
-					icon={<Database color={palette.icon} size={18} strokeWidth={2.1} />}
-					title={t('syncSettings.localStore.title')}
-				>
+				<SettingsCard title={t('syncSettings.localStore.title')}>
 					<View
 						className="rounded-md px-3 py-3"
 						style={{
@@ -285,91 +236,6 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 				onScanned={handleScanned}
 				visible={scannerVisible}
 			/>
-		</View>
-	);
-}
-
-function SettingsCard({
-	children,
-	detail,
-	icon,
-	title,
-}: {
-	children: ReactNode;
-	detail?: string;
-	icon?: ReactNode;
-	title: string;
-}) {
-	const palette = useAppThemePalette();
-
-	return (
-		<View
-			className="gap-3 rounded-lg p-4"
-			style={{
-				backgroundColor: palette.surface,
-				borderColor: palette.border,
-				borderWidth: 1,
-			}}
-		>
-			<View className="flex-row items-start gap-3">
-				{icon ? (
-					<View
-						className="h-9 w-9 items-center justify-center rounded-full"
-						style={{ backgroundColor: palette.surfaceMuted }}
-					>
-						{icon}
-					</View>
-				) : null}
-				<View className="flex-1 gap-1">
-					<Text className="text-[16px] font-semibold text-foreground">
-						{title}
-					</Text>
-					{detail ? (
-						<Text className="text-[13px] leading-5 text-muted-foreground">
-							{detail}
-						</Text>
-					) : null}
-				</View>
-			</View>
-			{children}
-		</View>
-	);
-}
-
-function ConnectionBadge({ state }: { state: SyncConnectionState }) {
-	const palette = useAppThemePalette();
-	const active = state === 'connected';
-	const busy =
-		state === 'connecting' ||
-		state === 'authenticating' ||
-		state === 'discovering' ||
-		state === 'syncing';
-	const className = active
-		? 'border-emerald-500/35 bg-emerald-500/10'
-		: busy
-			? 'border-sky-500/35 bg-sky-500/10'
-			: '';
-	const textClassName = active
-		? 'text-emerald-600'
-		: busy
-			? 'text-sky-600'
-			: 'text-muted-foreground';
-
-	return (
-		<View
-			className={`rounded-full border px-2.5 py-1 ${className}`}
-			style={
-				active || busy
-					? undefined
-					: {
-							backgroundColor: palette.surfaceMuted,
-							borderColor: palette.border,
-						}
-			}
-		>
-			<Text className={`text-[12px] font-semibold ${textClassName}`}>
-				{state}
-			</Text>
 		</View>
 	);
 }

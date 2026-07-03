@@ -10,6 +10,7 @@ import {
 } from 'react';
 import * as SQLite from 'expo-sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { useErrorToast } from '@/components/ui/toast';
 
 import {
 	initializeDatabase,
@@ -51,6 +52,7 @@ interface MadoraSyncContextValue {
 const MadoraSyncContext = createContext<MadoraSyncContextValue | null>(null);
 
 export function MadoraSyncProvider({ children }: { children: ReactNode }) {
+	const showErrorToast = useErrorToast();
 	const [ready, setReady] = useState(false);
 	const [db, setDb] = useState<SQLiteDatabase | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -68,6 +70,17 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		}),
 		[trustedDevices.length]
 	);
+
+	useEffect(() => {
+		if (!errorMessage) return;
+		showErrorToast(errorMessage);
+
+		const timeoutId = setTimeout(() => {
+			setErrorMessage(null);
+		}, 0);
+
+		return () => clearTimeout(timeoutId);
+	}, [errorMessage, showErrorToast]);
 
 	useEffect(() => {
 		let cancelled = false;
