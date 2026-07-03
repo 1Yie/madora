@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react-native';
 
-import { useAppThemePalette } from '@/features/settings';
+import { useAppThemePalette } from '@/features/settings/providers/app-settings-provider';
 
 export function BackButton({ onPress }: { onPress?: () => void }) {
 	const { t } = useTranslation();

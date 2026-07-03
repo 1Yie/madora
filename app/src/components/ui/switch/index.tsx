@@ -8,7 +8,7 @@ import Animated, {
 	useSharedValue,
 	withTiming,
 } from 'react-native-reanimated';
-import { useResolvedThemePreference } from '@/features/settings';
+import { useResolvedThemePreference } from '@/features/settings/providers/app-settings-provider';
 
 type SwitchSize = 'sm' | 'md' | 'lg';
 

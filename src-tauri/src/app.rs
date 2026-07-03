@@ -2,8 +2,8 @@ use std::env;
 
 use crate::{
     commands::{
-        ai, explorer, git, license, madora_sync, project, secure_storage, system, utility,
-        webdav, workspace,
+        ai, explorer, git, license, madora_sync, project, secure_storage, system, utility, webdav,
+        workspace,
     },
     protocol::MadoraProtocolState,
     services::{
