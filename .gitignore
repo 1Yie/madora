@@ -31,3 +31,5 @@ target/
 src-tauri/mado
 
 *.key
+*.keystore
+*.jks
