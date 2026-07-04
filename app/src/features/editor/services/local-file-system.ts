@@ -158,11 +158,17 @@ export async function createLocalMarkdownFile(
 
 	if (Platform.OS === 'android' && isContentUri(directoryUri)) {
 		const previousEntries = await listScopedDirectoryEntries(directoryUri);
-		const fileUri = appendScopedPath(directoryUri, title);
-		await NativeFileSystem.writeFile(fileUri, '');
+		const requestUri = appendScopedPath(directoryUri, title);
+		const documentUri =
+			getScopedChildDocumentUri(directoryUri, title, rootUri) ?? requestUri;
+		await NativeFileSystem.writeFile(requestUri, '');
 		const createdUri =
-			(await resolveScopedEntryUri(directoryUri, title, previousEntries)) ??
-			fileUri;
+			(await resolveScopedEntryUri(
+				directoryUri,
+				title,
+				previousEntries,
+				documentUri
+			)) ?? documentUri;
 		return readLocalFile(createdUri, rootUri);
 	}
 
@@ -256,8 +262,57 @@ export async function renameLocalFile(
 
 	if (Platform.OS === 'android' && isContentUri(fileUri)) {
 		const targetName = normalizeFileNameForRename(fileUri, trimmedName);
-		await NativeFileSystem.mv(fileUri, targetName);
-		return readLocalFile(fileUri, rootUri ?? null);
+		const parentUri = getScopedParentDirectoryUri(fileUri, rootUri ?? null);
+		if (!parentUri) {
+			throw new Error('Cannot resolve parent directory for file.');
+		}
+		const previousEntries = await listScopedDirectoryEntries(parentUri);
+		const normalizedFileUri = normalizeScopedUri(fileUri);
+		const currentEntry = previousEntries.find(
+			(entry) => normalizeScopedUri(entry.path) === normalizedFileUri
+		);
+		const currentName = currentEntry?.filename ?? getContentUriName(fileUri);
+		if (currentName === targetName) {
+			return readLocalFile(fileUri, rootUri ?? null);
+		}
+
+		const existingTarget = previousEntries.find(
+			(entry) =>
+				entry.filename === targetName &&
+				normalizeScopedUri(entry.path) !== normalizedFileUri
+		);
+		if (existingTarget) {
+			throw new Error('A file with that name already exists.');
+		}
+
+		const requestUri = appendScopedPath(parentUri, targetName);
+		const documentUri =
+			getScopedChildDocumentUri(parentUri, targetName, rootUri ?? parentUri) ??
+			requestUri;
+		let renamedUri: string | null = null;
+
+		try {
+			await NativeFileSystem.mv(fileUri, targetName);
+			renamedUri = await resolveScopedEntryUri(
+				parentUri,
+				targetName,
+				previousEntries,
+				documentUri
+			);
+		} catch {
+			await NativeFileSystem.cp(fileUri, requestUri);
+			renamedUri =
+				(await resolveScopedEntryUri(
+					parentUri,
+					targetName,
+					previousEntries,
+					documentUri
+				)) ?? documentUri;
+			await NativeFileSystem.stat(renamedUri);
+			await NativeFileSystem.unlink(fileUri);
+		}
+
+		return readLocalFile(renamedUri ?? documentUri, rootUri ?? null);
 	}
 
 	const file = new File(fileUri);
@@ -282,15 +337,19 @@ export async function copyLocalFileToDirectory(
 			directoryUri,
 			sourceName
 		);
-		const targetUri = appendScopedPath(directoryUri, targetName);
+		const requestUri = appendScopedPath(directoryUri, targetName);
+		const documentUri =
+			getScopedChildDocumentUri(directoryUri, targetName, rootUri) ??
+			requestUri;
 
-		await NativeFileSystem.cp(fileUri, targetUri);
+		await NativeFileSystem.cp(fileUri, requestUri);
 		const copiedUri =
 			(await resolveScopedEntryUri(
 				directoryUri,
 				targetName,
-				previousEntries
-			)) ?? targetUri;
+				previousEntries,
+				documentUri
+			)) ?? documentUri;
 		return readLocalFile(copiedUri, rootUri);
 	}
 
@@ -565,6 +624,80 @@ function appendScopedPath(baseUri: string, segment: string) {
 	return AndroidScoped.appendPath(normalizeScopedUri(baseUri), segment);
 }
 
+function getScopedChildDocumentUri(
+	parentUri: string,
+	childName: string,
+	rootUri: string | null
+) {
+	if (!rootUri || !isContentUri(parentUri) || !isContentUri(rootUri)) {
+		return null;
+	}
+
+	const rootSegments = getContentUriSegments(rootUri);
+	const parentSegments = getContentUriSegments(parentUri);
+	if (rootSegments.length === 0 || parentSegments.length === 0) return null;
+	if (
+		!rootSegments.every((segment, index) => parentSegments[index] === segment)
+	) {
+		return null;
+	}
+
+	const childSegments = [
+		...parentSegments.slice(rootSegments.length),
+		childName,
+	];
+	const rootDocumentId = getContentUriDocumentId(rootUri);
+	if (!rootDocumentId) return null;
+
+	const childDocumentId =
+		childSegments.length > 0
+			? `${rootDocumentId}/${childSegments.map(encodePathSegment).join('/')}`
+			: rootDocumentId;
+
+	return `${normalizeScopedUri(rootUri)}/document/${encodeURIComponent(
+		childDocumentId
+	)}`;
+}
+
+function getScopedParentDirectoryUri(fileUri: string, rootUri: string | null) {
+	if (!rootUri) return null;
+
+	const fileSegments = getContentUriSegments(fileUri);
+	if (fileSegments.length <= 1) return rootUri;
+
+	const parentRelativeSegments = fileSegments.slice(0, -1);
+	const rootSegments = isContentUri(rootUri)
+		? getContentUriSegments(rootUri)
+		: [];
+	const childSegments =
+		rootSegments.length > 0 &&
+		parentRelativeSegments
+			.slice(0, rootSegments.length)
+			.every((segment, index) => segment === rootSegments[index])
+			? parentRelativeSegments.slice(rootSegments.length)
+			: parentRelativeSegments;
+
+	return childSegments.reduce(
+		(currentUri, segment) => appendScopedPath(currentUri, segment),
+		rootUri ?? ''
+	);
+}
+
+function getContentUriDocumentId(uri: string) {
+	const decoded = decodeRepeatedly(uri).replace(/\/+$/, '');
+	const matches = Array.from(
+		decoded.matchAll(
+			/\/(?:tree|document)\/([^?#]+?)(?=\/(?:tree|document)\/|$|\?)/g
+		)
+	);
+	const firstMatch = matches[0]?.[1];
+	return firstMatch || null;
+}
+
+function encodePathSegment(segment: string) {
+	return segment.replaceAll('/', '%2F');
+}
+
 async function deleteScopedDirectory(directoryUri: string) {
 	let entries: Awaited<ReturnType<typeof NativeFileSystem.statDir>> = [];
 
@@ -669,7 +802,8 @@ async function listScopedDirectoryEntries(directoryUri: string) {
 async function resolveScopedEntryUri(
 	directoryUri: string,
 	fileName: string,
-	previousEntries: Awaited<ReturnType<typeof NativeFileSystem.statDir>>
+	previousEntries: Awaited<ReturnType<typeof NativeFileSystem.statDir>>,
+	fallbackUri?: string | null
 ) {
 	const nextEntries = await listScopedDirectoryEntries(directoryUri);
 	const previousPaths = new Set(previousEntries.map((entry) => entry.path));
@@ -678,7 +812,7 @@ async function resolveScopedEntryUri(
 			(entry) => entry.filename === fileName && !previousPaths.has(entry.path)
 		) ?? nextEntries.find((entry) => entry.filename === fileName);
 
-	return createdEntry?.path ?? null;
+	return createdEntry?.path ?? fallbackUri ?? null;
 }
 
 function normalizeMarkdownFileName(fileName: string) {

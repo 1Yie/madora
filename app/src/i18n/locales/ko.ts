@@ -270,6 +270,16 @@ const ko = {
 			detail: '로컬 폴더를 열어 여기서 파일을 탐색하고 만들 수 있습니다.',
 			title: '선택된 폴더가 없습니다',
 		},
+		remoteDisconnected: {
+			action: '동기화 설정 열기',
+			detail:
+				'원격 동기화 연결이 끊어졌습니다. 데스크톱 앱에 다시 연결하거나 페어링하면 원격 파일을 다시 볼 수 있습니다.',
+			title: '원격 동기화 연결 끊김',
+		},
+		remoteEmpty: {
+			detail: '데스크톱 워크스페이스에 현재 표시할 파일이 없습니다.',
+			title: '원격 폴더가 비어 있습니다',
+		},
 		feedback: {
 			copyCanceledDetail: '복사한 파일을 지웠습니다.',
 			copyCanceledTitle: '복사를 취소했습니다',
@@ -295,6 +305,10 @@ const ko = {
 		noSelection: {
 			detail: '파일 탭에서 파일을 선택하거나 만드세요.',
 			title: '선택된 파일이 없습니다',
+		},
+		remoteNoSelection: {
+			detail: '원격 폴더에서 파일을 선택하세요.',
+			title: '선택된 원격 파일이 없습니다',
 		},
 	},
 	settingsHome: {
@@ -427,12 +441,13 @@ const ko = {
 			title: '연결',
 		},
 		emptyTrusted: '아직 페어링된 기기가 없습니다.',
-		localStore: {
-			detail: 'SQLite로 페어링 상태와 신뢰할 수 있는 기기 기록을 저장합니다.',
-			title: '동기화 저장소',
-		},
-		metrics: {
-			trusted: '신뢰됨',
+		localDevice: {
+			defaultName: 'Madora Phone',
+			detail: '이 이름은 데스크톱 동기화 상태와 원격 편집 표시에서 사용됩니다.',
+			edit: '이름 변경',
+			placeholder: '예: Madora Phone',
+			saving: '저장 중',
+			title: '이 앱의 동기화 이름',
 		},
 		pairing: {
 			detail: '데스크톱 QR을 스캔하여 로컬 네트워크로 페어링합니다.',

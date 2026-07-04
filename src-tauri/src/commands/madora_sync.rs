@@ -5,6 +5,7 @@ use crate::models::madora_sync::{
     MadoraSyncConfig, MadoraSyncPairDeviceInput, MadoraSyncPairDeviceResult, MadoraSyncPairingCode,
     MadoraSyncPairingQr, MadoraSyncSettingsInput,
 };
+use crate::models::sync_server::EditorStateInput;
 use crate::services::madora_sync::MadoraSyncStore;
 use crate::services::sync_server;
 
@@ -93,5 +94,14 @@ pub async fn madora_sync_restart_server<R: tauri::Runtime>(
     // Give the accept loop a moment to observe the shutdown flag.
     tokio::time::sleep(std::time::Duration::from_millis(350)).await;
     sync_server::spawn(app_handle);
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn madora_sync_publish_editor_state<R: tauri::Runtime>(
+    app_handle: tauri::AppHandle<R>,
+    state: EditorStateInput,
+) -> Result<bool, String> {
+    sync_server::publish_desktop_editor_state(&app_handle, state)?;
     Ok(true)
 }

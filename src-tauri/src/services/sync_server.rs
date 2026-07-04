@@ -7,10 +7,12 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tokio::sync::mpsc;
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -18,8 +20,9 @@ use crate::models::ai::{AiCompletionConfig, AiProvider, CompletionRequest};
 use crate::models::madora_sync::MadoraSyncPairDeviceInput;
 use crate::models::sync_server::{
     AiCompleteMessage, AiResultMessage, AuthErrorMessage, AuthOkMessage, ClientMessage,
-    ErrorMessage, FileListMessage, FileListResultMessage, FileReadMessage, FileReadResultMessage,
-    FileWriteMessage, FileWriteResultMessage, ServerMessage,
+    EditorStateInput, EditorStateMessage, ErrorMessage, FileListMessage, FileListResultMessage,
+    FileReadMessage, FileReadResultMessage, FileWriteMessage, FileWriteResultMessage,
+    ServerMessage,
 };
 use crate::protocol::MadoraProtocolState;
 use crate::services::ai::{self, AiCompletionService};
@@ -34,6 +37,10 @@ pub struct SyncServer;
 /// Monotonic generation for sync-server listeners. Restarting increments the
 /// generation so older accept loops exit and release their port.
 static SERVER_GENERATION: AtomicU64 = AtomicU64::new(0);
+static CLIENTS: LazyLock<Mutex<Vec<mpsc::UnboundedSender<String>>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+pub const EDITOR_STATE_EVENT: &str = "madora-sync://editor-state";
 
 /// Spawn the WebSocket server on the Tauri async runtime.
 ///
@@ -114,12 +121,14 @@ async fn accept_loop<R: Runtime>(listener: TcpListener, handle: AppHandle<R>, ge
 
 /// Process a single WebSocket connection: authenticate, then run the message loop.
 async fn handle_connection<R: Runtime>(
-    mut ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+    ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
     handle: AppHandle<R>,
     _peer: std::net::SocketAddr,
 ) -> Result<(), String> {
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+
     // ── Phase 1: Authentication ──────────────────────────────────────────
-    let auth_msg = ws_stream
+    let auth_msg = ws_receiver
         .next()
         .await
         .ok_or_else(|| "connection closed before auth".to_string())?
@@ -136,7 +145,7 @@ async fn handle_connection<R: Runtime>(
 
     let ClientMessage::Auth(auth) = client_msg else {
         let _ = send(
-            &mut ws_stream,
+            &mut ws_sender,
             ServerMessage::AuthError(AuthErrorMessage {
                 message: "First message must be an auth handshake".to_string(),
             }),
@@ -162,55 +171,73 @@ async fn handle_connection<R: Runtime>(
     match device_name_result {
         Ok(name) => {
             send(
-                &mut ws_stream,
+                &mut ws_sender,
                 ServerMessage::AuthOk(AuthOkMessage { device_name: name }),
             )
             .await?;
         }
         Err(error) => {
             send(
-                &mut ws_stream,
+                &mut ws_sender,
                 ServerMessage::AuthError(AuthErrorMessage { message: error }),
             )
             .await?;
-            let _ = ws_stream.close(None).await;
+            let _ = ws_sender.close().await;
             return Ok(());
         }
     }
 
+    let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded_channel::<String>();
+    register_client(outgoing_tx.clone());
+
     // ── Phase 2: Message loop ────────────────────────────────────────────
-    while let Some(msg_result) = ws_stream.next().await {
-        let msg = msg_result.map_err(|e| format!("ws read error: {e}"))?;
+    loop {
+        tokio::select! {
+            inbound = ws_receiver.next() => {
+                let Some(msg_result) = inbound else {
+                    break;
+                };
 
-        let text = match msg {
-            Message::Text(text) => text.to_string(),
-            Message::Binary(data) => match String::from_utf8(data.to_vec()) {
-                Ok(text) => text,
-                Err(_) => continue,
-            },
-            Message::Close(_) => break,
-            Message::Ping(_) | Message::Pong(_) => continue,
-            Message::Frame(_) => continue,
-        };
+                let msg = msg_result.map_err(|e| format!("ws read error: {e}"))?;
 
-        let parsed: Result<ClientMessage, _> = serde_json::from_str(&text);
-        let message = match parsed {
-            Ok(message) => message,
-            Err(error) => {
-                send(
-                    &mut ws_stream,
-                    ServerMessage::Error(ErrorMessage {
-                        message: format!("invalid message: {error}"),
-                        code: None,
-                    }),
-                )
-                .await?;
-                continue;
+                let text = match msg {
+                    Message::Text(text) => text.to_string(),
+                    Message::Binary(data) => match String::from_utf8(data.to_vec()) {
+                        Ok(text) => text,
+                        Err(_) => continue,
+                    },
+                    Message::Close(_) => break,
+                    Message::Ping(_) | Message::Pong(_) => continue,
+                    Message::Frame(_) => continue,
+                };
+
+                let parsed: Result<ClientMessage, _> = serde_json::from_str(&text);
+                let message = match parsed {
+                    Ok(message) => message,
+                    Err(error) => {
+                        send(
+                            &mut ws_sender,
+                            ServerMessage::Error(ErrorMessage {
+                                message: format!("invalid message: {error}"),
+                                code: None,
+                            }),
+                        )
+                        .await?;
+                        continue;
+                    }
+                };
+
+                let response = dispatch(&handle, message).await;
+                let _ = send(&mut ws_sender, response).await;
             }
-        };
+            outbound = outgoing_rx.recv() => {
+                let Some(message) = outbound else {
+                    break;
+                };
 
-        let response = dispatch(&handle, message).await;
-        let _ = send(&mut ws_stream, response).await;
+                send_json(&mut ws_sender, message).await?;
+            }
+        }
     }
 
     Ok(())
@@ -223,11 +250,81 @@ async fn dispatch<R: Runtime>(handle: &AppHandle<R>, message: ClientMessage) -> 
         ClientMessage::FileRead(msg) => handle_file_read(handle, msg).await,
         ClientMessage::FileWrite(msg) => handle_file_write(handle, msg).await,
         ClientMessage::AiComplete(msg) => handle_ai_complete(handle, msg).await,
+        ClientMessage::EditorState(msg) => handle_editor_state(handle, msg).await,
         ClientMessage::Auth(_) => ServerMessage::Error(ErrorMessage {
             message: "Already authenticated".to_string(),
             code: None,
         }),
     }
+}
+
+async fn handle_editor_state<R: Runtime>(
+    handle: &AppHandle<R>,
+    mut msg: EditorStateMessage,
+) -> ServerMessage {
+    msg.updated_at = current_timestamp_ms();
+
+    if let (Some(file_path), Some(content)) = (msg.file_path.clone(), msg.content.clone()) {
+        if let Err(error) = write_synced_file(handle, file_path, content).await {
+            return ServerMessage::Error(ErrorMessage {
+                message: error,
+                code: None,
+            });
+        }
+    }
+
+    let _ = handle.emit(EDITOR_STATE_EVENT, msg.clone());
+    broadcast(ServerMessage::EditorState(msg.clone()).to_json());
+    ServerMessage::EditorState(msg)
+}
+
+pub fn publish_desktop_editor_state<R: Runtime>(
+    handle: &AppHandle<R>,
+    input: EditorStateInput,
+) -> Result<(), String> {
+    let config = handle
+        .state::<MadoraSyncStore>()
+        .get_config()
+        .map_err(|error| error.to_string())?;
+
+    let state = EditorStateMessage {
+        device_id: "desktop".to_string(),
+        device_name: config.device_name,
+        source: "desktop".to_string(),
+        file_path: input.file_path,
+        title: input.title,
+        content: input.content,
+        content_hash: input.content_hash,
+        line: input.line,
+        column: input.column,
+        cursor_index: input.cursor_index,
+        editing: input.editing,
+        updated_at: current_timestamp_ms(),
+    };
+
+    broadcast(ServerMessage::EditorState(state).to_json());
+    Ok(())
+}
+
+async fn write_synced_file<R: Runtime>(
+    handle: &AppHandle<R>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    let Some(root) = get_workspace_root(handle) else {
+        return Err("No workspace open on the desktop".to_string());
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_path = PathBuf::from(&root);
+        let file_path = PathBuf::from(&path);
+        if !is_within_root(&root_path, &file_path) {
+            return Err("path is outside the workspace".to_string());
+        }
+        explorer::write_workspace_file(&file_path, &content)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────
@@ -440,10 +537,57 @@ fn load_api_key(provider: AiProvider) -> Result<String, String> {
 }
 
 async fn send(
-    ws: &mut tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+    ws: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+        Message,
+    >,
     message: ServerMessage,
 ) -> Result<(), String> {
     ws.send(Message::Text(message.to_json().into()))
         .await
         .map_err(|e| format!("ws send error: {e}"))
+}
+
+async fn send_json(
+    ws: &mut futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+        Message,
+    >,
+    message: String,
+) -> Result<(), String> {
+    ws.send(Message::Text(message.into()))
+        .await
+        .map_err(|e| format!("ws send error: {e}"))
+}
+
+fn register_client(sender: mpsc::UnboundedSender<String>) {
+    let Ok(mut clients) = CLIENTS.lock() else {
+        return;
+    };
+
+    clients.retain(|client| !client.is_closed());
+    clients.push(sender);
+}
+
+fn broadcast(message: String) {
+    let Ok(mut clients) = CLIENTS.lock() else {
+        return;
+    };
+
+    clients.retain(|client| {
+        if client.is_closed() {
+            return false;
+        }
+
+        client.send(message.clone()).is_ok()
+    });
+}
+
+fn current_timestamp_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
 }

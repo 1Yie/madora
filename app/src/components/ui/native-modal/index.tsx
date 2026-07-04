@@ -5,12 +5,12 @@ import {
 	Platform,
 	Pressable,
 	Text,
-	TextInput,
 	type TextInputProps,
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Input, InputField } from '@/components/ui/input';
 import { KeyboardDismissView } from '@/components/ui/keyboard-dismiss-view';
 import { NativeToastViewport } from '@/components/ui/native-toast';
 import { useAppThemePalette } from '@/features/settings';
@@ -96,23 +96,10 @@ export function NativeModal({
 }
 
 export function NativeModalTextInput(props: TextInputProps) {
-	const palette = useAppThemePalette();
-
 	return (
-		<TextInput
-			placeholderTextColor={palette.mutedForeground}
-			selectionColor={palette.accentSurface}
-			{...props}
-			className="min-h-10 rounded-md border px-3 text-[14px]"
-			style={[
-				{
-					backgroundColor: palette.surfaceMuted,
-					borderColor: palette.border,
-					color: palette.foreground,
-				},
-				props.style,
-			]}
-		/>
+		<Input>
+			<InputField {...props} />
+		</Input>
 	);
 }
 

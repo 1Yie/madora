@@ -11,6 +11,7 @@ import {
 	FlatList,
 	SectionList,
 	ViewStyle,
+	useWindowDimensions,
 } from 'react-native';
 import { UIIcon } from '@gluestack-ui/core/icon/creator';
 import { tva } from '@gluestack-ui/utils/nativewind-utils';
@@ -90,7 +91,7 @@ export const UIActionsheet = createActionsheet({
 const actionsheetStyle = tva({ base: 'w-full h-full web:pointer-events-none' });
 
 const actionsheetContentStyle = tva({
-	base: 'items-center rounded-tl-3xl rounded-tr-3xl p-2 bg-background web:pointer-events-auto web:select-none shadow-lg pb-safe',
+	base: 'w-full items-stretch overflow-hidden rounded-tl-3xl rounded-tr-3xl p-2 bg-background web:pointer-events-auto web:select-none shadow-lg pb-safe',
 });
 
 const actionsheetItemStyle = tva({
@@ -303,7 +304,10 @@ const Actionsheet = React.forwardRef<
 const ActionsheetContent = React.forwardRef<
 	React.ComponentRef<typeof UIActionsheet.Content>,
 	IActionsheetContentProps & { className?: string }
->(function ActionsheetContent({ className, ...props }, ref) {
+>(function ActionsheetContent({ className, style, ...props }, ref) {
+	const { height } = useWindowDimensions();
+	const maxHeight = Math.max(240, Math.floor(height * 0.82));
+
 	return (
 		<UIActionsheet.Content
 			className={actionsheetContentStyle({
@@ -311,6 +315,7 @@ const ActionsheetContent = React.forwardRef<
 			})}
 			ref={ref}
 			{...props}
+			style={[style, { maxHeight }]}
 		/>
 	);
 });
@@ -410,14 +415,20 @@ const ActionsheetBackdrop = React.forwardRef<
 const ActionsheetScrollView = React.forwardRef<
 	React.ComponentRef<typeof UIActionsheet.ScrollView>,
 	IActionsheetScrollViewProps
->(function ActionsheetScrollView({ className, ...props }, ref) {
+>(function ActionsheetScrollView({ className, style, ...props }, ref) {
+	const { height } = useWindowDimensions();
+	const maxHeight = Math.max(180, Math.floor(height * 0.72));
+
 	return (
 		<UIActionsheet.ScrollView
+			bounces={false}
 			className={actionsheetScrollViewStyle({
 				class: className,
 			})}
+			nestedScrollEnabled
 			ref={ref}
 			{...props}
+			style={[style, { maxHeight }]}
 		/>
 	);
 });

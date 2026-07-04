@@ -20,7 +20,10 @@ export function KeyboardDismissView({
 	) => {
 		const shouldBecomeResponder =
 			onStartShouldSetResponderCapture?.(event) ?? false;
-		Keyboard.dismiss();
+
+		if (event.target === event.currentTarget) {
+			Keyboard.dismiss();
+		}
 
 		return shouldBecomeResponder;
 	};

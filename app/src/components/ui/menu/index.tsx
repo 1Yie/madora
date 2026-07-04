@@ -7,6 +7,7 @@ import { styled } from 'nativewind';
 import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { FadeOut, ZoomIn } from 'react-native-reanimated';
+import { runAfterKeyboardSettled } from '../keyboard-stability';
 
 const AnimatedView = Animated.createAnimatedComponent(ScrollView);
 
@@ -120,7 +121,27 @@ type IMenuItemLabelProps = React.ComponentProps<typeof UIMenu.ItemLabel> &
 	VariantProps<typeof menuItemLabelStyle> & { className?: string };
 
 const Menu = React.forwardRef<React.ComponentRef<typeof UIMenu>, IMenuProps>(
-	function Menu({ className, ...props }, ref) {
+	function Menu({ className, trigger, ...props }, ref) {
+		const stableTrigger = React.useCallback(
+			(
+				triggerProps: Parameters<NonNullable<IMenuProps['trigger']>>[0],
+				state
+			) =>
+				trigger?.(
+					{
+						...triggerProps,
+						onPress: triggerProps.onPress
+							? (event) => {
+									event.persist?.();
+									runAfterKeyboardSettled(() => triggerProps.onPress(event));
+								}
+							: undefined,
+					},
+					state
+				),
+			[trigger]
+		);
+
 		return (
 			<UIMenu
 				entering={ZoomIn.duration(150).withInitialValues({
@@ -132,6 +153,7 @@ const Menu = React.forwardRef<React.ComponentRef<typeof UIMenu>, IMenuProps>(
 				className={menuStyle({
 					class: className,
 				})}
+				trigger={stableTrigger}
 				{...props}
 			/>
 		);

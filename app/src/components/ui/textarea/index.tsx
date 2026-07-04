@@ -16,7 +16,7 @@ const UITextarea = createTextarea({
 });
 
 const textareaStyle = tva({
-	base: 'w-full h-[100px] border border-border  dark:bg-input/30 rounded data-[hover=true]:border-border/80 data-[focus=true]:border-primary/80 data-[focus=true]:data-[hover=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:bg-background/90 data-[disabled=true]:data-[hover=true]:border-border/80',
+	base: 'w-full h-[100px] rounded-md border border-border bg-secondary shadow-xs overflow-hidden data-[hover=true]:border-border/80 data-[focus=true]:border-primary/80 data-[focus=true]:data-[hover=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:bg-background/90 data-[disabled=true]:data-[hover=true]:border-border/80',
 
 	variants: {
 		variant: {
@@ -33,7 +33,7 @@ const textareaStyle = tva({
 });
 
 const textareaInputStyle = tva({
-	base: 'p-2 web:outline-0 web:outline-none flex-1 text-foreground placeholder:text-foreground/60 web:cursor-text web:data-[disabled=true]:cursor-not-allowed',
+	base: 'p-3 web:outline-0 web:outline-none flex-1 text-foreground placeholder:text-muted-foreground web:cursor-text web:data-[disabled=true]:cursor-not-allowed',
 	parentVariants: {
 		size: {
 			sm: 'text-sm',

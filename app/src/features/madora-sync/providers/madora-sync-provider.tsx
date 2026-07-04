@@ -10,41 +10,43 @@ import {
 } from 'react';
 import * as SQLite from 'expo-sqlite';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { useTranslation } from 'react-i18next';
 import { useErrorToast } from '@/components/ui/toast';
 
 import {
+	deleteTrustedDevice,
 	initializeDatabase,
+	listTrustedDevices,
+	LOCAL_DEVICE_ID,
 	MADORA_SYNC_DB_NAME,
 	readSettings,
+	upsertTrustedDevice,
 	writeSetting,
 } from '../services/database';
 import {
 	parsePairingPayload,
+	type EditorStateMessage,
 	type ExplorerNode,
 	type PairingPayload,
 	type ServerMessage,
 } from '../lib/protocol';
 import { SyncClient } from '../services/sync-client';
-import type {
-	PairedHost,
-	StorageStats,
-	SyncConnectionState,
-	TrustedDevice,
-} from '../types';
-
-const LOCAL_DEVICE_ID = 'device-mobile-local';
-const LOCAL_DEVICE_NAME = 'Madora Phone';
+import type { PairedHost, SyncConnectionState, TrustedDevice } from '../types';
 
 interface MadoraSyncContextValue {
 	connectionState: SyncConnectionState;
 	errorMessage: string | null;
 	lastSyncAt: number | null;
+	localDeviceName: string;
 	pairedHost: PairedHost | null;
 	pairFromQrPayload: (raw: string) => Promise<boolean>;
 	pairWithPayload: (payload: PairingPayload) => Promise<boolean>;
+	publishEditorState: (state: EditorStateInput) => void;
+	setLocalDeviceName: (name: string) => Promise<void>;
 	reconnect: () => void;
 	disconnect: () => void;
 	ready: boolean;
+	remoteEditorState: EditorStateMessage | null;
 	refreshRemoteFileTree: (path?: string) => Promise<ExplorerNode[]>;
 	readRemoteFile: (path: string) => Promise<{
 		content: string | null;
@@ -52,32 +54,42 @@ interface MadoraSyncContextValue {
 		truncated: boolean;
 	}>;
 	writeRemoteFile: (path: string, content: string) => Promise<boolean>;
-	storageStats: StorageStats;
 	trustedDevices: TrustedDevice[];
 	removeTrustedDevice: (id: string) => Promise<void>;
 }
 
+export type EditorStateInput = {
+	filePath: string | null;
+	title: string | null;
+	content: string | null;
+	contentHash: string | null;
+	line: number | null;
+	column: number | null;
+	cursorIndex: number | null;
+	editing: boolean;
+};
+
 const MadoraSyncContext = createContext<MadoraSyncContextValue | null>(null);
 
 export function MadoraSyncProvider({ children }: { children: ReactNode }) {
+	const { t } = useTranslation();
 	const showErrorToast = useErrorToast();
+	const defaultLocalDeviceName = t('syncSettings.localDevice.defaultName');
 	const [ready, setReady] = useState(false);
 	const [db, setDb] = useState<SQLiteDatabase | null>(null);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [connectionState, setConnectionState] =
 		useState<SyncConnectionState>('disconnected');
 	const [pairedHost, setPairedHost] = useState<PairedHost | null>(null);
+	const [remoteEditorState, setRemoteEditorState] =
+		useState<EditorStateMessage | null>(null);
 	const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[]>([]);
 	const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+	const [localDeviceName, setLocalDeviceNameState] = useState(
+		defaultLocalDeviceName
+	);
 
 	const clientRef = useRef<SyncClient | null>(null);
-
-	const storageStats = useMemo<StorageStats>(
-		() => ({
-			trustedDevices: trustedDevices.length,
-		}),
-		[trustedDevices.length]
-	);
 
 	useEffect(() => {
 		if (!errorMessage) return;
@@ -90,7 +102,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		async function setupDatabase() {
 			try {
 				const database = await SQLite.openDatabaseAsync(MADORA_SYNC_DB_NAME);
-				await initializeDatabase(database);
+				await initializeDatabase(database, defaultLocalDeviceName);
 				if (cancelled) return;
 
 				const settings = await readSettings(database);
@@ -107,29 +119,12 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				if (settings.last_sync_at) {
 					setLastSyncAt(Number(settings.last_sync_at));
 				}
+				if (settings.local_device_name?.trim()) {
+					setLocalDeviceNameState(settings.local_device_name.trim());
+				}
 
-				const devices = await database.getAllAsync<{
-					address: string;
-					id: string;
-					kind: 'desktop' | 'mobile';
-					last_seen: number;
-					name: string;
-					token: string;
-					trusted: number;
-				}>(
-					'SELECT id, name, kind, last_seen, trusted, token, address FROM devices ORDER BY last_seen DESC'
-				);
-				setTrustedDevices(
-					devices.map((device) => ({
-						address: device.address,
-						id: device.id,
-						kind: device.kind,
-						lastSeen: device.last_seen,
-						name: device.name,
-						token: device.token,
-						trusted: device.trusted === 1,
-					}))
-				);
+				const devices = await listTrustedDevices(database);
+				setTrustedDevices(devices);
 
 				setDb(database);
 				setReady(true);
@@ -147,7 +142,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [defaultLocalDeviceName]);
 
 	const handleServerMessage = useCallback(
 		(message: ServerMessage) => {
@@ -167,18 +162,26 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 
 			if (message.type === 'auth_error') {
 				setErrorMessage(message.message);
+				return;
+			}
+
+			if (message.type === 'editor_state') {
+				if (message.deviceId === LOCAL_DEVICE_ID) {
+					return;
+				}
+				setRemoteEditorState(message);
 			}
 		},
 		[db]
 	);
 
 	const connectToHost = useCallback(
-		(host: PairedHost) => {
+		(host: PairedHost, deviceName = localDeviceName) => {
 			clientRef.current?.disconnect();
 
 			const client = new SyncClient({
 				deviceId: LOCAL_DEVICE_ID,
-				deviceName: LOCAL_DEVICE_NAME,
+				deviceName,
 			});
 			clientRef.current = client;
 
@@ -201,7 +204,22 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				port: host.port,
 			});
 		},
-		[handleServerMessage]
+		[handleServerMessage, localDeviceName]
+	);
+
+	const setLocalDeviceName = useCallback(
+		async (name: string) => {
+			const nextName = name.trim() || defaultLocalDeviceName;
+			setLocalDeviceNameState(nextName);
+			if (db) {
+				await writeSetting(db, 'local_device_name', nextName);
+			}
+
+			if (pairedHost && clientRef.current) {
+				connectToHost(pairedHost, nextName);
+			}
+		},
+		[connectToHost, db, defaultLocalDeviceName, pairedHost]
 	);
 
 	useEffect(() => {
@@ -263,16 +281,15 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 
 			if (db) {
 				const now = Date.now();
-				await db.runAsync(
-					'INSERT INTO devices (id, name, kind, last_seen, trusted, token, address) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen = excluded.last_seen, trusted = excluded.trusted, token = excluded.token, address = excluded.address',
-					host.id,
-					host.name,
-					'desktop',
-					now,
-					1,
-					host.pairingToken,
-					`${host.host}:${host.port}`
-				);
+				await upsertTrustedDevice(db, {
+					address: `${host.host}:${host.port}`,
+					id: host.id,
+					kind: 'desktop',
+					lastSeen: now,
+					name: host.name,
+					token: host.pairingToken,
+					trusted: true,
+				});
 			}
 
 			await persistPairedHost(host);
@@ -301,6 +318,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		clientRef.current = null;
 		setPairedHost(null);
 		setConnectionState('disconnected');
+		setRemoteEditorState(null);
 		setErrorMessage(null);
 		void persistPairedHost(null);
 	}, [persistPairedHost]);
@@ -315,7 +333,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		async (id: string) => {
 			if (!db) return;
 			try {
-				await db.runAsync('DELETE FROM devices WHERE id = ?', id);
+				await deleteTrustedDevice(db, id);
 				setTrustedDevices((current) => current.filter((d) => d.id !== id));
 				if (pairedHost?.id === id) {
 					clientRef.current?.disconnect();
@@ -333,7 +351,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				);
 			}
 		},
-		[db, pairedHost?.id, persistPairedHost, showErrorToast]
+		[db, pairedHost, persistPairedHost, showErrorToast]
 	);
 
 	const refreshRemoteFileTree = useCallback(
@@ -365,7 +383,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				const message =
 					error instanceof Error ? error.message : 'Failed to refresh files';
 				setErrorMessage(message);
-				throw new Error(message);
+				throw new Error(message, { cause: error });
 			}
 		},
 		[handleServerMessage]
@@ -417,21 +435,48 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		return true;
 	}, []);
 
+	const publishEditorState = useCallback(
+		(state: EditorStateInput) => {
+			const client = clientRef.current;
+			if (!client?.isConnected) return;
+
+			client.send({
+				type: 'editor_state',
+				deviceId: LOCAL_DEVICE_ID,
+				deviceName: localDeviceName,
+				source: 'app',
+				filePath: state.filePath,
+				title: state.title,
+				content: state.content,
+				contentHash: state.contentHash,
+				line: state.line,
+				column: state.column,
+				cursorIndex: state.cursorIndex,
+				editing: state.editing,
+				updatedAt: Date.now(),
+			});
+		},
+		[localDeviceName]
+	);
+
 	const value = useMemo<MadoraSyncContextValue>(
 		() => ({
 			connectionState,
 			errorMessage,
 			lastSyncAt,
+			localDeviceName,
 			pairedHost,
 			pairFromQrPayload,
 			pairWithPayload,
+			publishEditorState,
+			setLocalDeviceName,
 			reconnect,
 			disconnect,
 			ready,
+			remoteEditorState,
 			refreshRemoteFileTree,
 			readRemoteFile,
 			writeRemoteFile,
-			storageStats,
 			trustedDevices,
 			removeTrustedDevice,
 		}),
@@ -439,16 +484,19 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			connectionState,
 			errorMessage,
 			lastSyncAt,
+			localDeviceName,
 			pairedHost,
 			pairFromQrPayload,
 			pairWithPayload,
+			publishEditorState,
+			setLocalDeviceName,
 			reconnect,
 			disconnect,
 			ready,
+			remoteEditorState,
 			refreshRemoteFileTree,
 			readRemoteFile,
 			writeRemoteFile,
-			storageStats,
 			trustedDevices,
 			removeTrustedDevice,
 		]

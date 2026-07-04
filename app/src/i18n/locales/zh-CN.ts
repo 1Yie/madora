@@ -60,7 +60,7 @@ const zhCN = {
 		sections: {
 			about: { description: '产品与链接', label: '关于' },
 			appearance: { description: '主题与界面', label: '外观' },
-			ai: { description: 'Provider、模型和 API Key', label: 'AI' },
+			ai: { description: '模型与配置', label: 'AI' },
 			editor: { description: '输入与编辑', label: '编辑器' },
 			sync: { description: '同步与配置', label: '同步' },
 		},
@@ -245,6 +245,15 @@ const zhCN = {
 			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
 			title: '还未选择文件夹',
 		},
+		remoteDisconnected: {
+			action: '前往同步设置',
+			detail: '远程同步已断开。重新配对或连接桌面端后，可以继续浏览远程文件。',
+			title: '远程同步已断开',
+		},
+		remoteEmpty: {
+			detail: '桌面端工作区当前没有可显示的文件。',
+			title: '远程文件夹为空',
+		},
 		feedback: {
 			copyCanceledDetail: '已清除待粘贴文件。',
 			copyCanceledTitle: '已取消复制',
@@ -269,6 +278,10 @@ const zhCN = {
 		noSelection: {
 			detail: '请前往 文件树 选择或创建文件。',
 			title: '还未选择文件',
+		},
+		remoteNoSelection: {
+			detail: '请前往远程文件夹选择一个文件。',
+			title: '还未选择远程文件',
 		},
 	},
 	settingsHome: {
@@ -395,18 +408,18 @@ const zhCN = {
 			title: '连接',
 		},
 		emptyTrusted: '还没有配对设备。',
-		localStore: {
-			detail: '使用 SQLite 保存配对状态和信任设备记录。',
-			title: '同步存储',
-		},
-		metrics: {
-			trusted: '信任',
+		localDevice: {
+			defaultName: 'Madora 手机',
+			detail: '这个名称会显示在桌面端的同步状态和远程编辑提示中。',
+			edit: '修改名称',
+			placeholder: '例如 Madora 手机',
+			saving: '保存中',
+			title: '本机同步名称',
 		},
 		pairing: {
 			detail: '扫描桌面端二维码，通过局域网完成配对。',
 			eyebrow: '设备',
-			instructions:
-				'打开 Madora 桌面端 -> 设置 -> 同步，然后扫描那里显示的二维码。',
+			instructions: '打开 Madora 桌面端 -> 设置 -> 同步。',
 			pair: '扫码配对',
 			ready: '准备配对',
 			repair: '重新扫码',

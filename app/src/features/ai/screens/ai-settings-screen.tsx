@@ -1,15 +1,6 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-	Modal,
-	Pressable,
-	ScrollView,
-	StyleSheet,
-	Text,
-	TextInput,
-	useWindowDimensions,
-	View,
-} from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
@@ -22,13 +13,25 @@ import {
 } from 'lucide-react-native';
 
 import modelsByProvider from '@/assets/models.json';
+import { Input, InputField } from '@/components/ui/input';
+import {
+	Select,
+	SelectBackdrop,
+	SelectContent,
+	SelectDragIndicator,
+	SelectDragIndicatorWrapper,
+	SelectInput,
+	SelectItem,
+	SelectPortal,
+	SelectScrollView,
+	SelectTrigger,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
 	APP_THEME_BACKGROUND_COLORS,
 	SettingsCard,
 	useAppThemePalette,
 	useResolvedThemePreference,
-	type AppThemePalette,
 } from '@/features/settings';
 import { BackButton } from '@/shared/components';
 import { ProviderGlyph } from '../components/provider-glyph';
@@ -41,10 +44,6 @@ const CUSTOM_PROTOCOLS: CustomProviderProtocol[] = [
 	'anthropic',
 	'google',
 ];
-const MODEL_DROPDOWN_GAP = 2;
-const MODEL_DROPDOWN_MAX_HEIGHT = 280;
-const MODEL_DROPDOWN_ROW_HEIGHT = 44;
-const FLOATING_TAB_BAR_CLEARANCE = 88;
 
 type ProviderModelOption = {
 	name: string;
@@ -189,15 +188,15 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 								}
 								label={t('common.labels.apiUrl')}
 							/>
-							<TextInput
-								autoCapitalize="none"
-								autoCorrect={false}
-								className="min-h-11 rounded-md border border-border bg-secondary
-									px-3 text-[14px] text-foreground"
-								onChangeText={settings.setApiUrl}
-								placeholder="https://api.example.com"
-								value={settings.apiUrl}
-							/>
+							<Input>
+								<InputField
+									autoCapitalize="none"
+									autoCorrect={false}
+									onChangeText={settings.setApiUrl}
+									placeholder="https://api.example.com"
+									value={settings.apiUrl}
+								/>
+							</Input>
 
 							<View className="flex-row items-center justify-between gap-4 pt-1">
 								<View className="flex-1 gap-1">
@@ -226,24 +225,52 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 
 				<SettingsCard title={t('common.labels.model')}>
 					{isCustomProvider || modelOptions.length === 0 ? (
-						<TextInput
-							autoCapitalize="none"
-							autoCorrect={false}
-							className="min-h-11 rounded-md border border-border bg-secondary
-								px-3 text-[14px] text-foreground"
-							onChangeText={settings.setModel}
-							placeholder={selectedProvider?.defaultModel || 'model-name'}
-							value={settings.model}
-						/>
+						<Input>
+							<InputField
+								autoCapitalize="none"
+								autoCorrect={false}
+								onChangeText={settings.setModel}
+								placeholder={selectedProvider?.defaultModel || 'model-name'}
+								value={settings.model}
+							/>
+						</Input>
 					) : (
-						<ModelDropdown
-							modelOptions={modelOptions}
-							onSelect={settings.setModel}
-							palette={palette}
+						<Select
+							closeOnOverlayClick
+							key={`${settings.provider}:${settings.model}`}
+							onValueChange={settings.setModel}
 							placeholder={t('settings.editor.modelPlaceholder')}
-							selectedLabel={selectedModelLabel}
 							selectedValue={settings.model}
-						/>
+							selectedLabel={selectedModelLabel}
+						>
+							<SelectTrigger>
+								<SelectInput
+									placeholder={t('settings.editor.modelPlaceholder')}
+								/>
+								<ChevronDown
+									color={palette.iconMuted}
+									size={18}
+									strokeWidth={2.1}
+								/>
+							</SelectTrigger>
+							<SelectPortal>
+								<SelectBackdrop />
+								<SelectContent>
+									<SelectDragIndicatorWrapper>
+										<SelectDragIndicator />
+									</SelectDragIndicatorWrapper>
+									<SelectScrollView>
+										{modelOptions.map((option) => (
+											<SelectItem
+												key={option.value}
+												label={option.name}
+												value={option.value}
+											/>
+										))}
+									</SelectScrollView>
+								</SelectContent>
+							</SelectPortal>
+						</Select>
 					)}
 				</SettingsCard>
 
@@ -258,20 +285,22 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 								: t('settings.ai.apiKeyMissing')
 						}
 					/>
-					<TextInput
-						autoCapitalize="none"
-						autoCorrect={false}
-						className="mt-3 min-h-11 rounded-md border border-border
-							bg-secondary px-3 text-[14px] text-foreground"
-						onChangeText={setApiKeyDraft}
-						placeholder={
-							settings.hasApiKey
-								? t('settings.editor.apiKeyPlaceholderSaved')
-								: 'sk-...'
-						}
-						secureTextEntry
-						value={apiKeyDraft}
-					/>
+					<View className="mt-3">
+						<Input>
+							<InputField
+								autoCapitalize="none"
+								autoCorrect={false}
+								onChangeText={setApiKeyDraft}
+								placeholder={
+									settings.hasApiKey
+										? t('settings.editor.apiKeyPlaceholderSaved')
+										: 'sk-...'
+								}
+								secureTextEntry
+								value={apiKeyDraft}
+							/>
+						</Input>
+					</View>
 					<View className="mt-3 flex-row gap-3">
 						<ActionButton
 							label={t('common.actions.save')}
@@ -293,219 +322,6 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 				</SettingsCard>
 			</KeyboardAwareScrollView>
 		</View>
-	);
-}
-
-type DropdownAnchor = {
-	height: number;
-	width: number;
-	x: number;
-	y: number;
-};
-
-function ModelDropdown({
-	modelOptions,
-	onSelect,
-	palette,
-	placeholder,
-	selectedLabel,
-	selectedValue,
-}: {
-	modelOptions: ProviderModelOption[];
-	onSelect: (value: string) => void;
-	palette: AppThemePalette;
-	placeholder: string;
-	selectedLabel: string;
-	selectedValue: string;
-}) {
-	const { height: screenHeight, width } = useWindowDimensions();
-	const insets = useSafeAreaInsets();
-	const triggerRef = useRef<View>(null);
-	const [anchor, setAnchor] = useState<DropdownAnchor | null>(null);
-	const [open, setOpen] = useState(false);
-
-	const closeDropdown = useCallback(() => {
-		setOpen(false);
-	}, []);
-
-	const openDropdown = useCallback(() => {
-		if (!triggerRef.current) {
-			return;
-		}
-		triggerRef.current.measureInWindow((x, y, measuredWidth, height) => {
-			setAnchor({ height, width: measuredWidth, x, y });
-			setOpen(true);
-		});
-	}, []);
-
-	const selectModel = useCallback(
-		(value: string) => {
-			onSelect(value);
-			setOpen(false);
-		},
-		[onSelect]
-	);
-
-	const dropdownMetrics = useMemo(() => {
-		if (!anchor) {
-			return null;
-		}
-
-		const horizontalPadding = 16;
-		const topLimit = Math.max(insets.top + 16, 16);
-		const bottomLimit = Math.max(
-			insets.bottom + FLOATING_TAB_BAR_CLEARANCE,
-			16
-		);
-		const desiredHeight = Math.min(
-			MODEL_DROPDOWN_MAX_HEIGHT,
-			modelOptions.length * MODEL_DROPDOWN_ROW_HEIGHT + 8
-		);
-		const dropdownWidth = Math.min(
-			Math.max(anchor.width, 220),
-			width - horizontalPadding * 2
-		);
-		const left = Math.min(
-			Math.max(anchor.x, horizontalPadding),
-			width - dropdownWidth - horizontalPadding
-		);
-		const topSpace = anchor.y - topLimit;
-		const bottomSpace = screenHeight - (anchor.y + anchor.height) - bottomLimit;
-		const openAbove = bottomSpace < desiredHeight && topSpace > bottomSpace;
-		const availableHeight = Math.max(
-			120,
-			(openAbove ? topSpace : bottomSpace) - MODEL_DROPDOWN_GAP
-		);
-		const maxHeight = Math.min(desiredHeight, availableHeight);
-
-		return {
-			bottom: openAbove
-				? screenHeight - anchor.y + MODEL_DROPDOWN_GAP
-				: undefined,
-			left,
-			maxHeight,
-			top: openAbove
-				? undefined
-				: anchor.y + anchor.height + MODEL_DROPDOWN_GAP,
-			width: dropdownWidth,
-		};
-	}, [
-		anchor,
-		insets.bottom,
-		insets.top,
-		modelOptions.length,
-		screenHeight,
-		width,
-	]);
-
-	return (
-		<>
-			<View ref={triggerRef} collapsable={false}>
-				<Pressable
-					className="min-h-11 flex-row items-center justify-between rounded-md
-						px-3"
-					style={{
-						backgroundColor: palette.surfaceMuted,
-						borderColor: palette.border,
-						borderWidth: 1,
-					}}
-					onPress={openDropdown}
-				>
-					<Text
-						className={`flex-1 text-[14px] ${
-							selectedLabel ? 'text-foreground' : 'text-muted-foreground'
-						}`}
-						numberOfLines={1}
-					>
-						{selectedLabel || placeholder}
-					</Text>
-					<ChevronDown color={palette.iconMuted} size={18} strokeWidth={2.1} />
-				</Pressable>
-			</View>
-
-			<Modal
-				animationType="fade"
-				onRequestClose={closeDropdown}
-				statusBarTranslucent
-				transparent
-				visible={open && dropdownMetrics !== null}
-			>
-				<View style={StyleSheet.absoluteFill}>
-					<Pressable
-						accessible={false}
-						onPress={closeDropdown}
-						style={StyleSheet.absoluteFill}
-					/>
-					{dropdownMetrics ? (
-						<View
-							className="overflow-hidden rounded-md shadow-lg"
-							style={{
-								backgroundColor: palette.surface,
-								bottom: dropdownMetrics.bottom,
-								borderColor: palette.border,
-								borderWidth: 1,
-								elevation: 12,
-								left: dropdownMetrics.left,
-								maxHeight: dropdownMetrics.maxHeight,
-								position: 'absolute',
-								top: dropdownMetrics.top,
-								width: dropdownMetrics.width,
-							}}
-						>
-							<ScrollView
-								bounces={false}
-								keyboardShouldPersistTaps="handled"
-								nestedScrollEnabled
-								showsVerticalScrollIndicator={
-									modelOptions.length * MODEL_DROPDOWN_ROW_HEIGHT >
-									dropdownMetrics.maxHeight
-								}
-							>
-								<View className="p-1">
-									{modelOptions.map((option) => {
-										const active = option.value === selectedValue;
-
-										return (
-											<Pressable
-												accessibilityRole="button"
-												accessibilityState={{ selected: active }}
-												className="min-h-11 flex-row items-center
-													justify-between gap-3 rounded-sm px-3 py-2"
-												key={option.value}
-												onPress={() => selectModel(option.value)}
-												style={{
-													backgroundColor: active
-														? palette.surfaceMuted
-														: 'transparent',
-												}}
-											>
-												<Text
-													className={`flex-1 text-[14px] ${
-														active
-															? 'font-semibold text-foreground'
-															: 'text-foreground/80'
-														}`}
-													numberOfLines={1}
-												>
-													{option.name}
-												</Text>
-												{active ? (
-													<Check
-														color={palette.icon}
-														size={15}
-														strokeWidth={2.4}
-													/>
-												) : null}
-											</Pressable>
-										);
-									})}
-								</View>
-							</ScrollView>
-						</View>
-					) : null}
-				</View>
-			</Modal>
-		</>
 	);
 }
 

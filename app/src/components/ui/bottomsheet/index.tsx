@@ -28,6 +28,7 @@ import type { PressableProps, TextInputProps, TextProps } from 'react-native';
 import { Keyboard, Platform, Text, View } from 'react-native';
 import { Pressable as RNPressable } from 'react-native';
 import { Pressable as GGHPressable } from 'react-native-gesture-handler';
+import { runAfterKeyboardSettled } from '../keyboard-stability';
 
 const bottomSheetBackdropStyle = tva({
 	base: 'absolute inset-0 bg-black opacity-50',
@@ -57,7 +58,7 @@ const bottomSheetFooterStyle = tva({
 });
 
 const bottomSheetTextInputStyle = tva({
-	base: 'flex-1 text-foreground text-sm md:text-sm py-1 placeholder:text-muted-foreground  web:outline-none ios:leading-[0px] web:cursor-text  h-9 w-full flex-row items-center rounded-md border border-border dark:bg-input/30 bg-transparent shadow-xs overflow-hidden px-3 gap-2',
+	base: 'min-h-11 w-full flex-row items-center rounded-md border border-border bg-secondary px-3 gap-2 text-foreground text-[14px] placeholder:text-muted-foreground shadow-xs overflow-hidden web:outline-none ios:leading-[0px] web:cursor-text',
 });
 
 type BottomSheetContextValue = {
@@ -260,7 +261,7 @@ export const BottomSheetTrigger = ({
 			{...props}
 			onPress={(e) => {
 				onPress?.(e);
-				handleOpen(index);
+				runAfterKeyboardSettled(() => handleOpen(index));
 			}}
 			className={bottomSheetTriggerStyle({ className })}
 		>

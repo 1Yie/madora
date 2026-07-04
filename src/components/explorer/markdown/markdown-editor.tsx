@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SaveMode } from '@/context/app-settings-provider';
+import type { RemoteCursorState } from '@/hooks/use-editor';
 import { useEditor } from '@/hooks/use-editor';
 import { Spinner } from '@/components/ui/spinner';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
@@ -39,10 +40,13 @@ type MarkdownEditorProps = {
 	encoding?: string | null;
 	mode: 'edit' | 'preview';
 	onChange: (value: string) => void;
+	onCursorChange?: (line: number, col: number, cursorIndex: number) => void;
 	onSave: () => void;
 	onToggleMode?: () => void;
+	remoteCursor?: RemoteCursorState | null;
 	saveMode: SaveMode;
 	saveStatus: SaveStatus;
+	syncLoading?: boolean;
 	title?: string;
 	filePath: string;
 	rootPath: string | null;
@@ -187,10 +191,13 @@ export function MarkdownEditor({
 	encoding,
 	mode,
 	onChange,
+	onCursorChange,
 	onSave,
 	onToggleMode,
+	remoteCursor,
 	saveMode,
 	saveStatus,
+	syncLoading,
 	title,
 	filePath,
 	rootPath,
@@ -202,8 +209,13 @@ export function MarkdownEditor({
 	const { editorRef, viewRef } = useEditor({
 		fontSize,
 		onChange,
-		onCursorChange: (line, col) => setCursorPos({ line, col }),
+		onCursorChange: (line, col, cursorIndex) => {
+			setCursorPos({ line, col });
+			onCursorChange?.(line, col, cursorIndex);
+		},
 		onSave,
+		remoteCursor,
+		syncLoading,
 		title,
 		value,
 	});

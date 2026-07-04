@@ -25,12 +25,26 @@ import {
 	ActionsheetSectionHeaderText,
 } from './select-actionsheet';
 import { Pressable, View, TextInput } from 'react-native';
+import { runAfterKeyboardSettled } from '../keyboard-stability';
 
 const SelectTriggerWrapper = React.forwardRef<
 	React.ComponentRef<typeof Pressable>,
 	React.ComponentProps<typeof Pressable>
->(function SelectTriggerWrapper({ ...props }, ref) {
-	return <Pressable {...props} ref={ref} />;
+>(function SelectTriggerWrapper({ onPress, ...props }, ref) {
+	return (
+		<Pressable
+			{...props}
+			ref={ref}
+			onPress={
+				onPress
+					? (event) => {
+							event.persist?.();
+							runAfterKeyboardSettled(() => onPress(event));
+						}
+					: undefined
+			}
+		/>
+	);
 });
 
 const selectIconStyle = tva({
@@ -52,12 +66,12 @@ const selectStyle = tva({
 });
 
 const selectTriggerStyle = tva({
-	base: 'border border-border rounded flex-row items-center overflow-hidden data-[hover=true]:border-primary/80 data-[focus=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:data-[hover=true]:border-border/80',
+	base: 'min-h-11 w-full flex-row items-center rounded-md border border-border bg-secondary px-3 gap-2 shadow-xs transition-[color,box-shadow] overflow-hidden data-[hover=true]:border-primary/80 data-[focus=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:data-[hover=true]:border-border/80',
 	variants: {
 		size: {
 			xl: 'min-h-12',
 			lg: 'min-h-11',
-			md: 'min-h-10',
+			md: 'min-h-11',
 			sm: 'min-h-9',
 		},
 		variant: {
@@ -72,18 +86,18 @@ const selectTriggerStyle = tva({
 });
 
 const selectInputStyle = tva({
-	base: 'px-3 placeholder:text-foreground/50 web:w-full h-full text-foreground/90 pointer-events-none web:outline-none ios:leading-[0px] py-0',
+	base: 'flex-1 text-foreground text-[14px] py-1 h-full placeholder:text-muted-foreground pointer-events-none web:outline-none ios:leading-[0px]',
 	parentVariants: {
 		size: {
-			xl: 'text-xl',
-			lg: 'text-lg',
-			md: 'text-base',
+			xl: 'text-[14px]',
+			lg: 'text-[14px]',
+			md: 'text-[14px]',
 			sm: 'text-sm',
 		},
 		variant: {
-			underlined: 'px-0',
+			underlined: '',
 			outline: '',
-			rounded: 'px-4',
+			rounded: '',
 		},
 	},
 });

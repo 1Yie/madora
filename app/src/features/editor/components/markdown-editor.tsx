@@ -33,10 +33,12 @@ import type {
 	MarkdownCompletionControl,
 	MarkdownToolbarIcon,
 } from '../providers/markdown-toolbar-provider';
+import type { EditorStateMessage } from '@/features/madora-sync/lib/protocol';
 
 type SaveMode = 'auto' | 'manual';
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 type EditorMode = 'edit' | 'preview';
+type RemoteEditorState = EditorStateMessage | null;
 
 type FormatKey =
 	| 'bold'
@@ -57,9 +59,12 @@ export function MarkdownEditor({
 	fontSize = 14,
 	mode,
 	onChange,
+	onEditorStateChange,
 	onRequestCompletion,
 	onSave,
 	onToggleMode,
+	remoteEditorState,
+	syncShowingLoader = false,
 	theme = 'light',
 	title,
 	value,
@@ -71,12 +76,21 @@ export function MarkdownEditor({
 	fontSize?: number;
 	mode?: EditorMode;
 	onChange: (content: string) => void;
+	onEditorStateChange?: (state: {
+		column: number | null;
+		content: string | null;
+		cursorIndex: number | null;
+		line: number | null;
+		localEditedAt: number;
+	}) => void;
 	onRequestCompletion?: (
 		fullText: string,
 		cursorPos: number
 	) => Promise<string>;
 	onSave?: () => void;
 	onToggleMode?: () => void;
+	remoteEditorState?: RemoteEditorState;
+	syncShowingLoader?: boolean;
 	theme?: ResolvedThemePreference;
 	rootPath?: string | null;
 	saveMode?: SaveMode;
@@ -92,6 +106,13 @@ export function MarkdownEditor({
 	const completionAnchorRef = useRef<number | null>(null);
 	const lastLocalValueRef = useRef(value);
 	const emittedValuesRef = useRef(new Set<string>());
+	const suppressContentUpdateRef = useRef<string | null>(null);
+	const latestRemoteCursorRef = useRef<{
+		content: string | null;
+		contentHash: string | null;
+		label: string | null;
+		pos: number;
+	} | null>(null);
 	const documentKeyRef = useRef(getDocumentKey(filePath, title));
 	const [editorContent, setEditorContent] = useState(value);
 	const [internalMode, setInternalMode] = useState<EditorMode>('edit');
@@ -166,6 +187,7 @@ export function MarkdownEditor({
 		if (documentChanged) {
 			lastLocalValueRef.current = value;
 			emittedValuesRef.current.clear();
+			suppressContentUpdateRef.current = value;
 			setEditorContent(value);
 			void apiRef.current?.editor.resetValue(value);
 			clearCompletion();
@@ -182,6 +204,7 @@ export function MarkdownEditor({
 		}
 
 		lastLocalValueRef.current = value;
+		suppressContentUpdateRef.current = value;
 		setEditorContent(value);
 		void apiRef.current?.editor.setValue(value);
 		clearCompletion();
@@ -271,16 +294,39 @@ export function MarkdownEditor({
 
 	const handleContentUpdate = useCallback(
 		(nextValue: string) => {
+			const localEditedAt = Date.now();
+			if (suppressContentUpdateRef.current === nextValue) {
+				suppressContentUpdateRef.current = null;
+				lastLocalValueRef.current = nextValue;
+				clearCompletion();
+				return;
+			}
+
 			lastLocalValueRef.current = nextValue;
 			emittedValuesRef.current.add(nextValue);
 			onChange(nextValue);
 			clearCompletion();
 			scheduleCompletion(nextValue);
+			void reportEditorState(
+				apiRef.current,
+				nextValue,
+				localEditedAt,
+				true,
+				onEditorStateChange
+			);
 		},
-		[clearCompletion, onChange, scheduleCompletion]
+		[clearCompletion, onChange, onEditorStateChange, scheduleCompletion]
 	);
 
 	const handleSelectionChange = useCallback(() => {
+		void reportEditorState(
+			apiRef.current,
+			lastLocalValueRef.current,
+			Date.now(),
+			false,
+			onEditorStateChange
+		);
+
 		const anchor = completionAnchorRef.current;
 		if (anchor === null) return;
 
@@ -304,7 +350,7 @@ export function MarkdownEditor({
 				clearCompletion();
 			}
 		})();
-	}, [clearCompletion]);
+	}, [clearCompletion, onEditorStateChange]);
 
 	const handleInitialized = useCallback(
 		(api: WebViewAPI) => {
@@ -319,6 +365,15 @@ export function MarkdownEditor({
 				theme
 			);
 			injectGhostTextSupport(api);
+			injectRemoteCursorSupport(api);
+			injectSyncLoaderSupport(api);
+			if (latestRemoteCursorRef.current) {
+				api.injectJavaScript(
+					`window.__madoraSetRemoteCursor && window.__madoraSetRemoteCursor(${JSON.stringify(
+						latestRemoteCursorRef.current
+					)}); true;`
+				);
+			}
 			void api.editor.setFontSize(fontSize);
 			void api.editor.registerShortcut('Mod-s', 'save');
 			void api.editor.registerShortcut('Escape', 'dismissCompletion');
@@ -460,6 +515,49 @@ export function MarkdownEditor({
 
 		return () => setMarkdownToolbar(null);
 	}, [completionControl, setMarkdownToolbar, toolbarActions]);
+
+	useEffect(() => {
+		const api = apiRef.current;
+		if (!api) return;
+		const cursorIndex = remoteEditorState?.cursorIndex ?? null;
+		if (cursorIndex === null) {
+			if (!remoteEditorState || remoteEditorState.filePath !== filePath) {
+				latestRemoteCursorRef.current = null;
+				api.injectJavaScript(
+					'window.__madoraSetRemoteCursor && window.__madoraSetRemoteCursor(null); true;'
+				);
+			}
+			return;
+		}
+
+		latestRemoteCursorRef.current = {
+			content: remoteEditorState?.content ?? null,
+			contentHash: remoteEditorState?.contentHash ?? null,
+			label: remoteEditorState?.deviceName ?? null,
+			pos: cursorIndex,
+		};
+		api.injectJavaScript(
+			`window.__madoraSetRemoteCursor && window.__madoraSetRemoteCursor(${JSON.stringify(
+				latestRemoteCursorRef.current
+			)}); true;`
+		);
+	}, [
+		filePath,
+		remoteEditorState?.cursorIndex,
+		remoteEditorState?.content,
+		remoteEditorState?.contentHash,
+		remoteEditorState?.deviceName,
+		remoteEditorState?.filePath,
+		remoteEditorState?.updatedAt,
+	]);
+
+	useEffect(() => {
+		const api = apiRef.current;
+		if (!api) return;
+		api.injectJavaScript(
+			`window.__madoraSetSyncLoader && window.__madoraSetSyncLoader(${syncShowingLoader ? 'true' : 'false'}); true;`
+		);
+	}, [syncShowingLoader]);
 
 	const previewContent = useMemo(() => value || '', [value]);
 	const containerStyle = useMemo(
@@ -635,6 +733,43 @@ async function insertImage(api: WebViewAPI, placeholder: string) {
 async function focusEditor(api: WebViewAPI) {
 	await api.focus();
 	await api.editor.scrollToCursor(24);
+}
+
+async function reportEditorState(
+	api: WebViewAPI | null,
+	content: string,
+	localEditedAt: number,
+	includeContent: boolean,
+	onEditorStateChange:
+		| ((state: {
+				column: number | null;
+				content: string | null;
+				cursorIndex: number | null;
+				line: number | null;
+				localEditedAt: number;
+		  }) => void)
+		| undefined
+) {
+	if (!api || !onEditorStateChange) return;
+
+	try {
+		const cursor = await api.editor.getCursor('head');
+		onEditorStateChange({
+			column: cursor.ch + 1,
+			content: includeContent ? content : null,
+			cursorIndex: cursor.index,
+			line: cursor.line + 1,
+			localEditedAt,
+		});
+	} catch {
+		onEditorStateChange({
+			column: null,
+			content: includeContent ? content : null,
+			cursorIndex: null,
+			line: null,
+			localEditedAt,
+		});
+	}
 }
 
 function injectEditorStyle(
@@ -852,6 +987,212 @@ function injectGhostTextSupport(api: WebViewAPI) {
   `);
 }
 
+function injectRemoteCursorSupport(api: WebViewAPI) {
+	api.injectJavaScript(`
+    (async function() {
+      if (window.__madoraRemoteCursorInstalled) return true;
+      window.__madoraRemoteCursorInstalled = true;
+
+      const { EditorView } =
+        await window.CodeMirrorEditor.requireAsyncModule('@codemirror/view');
+      const { StateEffect } =
+        await window.CodeMirrorEditor.requireAsyncModule('@codemirror/state');
+      const editorDom = document.querySelector('.cm-editor');
+      const view = EditorView.findFromDOM(editorDom);
+      if (!view) return true;
+
+      window.__madoraRemoteCursorState = null;
+      let remoteCursorFrame = null;
+      const overlay = document.createElement('div');
+      overlay.className = 'cm-madora-remote-cursor';
+      overlay.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('div');
+      label.className = 'cm-madora-remote-cursor-label';
+      overlay.appendChild(label);
+      view.dom.appendChild(overlay);
+
+      function hashMadoraEditorContent(content) {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < content.length; index += 1) {
+          hash ^= content.charCodeAt(index);
+          hash = Math.imul(hash, 0x01000193);
+        }
+        return (hash >>> 0).toString(36);
+      }
+
+      function renderRemoteCursor() {
+        const currentCursor = window.__madoraRemoteCursorState;
+        if (
+          !currentCursor ||
+          (currentCursor.content !== null && view.state.doc.toString() !== currentCursor.content) ||
+          (currentCursor.contentHash !== null && hashMadoraEditorContent(view.state.doc.toString()) !== currentCursor.contentHash) ||
+          currentCursor.pos < 0 ||
+          currentCursor.pos > view.state.doc.length
+        ) {
+          overlay.style.display = 'none';
+          return;
+        }
+
+        const coords = view.coordsAtPos(currentCursor.pos);
+        if (!coords) {
+          overlay.style.display = 'none';
+          return;
+        }
+
+        const editorRect = view.dom.getBoundingClientRect();
+        const x = coords.left - editorRect.left;
+        const y = coords.top - editorRect.top;
+        overlay.style.display = 'block';
+        overlay.style.left = Math.round(x) + 'px';
+        overlay.style.top = Math.round(y) + 'px';
+        overlay.style.height = Math.max(14, coords.bottom - coords.top) + 'px';
+
+        label.textContent = currentCursor.label || '';
+        label.style.display = currentCursor.label ? 'block' : 'none';
+        if (!currentCursor.label) return;
+
+        requestAnimationFrame(function() {
+          if (overlay.style.display === 'none') return;
+          const labelWidth = label.offsetWidth;
+          const minLeft = 2 - x;
+          const maxLeft = editorRect.width - x - labelWidth - 2;
+          label.style.left = Math.round(Math.max(minLeft, Math.min(-1, maxLeft))) + 'px';
+        });
+      }
+
+      function scheduleRenderRemoteCursor() {
+        if (remoteCursorFrame !== null) return;
+        remoteCursorFrame = requestAnimationFrame(function() {
+          remoteCursorFrame = null;
+          renderRemoteCursor();
+        });
+      }
+
+      window.__madoraSetRemoteCursor = function(cursor) {
+        window.__madoraRemoteCursorState =
+          cursor && Number.isFinite(cursor.pos)
+            ? {
+                content: typeof cursor.content === 'string' ? cursor.content : null,
+                contentHash: typeof cursor.contentHash === 'string' ? cursor.contentHash : null,
+                label: cursor.label || null,
+                pos: Number(cursor.pos),
+              }
+            : null;
+        renderRemoteCursor();
+        if (window.__madoraSetSyncLoader) window.__madoraSetSyncLoader(window.__madoraSyncLoaderVisible || false);
+      };
+
+      const scroller = view.dom.querySelector('.cm-scroller');
+      if (scroller) {
+        scroller.addEventListener('scroll', scheduleRenderRemoteCursor, { passive: true });
+      }
+      window.addEventListener('resize', scheduleRenderRemoteCursor);
+
+      const updateListener = EditorView.updateListener.of(function(update) {
+        if (update.docChanged || update.selectionSet || update.viewportChanged || update.geometryChanged) {
+          scheduleRenderRemoteCursor();
+        }
+      });
+      view.dispatch({ effects: StateEffect.appendConfig.of(updateListener) });
+
+      return true;
+    })();
+    true;
+  `);
+}
+
+function injectSyncLoaderSupport(api: WebViewAPI) {
+	api.injectJavaScript(`
+    (async function() {
+      if (window.__madoraSyncLoaderInstalled) return true;
+      window.__madoraSyncLoaderInstalled = true;
+
+      const { EditorView } =
+        await window.CodeMirrorEditor.requireAsyncModule('@codemirror/view');
+      const { StateEffect } =
+        await window.CodeMirrorEditor.requireAsyncModule('@codemirror/state');
+      const editorDom = document.querySelector('.cm-editor');
+      const view = EditorView.findFromDOM(editorDom);
+      if (!view) return true;
+
+      let visible = false;
+      let syncLoaderFrame = null;
+      const loader = document.createElement('div');
+      loader.className = 'cm-madora-sync-loader';
+      loader.setAttribute('aria-hidden', 'true');
+      loader.appendChild(document.createElement('i'));
+      loader.appendChild(document.createElement('i'));
+      loader.appendChild(document.createElement('i'));
+      view.dom.appendChild(loader);
+
+      function hashMadoraEditorContent(content) {
+        let hash = 0x811c9dc5;
+        for (let index = 0; index < content.length; index += 1) {
+          hash ^= content.charCodeAt(index);
+          hash = Math.imul(hash, 0x01000193);
+        }
+        return (hash >>> 0).toString(36);
+      }
+
+      function renderSyncLoader() {
+        const remoteCursor = window.__madoraRemoteCursorState;
+        if (
+          !visible ||
+          !remoteCursor ||
+          (remoteCursor.content !== null && view.state.doc.toString() !== remoteCursor.content) ||
+          (remoteCursor.contentHash !== null && hashMadoraEditorContent(view.state.doc.toString()) !== remoteCursor.contentHash) ||
+          remoteCursor.pos < 0 ||
+          remoteCursor.pos > view.state.doc.length
+        ) {
+          loader.style.display = 'none';
+          return;
+        }
+
+        const coords = view.coordsAtPos(remoteCursor.pos);
+        if (!coords) {
+          loader.style.display = 'none';
+          return;
+        }
+
+        const editorRect = view.dom.getBoundingClientRect();
+        loader.style.display = 'inline-flex';
+        loader.style.left = Math.round(coords.left - editorRect.left + 6) + 'px';
+        loader.style.top = Math.round(coords.bottom - editorRect.top - 1) + 'px';
+      }
+
+      function scheduleRenderSyncLoader() {
+        if (syncLoaderFrame !== null) return;
+        syncLoaderFrame = requestAnimationFrame(function() {
+          syncLoaderFrame = null;
+          renderSyncLoader();
+        });
+      }
+
+      window.__madoraSetSyncLoader = function(nextVisible) {
+        visible = Boolean(nextVisible);
+        window.__madoraSyncLoaderVisible = visible;
+        renderSyncLoader();
+      };
+
+      const scroller = view.dom.querySelector('.cm-scroller');
+      if (scroller) {
+        scroller.addEventListener('scroll', scheduleRenderSyncLoader, { passive: true });
+      }
+      window.addEventListener('resize', scheduleRenderSyncLoader);
+
+      const updateListener = EditorView.updateListener.of(function(update) {
+        if (update.docChanged || update.selectionSet || update.viewportChanged || update.geometryChanged) {
+          scheduleRenderSyncLoader();
+        }
+      });
+      view.dispatch({ effects: StateEffect.appendConfig.of(updateListener) });
+
+      return true;
+    })();
+    true;
+  `);
+}
+
 function getEditorCss(
 	fontSize: number,
 	contentTopPadding: number,
@@ -944,6 +1285,63 @@ function getEditorCss(
       user-select: none;
       vertical-align: top;
       white-space: pre-wrap;
+    }
+    .cm-madora-remote-cursor {
+      border-left: 2px solid #22c55e;
+      pointer-events: none;
+      position: absolute;
+      transform: translateX(-1px);
+      z-index: 3;
+    }
+    .cm-madora-remote-cursor-label {
+      background: #16a34a;
+      border-radius: 3px;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      left: -1px;
+      line-height: 14px;
+      max-width: 120px;
+      overflow: hidden;
+      padding: 0 4px;
+      position: absolute;
+      text-overflow: ellipsis;
+      top: -15px;
+      white-space: nowrap;
+    }
+    .cm-madora-sync-loader {
+      align-items: center;
+      display: inline-flex;
+      gap: 3px;
+      pointer-events: none;
+      position: absolute;
+      z-index: 3;
+    }
+    .cm-madora-sync-loader i {
+      animation: madora-sync-pulse 0.9s ease-in-out infinite;
+      background: #22c55e;
+      border-radius: 999px;
+      display: inline-block;
+      height: 4px;
+      opacity: 0.35;
+      width: 4px;
+    }
+    .cm-madora-sync-loader i:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+    .cm-madora-sync-loader i:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+    @keyframes madora-sync-pulse {
+      0%, 80%, 100% {
+        opacity: 0.3;
+        transform: translateY(0);
+      }
+      40% {
+        opacity: 1;
+        transform: translateY(-2px);
+      }
     }
   `;
 }

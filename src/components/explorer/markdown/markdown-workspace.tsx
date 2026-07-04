@@ -1,9 +1,15 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+	madoraSyncPublishEditorState,
+	type MadoraSyncEditorState,
+} from '@/invoke/madora-sync';
+import { listen } from '@tauri-apps/api/event';
 
 import { useAppSettings } from '@/context/app-settings-provider';
 import { showErrorToast } from '@/components/ui/toast';
+import { hashEditorContent } from '@/lib/editor-content-hash';
 import {
 	getMarkdownDraftStorageKey,
 	getStoredMarkdownDraftContent,
@@ -26,6 +32,9 @@ type MarkdownWorkspaceProps = {
 };
 
 const SAVE_DEBOUNCE_MS = 400;
+const EDITOR_STATE_THROTTLE_MS = 80;
+const LOCAL_EDIT_PROTECTION_MS = 1_200;
+const REMOTE_APPLY_LOADING_MS = 420;
 
 function getInitialValue(filePath: string, content: string): string {
 	const draft = getStoredMarkdownDraftContent(filePath);
@@ -68,18 +77,151 @@ export function MarkdownWorkspace({
 	const { saveMode, editorFontSize } = useAppSettings();
 	const [value, setValue] = useState(() => getInitialValue(filePath, content));
 	const [saveError, setSaveError] = useState<string | null>(null);
+	const [remoteState, setRemoteState] = useState<MadoraSyncEditorState | null>(
+		null
+	);
+	const [syncLoading, setSyncLoading] = useState(false);
 	const [saveStatus, setSaveStatus] = useState<SaveStatus>(() =>
 		hasStoredDraft(filePath) ? 'dirty' : 'idle'
 	);
 	const saveTimerRef = useRef<number | null>(null);
+	const editorStateTimerRef = useRef<number | null>(null);
+	const remoteApplyLoadingTimerRef = useRef<number | null>(null);
 	const saveRequestIdRef = useRef(0);
 	const lastSavedValueRef = useRef(content);
+	const lastEditorStateAtRef = useRef(0);
+	const lastLocalEditAtRef = useRef(0);
+	const pendingRemoteStateRef = useRef<MadoraSyncEditorState | null>(null);
+	const lastCursorRef = useRef<{
+		column: number | null;
+		cursorIndex: number | null;
+		line: number | null;
+	}>({ column: null, cursorIndex: null, line: null });
 	const syncingFromPropsRef = useRef(false);
 	const latestValueRef = useRef(value);
 
 	useEffect(() => {
 		latestValueRef.current = value;
 	}, [value]);
+
+	useEffect(() => {
+		const pendingRemoteState = pendingRemoteStateRef.current;
+		if (
+			!pendingRemoteState ||
+			pendingRemoteState.filePath !== filePath ||
+			pendingRemoteState.content !== value
+		) {
+			return;
+		}
+
+		pendingRemoteStateRef.current = null;
+		setRemoteState(pendingRemoteState);
+		setSyncLoading(true);
+		if (remoteApplyLoadingTimerRef.current !== null) {
+			window.clearTimeout(remoteApplyLoadingTimerRef.current);
+		}
+		remoteApplyLoadingTimerRef.current = window.setTimeout(() => {
+			setSyncLoading(false);
+			remoteApplyLoadingTimerRef.current = null;
+		}, REMOTE_APPLY_LOADING_MS);
+	}, [filePath, value]);
+
+	useEffect(() => {
+		let active = true;
+		let unlisten: (() => void) | null = null;
+
+		void listen<MadoraSyncEditorState>(
+			'madora-sync://editor-state',
+			(event) => {
+				if (!active) return;
+				const nextState = event.payload;
+				if (nextState.filePath === filePath) {
+					const hasRecentLocalEdit =
+						Date.now() - lastLocalEditAtRef.current < LOCAL_EDIT_PROTECTION_MS;
+					const hasRemoteContent = typeof nextState.content === 'string';
+					const canApplyRemoteContent = hasRemoteContent && !hasRecentLocalEdit;
+
+					if (!hasRemoteContent) {
+						const pendingRemoteState = pendingRemoteStateRef.current;
+						if (pendingRemoteState?.filePath === filePath) {
+							pendingRemoteStateRef.current = {
+								...pendingRemoteState,
+								column: nextState.column,
+								cursorIndex: nextState.cursorIndex,
+								deviceId: nextState.deviceId,
+								deviceName: nextState.deviceName,
+								editing: nextState.editing,
+								line: nextState.line,
+								source: nextState.source,
+								title: nextState.title ?? pendingRemoteState.title,
+								updatedAt: nextState.updatedAt,
+							};
+							return;
+						}
+
+						setRemoteState(nextState);
+						setSyncLoading(true);
+						if (remoteApplyLoadingTimerRef.current !== null) {
+							window.clearTimeout(remoteApplyLoadingTimerRef.current);
+						}
+						remoteApplyLoadingTimerRef.current = window.setTimeout(() => {
+							setSyncLoading(false);
+							remoteApplyLoadingTimerRef.current = null;
+						}, REMOTE_APPLY_LOADING_MS);
+					}
+
+					const nextContent =
+						typeof nextState.content === 'string' ? nextState.content : null;
+					if (canApplyRemoteContent && nextContent !== null) {
+						if (
+							!pendingRemoteStateRef.current &&
+							nextContent === latestValueRef.current
+						) {
+							pendingRemoteStateRef.current = null;
+							setRemoteState(nextState);
+							setSyncLoading(true);
+							if (remoteApplyLoadingTimerRef.current !== null) {
+								window.clearTimeout(remoteApplyLoadingTimerRef.current);
+							}
+							remoteApplyLoadingTimerRef.current = window.setTimeout(() => {
+								setSyncLoading(false);
+								remoteApplyLoadingTimerRef.current = null;
+							}, REMOTE_APPLY_LOADING_MS);
+							return;
+						}
+
+						pendingRemoteStateRef.current = nextState;
+						lastSavedValueRef.current = nextContent;
+						syncingFromPropsRef.current = true;
+						removeStoredMarkdownDraft(filePath);
+						setValue(nextContent);
+						setSaveError(null);
+						setSaveStatus('saved');
+						window.dispatchEvent(
+							new CustomEvent('editor-dirty-changed', {
+								detail: { filePath },
+							})
+						);
+					} else if (hasRemoteContent) {
+						pendingRemoteStateRef.current = nextState;
+					}
+				} else {
+					setRemoteState(null);
+				}
+			}
+		).then((dispose) => {
+			if (!active) {
+				dispose();
+				return;
+			}
+			unlisten = dispose;
+		});
+
+		return () => {
+			active = false;
+			unlisten?.();
+		};
+	}, [filePath]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -187,6 +329,128 @@ export function MarkdownWorkspace({
 		void requestSave(value, true);
 	}, [requestSave, value]);
 
+	const publishEditorState = useCallback(
+		({
+			column,
+			content,
+			contentHash,
+			cursorIndex,
+			editing,
+			line,
+		}: {
+			column: number | null;
+			content?: string | null;
+			contentHash?: string | null;
+			cursorIndex: number | null;
+			editing: boolean;
+			line: number | null;
+		}) => {
+			void madoraSyncPublishEditorState({
+				column,
+				content,
+				contentHash,
+				cursorIndex,
+				editing,
+				filePath,
+				line,
+				title: getFileTitle(filePath),
+			});
+		},
+		[filePath]
+	);
+
+	const scheduleEditorStatePublish = useCallback(
+		(nextValue: string | null) => {
+			if (editorStateTimerRef.current !== null) {
+				window.clearTimeout(editorStateTimerRef.current);
+			}
+
+			editorStateTimerRef.current = window.setTimeout(() => {
+				editorStateTimerRef.current = null;
+				lastEditorStateAtRef.current = Date.now();
+				publishEditorState({
+					...lastCursorRef.current,
+					content: nextValue,
+					contentHash: hashEditorContent(nextValue ?? latestValueRef.current),
+					editing: mode === 'edit',
+				});
+			}, EDITOR_STATE_THROTTLE_MS);
+		},
+		[mode, publishEditorState]
+	);
+
+	const handleCursorEditorStateChange = useCallback(
+		(line: number, col: number, cursorIndex: number) => {
+			lastCursorRef.current = { column: col, cursorIndex, line };
+			const now = Date.now();
+			if (now - lastEditorStateAtRef.current < EDITOR_STATE_THROTTLE_MS) {
+				scheduleEditorStatePublish(null);
+				return;
+			}
+
+			lastEditorStateAtRef.current = now;
+			publishEditorState({
+				column: col,
+				content: null,
+				contentHash: hashEditorContent(latestValueRef.current),
+				cursorIndex,
+				editing: mode === 'edit',
+				line,
+			});
+		},
+		[mode, publishEditorState, scheduleEditorStatePublish]
+	);
+
+	const handleEditorChange = useCallback(
+		(nextValue: string) => {
+			lastLocalEditAtRef.current = Date.now();
+			latestValueRef.current = nextValue;
+			setValue(nextValue);
+			const now = Date.now();
+			if (now - lastEditorStateAtRef.current < EDITOR_STATE_THROTTLE_MS) {
+				scheduleEditorStatePublish(nextValue);
+				return;
+			}
+
+			if (editorStateTimerRef.current !== null) {
+				window.clearTimeout(editorStateTimerRef.current);
+				editorStateTimerRef.current = null;
+			}
+			lastEditorStateAtRef.current = now;
+			publishEditorState({
+				...lastCursorRef.current,
+				content: nextValue,
+				contentHash: hashEditorContent(nextValue),
+				editing: mode === 'edit',
+			});
+		},
+		[mode, publishEditorState, scheduleEditorStatePublish]
+	);
+
+	useEffect(() => {
+		publishEditorState({
+			column: null,
+			content: latestValueRef.current,
+			contentHash: hashEditorContent(latestValueRef.current),
+			cursorIndex: null,
+			editing: mode === 'edit',
+			line: null,
+		});
+
+		return () => {
+			void madoraSyncPublishEditorState({
+				column: null,
+				content: null,
+				contentHash: null,
+				cursorIndex: null,
+				editing: false,
+				filePath,
+				line: null,
+				title: getFileTitle(filePath),
+			});
+		};
+	}, [filePath, mode, publishEditorState]);
+
 	useEffect(() => {
 		const editorId = `markdown:${filePath}`;
 
@@ -211,6 +475,14 @@ export function MarkdownWorkspace({
 		);
 
 		return () => {
+			if (editorStateTimerRef.current !== null) {
+				window.clearTimeout(editorStateTimerRef.current);
+				editorStateTimerRef.current = null;
+			}
+			if (remoteApplyLoadingTimerRef.current !== null) {
+				window.clearTimeout(remoteApplyLoadingTimerRef.current);
+				remoteApplyLoadingTimerRef.current = null;
+			}
 			unregisterEditor(editorId);
 		};
 	}, [filePath, requestSave]);
@@ -280,12 +552,20 @@ export function MarkdownWorkspace({
 			onToggleMode={onToggleMode}
 			encoding={encoding}
 			mode={mode}
-			onChange={setValue}
+			onChange={handleEditorChange}
+			onCursorChange={handleCursorEditorStateChange}
 			onSave={handleSave}
 			saveMode={saveMode}
 			filePath={filePath}
 			rootPath={rootPath}
 			saveStatus={saveStatus}
+			syncLoading={syncLoading}
+			remoteCursor={{
+				contentHash: remoteState?.contentHash ?? null,
+				content: remoteState?.content ?? null,
+				cursorIndex: remoteState?.cursorIndex ?? null,
+				label: remoteState?.deviceName ?? null,
+			}}
 			title={getFileTitle(filePath)}
 			fontSize={editorFontSize}
 			value={value}

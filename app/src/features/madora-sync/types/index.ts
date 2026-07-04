@@ -28,7 +28,3 @@ export interface TrustedDevice {
 	token: string;
 	address: string;
 }
-
-export interface StorageStats {
-	trustedDevices: number;
-}

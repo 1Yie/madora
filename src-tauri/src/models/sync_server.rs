@@ -56,6 +56,39 @@ pub struct AiCompleteMessage {
     pub suffix: Option<String>,
 }
 
+/// Current editor state for another connected device.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorStateMessage {
+    pub device_id: String,
+    pub device_name: String,
+    pub source: String,
+    pub file_path: Option<String>,
+    pub title: Option<String>,
+    pub content: Option<String>,
+    pub content_hash: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub cursor_index: Option<usize>,
+    pub editing: bool,
+    #[serde(default)]
+    pub updated_at: u64,
+}
+
+/// Local desktop editor state input from the Tauri frontend.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorStateInput {
+    pub file_path: Option<String>,
+    pub title: Option<String>,
+    pub content: Option<String>,
+    pub content_hash: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub cursor_index: Option<usize>,
+    pub editing: bool,
+}
+
 /// Top-level inbound message envelope.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -65,6 +98,7 @@ pub enum ClientMessage {
     FileRead(FileReadMessage),
     FileWrite(FileWriteMessage),
     AiComplete(AiCompleteMessage),
+    EditorState(EditorStateMessage),
 }
 
 // ─── Host → Client messages ─────────────────────────────────────────────
@@ -132,6 +166,7 @@ pub enum ServerMessage {
     FileReadResult(FileReadResultMessage),
     FileWriteResult(FileWriteResultMessage),
     AiResult(AiResultMessage),
+    EditorState(EditorStateMessage),
     Error(ErrorMessage),
 }
 

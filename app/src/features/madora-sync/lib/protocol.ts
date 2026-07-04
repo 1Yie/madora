@@ -112,12 +112,29 @@ export interface AiCompleteMessage {
 	suffix?: string;
 }
 
+export interface EditorStateMessage {
+	type: 'editor_state';
+	deviceId: string;
+	deviceName: string;
+	source: 'app' | 'desktop' | string;
+	filePath: string | null;
+	title: string | null;
+	content: string | null;
+	contentHash: string | null;
+	line: number | null;
+	column: number | null;
+	cursorIndex: number | null;
+	editing: boolean;
+	updatedAt: number;
+}
+
 export type ClientMessage =
 	| AuthMessage
 	| FileListMessage
 	| FileReadMessage
 	| FileWriteMessage
-	| AiCompleteMessage;
+	| AiCompleteMessage
+	| EditorStateMessage;
 
 // ─── Host → Client messages ──────────────────────────────────────────────
 
@@ -173,6 +190,7 @@ export type ServerMessage =
 	| FileReadResultMessage
 	| FileWriteResultMessage
 	| AiResultMessage
+	| EditorStateMessage
 	| ErrorMessage;
 
 /** Type guard — safely parse an inbound JSON string into a ServerMessage. */

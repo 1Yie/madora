@@ -13,9 +13,4 @@ export {
 	MadoraSyncProvider,
 	useMadoraSync,
 } from './providers/madora-sync-provider';
-export type {
-	PairedHost,
-	StorageStats,
-	SyncConnectionState,
-	TrustedDevice,
-} from './types';
+export type { PairedHost, SyncConnectionState, TrustedDevice } from './types';

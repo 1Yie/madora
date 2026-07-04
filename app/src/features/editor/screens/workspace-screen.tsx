@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { router } from 'expo-router';
 import {
 	DeviceEventEmitter,
 	Keyboard,
@@ -28,12 +29,14 @@ import {
 	LocateFixed,
 	MonitorSmartphone,
 	RefreshCw,
+	Settings,
 	Trash2,
 	X,
 } from 'lucide-react-native';
 
 import { MarkdownEditor } from '../components/markdown-editor';
 import { useEditorWorkspace } from '../providers/editor-provider';
+import { hashEditorContent } from '../lib/editor-content-hash';
 import {
 	NativeModal,
 	NativeModalActions,
@@ -59,6 +62,8 @@ import {
 	useResolvedThemePreference,
 } from '@/features/settings';
 import { useMadoraSync } from '@/features/madora-sync';
+import type { EditorStateMessage } from '@/features/madora-sync/lib/protocol';
+import type { SyncConnectionState } from '@/features/madora-sync';
 
 const EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING = 56;
 const EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING = 40;
@@ -77,6 +82,8 @@ const TREE_LOCATE_SCROLL_OFFSET = 96;
 const DOUBLE_PRESS_DELAY = 260;
 const WORKSPACE_TOAST_ID = 'madora-workspace-toast';
 const WORKSPACE_TOAST_DURATION_MS = 2200;
+const LOCAL_EDIT_PROTECTION_MS = 1_200;
+const REMOTE_APPLY_LOADING_MS = 420;
 
 export function WorkspaceScreen() {
 	const insets = useSafeAreaInsets();
@@ -96,7 +103,6 @@ export function WorkspaceScreen() {
 		createLocalFile,
 		deleteSelectedEntry,
 		documents,
-		errorMessage,
 		expandedDirectoryPaths,
 		fileTree,
 		focusedTreeNode,
@@ -117,7 +123,8 @@ export function WorkspaceScreen() {
 		updateSelectedDocumentContent,
 		workspaceSource,
 	} = useEditorWorkspace();
-	const { connectionState } = useMadoraSync();
+	const { connectionState, publishEditorState, remoteEditorState } =
+		useMadoraSync();
 	const { showToast } = useNativeToast();
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [createValue, setCreateValue] = useState('');
@@ -128,6 +135,18 @@ export function WorkspaceScreen() {
 	const [renameValue, setRenameValue] = useState('');
 	const [refreshingFileTree, setRefreshingFileTree] = useState(false);
 	const [locateRequestId, setLocateRequestId] = useState(0);
+	const [editorSyncLoading, setEditorSyncLoading] = useState(false);
+	const [visibleRemoteEditorState, setVisibleRemoteEditorState] =
+		useState<EditorStateMessage | null>(null);
+	const activeRemoteDocumentRef = useRef<{
+		path: string;
+		title: string;
+	} | null>(null);
+	const pendingRemoteEditorStateRef = useRef<EditorStateMessage | null>(null);
+	const lastLocalEditAtRef = useRef(0);
+	const remoteApplyLoadingTimerRef = useRef<ReturnType<
+		typeof setTimeout
+	> | null>(null);
 
 	const editorTopPadding = insets.top;
 	const editorBottomPadding =
@@ -135,6 +154,17 @@ export function WorkspaceScreen() {
 		(keyboardHeight > 0
 			? keyboardHeight + EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING
 			: EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING);
+
+	const showRemoteEditorSyncLoading = useCallback(() => {
+		setEditorSyncLoading(true);
+		if (remoteApplyLoadingTimerRef.current) {
+			clearTimeout(remoteApplyLoadingTimerRef.current);
+		}
+		remoteApplyLoadingTimerRef.current = setTimeout(() => {
+			setEditorSyncLoading(false);
+			remoteApplyLoadingTimerRef.current = null;
+		}, REMOTE_APPLY_LOADING_MS);
+	}, []);
 
 	useEffect(() => {
 		const subscription = DeviceEventEmitter.addListener(
@@ -189,6 +219,203 @@ export function WorkspaceScreen() {
 		renameModalOpen,
 	]);
 
+	useEffect(() => {
+		if (workspaceSource.kind !== 'remote' || !selectedDocument) {
+			activeRemoteDocumentRef.current = null;
+			pendingRemoteEditorStateRef.current = null;
+			Promise.resolve().then(() => {
+				setVisibleRemoteEditorState(null);
+				setEditorSyncLoading(false);
+			});
+			if (remoteApplyLoadingTimerRef.current) {
+				clearTimeout(remoteApplyLoadingTimerRef.current);
+				remoteApplyLoadingTimerRef.current = null;
+			}
+			publishEditorState({
+				column: null,
+				content: null,
+				contentHash: null,
+				cursorIndex: null,
+				editing: false,
+				filePath: null,
+				line: null,
+				title: null,
+			});
+			return;
+		}
+
+		activeRemoteDocumentRef.current = {
+			path: selectedDocument.path,
+			title: selectedDocument.title,
+		};
+		publishEditorState({
+			column: null,
+			content: null,
+			contentHash: hashEditorContent(selectedDocument.content),
+			cursorIndex: null,
+			editing: activeTab === 'editor',
+			filePath: selectedDocument.path,
+			line: null,
+			title: selectedDocument.title,
+		});
+	}, [
+		activeTab,
+		publishEditorState,
+		selectedDocument?.path,
+		selectedDocument?.title,
+		workspaceSource.kind,
+	]);
+
+	useEffect(() => {
+		if (workspaceSource.kind !== 'remote' || !selectedDocument) {
+			pendingRemoteEditorStateRef.current = null;
+			Promise.resolve().then(() => {
+				setVisibleRemoteEditorState(null);
+			});
+			return;
+		}
+
+		if (
+			!remoteEditorState ||
+			remoteEditorState.filePath !== selectedDocument.path
+		) {
+			pendingRemoteEditorStateRef.current = null;
+			Promise.resolve().then(() => {
+				setVisibleRemoteEditorState(null);
+			});
+			return;
+		}
+
+		const nextContent =
+			typeof remoteEditorState.content === 'string'
+				? remoteEditorState.content
+				: null;
+
+		if (nextContent === null) {
+			const pending = pendingRemoteEditorStateRef.current;
+			if (pending?.filePath === selectedDocument.path) {
+				pendingRemoteEditorStateRef.current = {
+					...pending,
+					column: remoteEditorState.column,
+					cursorIndex: remoteEditorState.cursorIndex,
+					deviceId: remoteEditorState.deviceId,
+					deviceName: remoteEditorState.deviceName,
+					editing: remoteEditorState.editing,
+					line: remoteEditorState.line,
+					source: remoteEditorState.source,
+					title: remoteEditorState.title ?? pending.title,
+					updatedAt: remoteEditorState.updatedAt,
+				};
+				return;
+			}
+
+			Promise.resolve().then(() => {
+				setVisibleRemoteEditorState(remoteEditorState);
+				if (remoteEditorState.cursorIndex !== null) {
+					showRemoteEditorSyncLoading();
+				}
+			});
+			return;
+		}
+
+		if (nextContent === selectedDocument.content) {
+			pendingRemoteEditorStateRef.current = null;
+			Promise.resolve().then(() => {
+				setVisibleRemoteEditorState(remoteEditorState);
+				if (remoteEditorState.cursorIndex !== null) {
+					showRemoteEditorSyncLoading();
+				}
+			});
+			return;
+		}
+
+		const hasRecentLocalEdit =
+			Date.now() - lastLocalEditAtRef.current < LOCAL_EDIT_PROTECTION_MS;
+		if (hasRecentLocalEdit) {
+			pendingRemoteEditorStateRef.current = remoteEditorState;
+			return;
+		}
+
+		pendingRemoteEditorStateRef.current = remoteEditorState;
+		updateSelectedDocumentContent(nextContent, {
+			skipRemoteWrite: true,
+		});
+	}, [
+		remoteEditorState,
+		selectedDocument?.content,
+		selectedDocument?.path,
+		showRemoteEditorSyncLoading,
+		updateSelectedDocumentContent,
+		workspaceSource.kind,
+	]);
+
+	useEffect(() => {
+		if (workspaceSource.kind !== 'remote' || !selectedDocument) return;
+
+		const pending = pendingRemoteEditorStateRef.current;
+		if (
+			!pending ||
+			pending.filePath !== selectedDocument.path ||
+			pending.content !== selectedDocument.content
+		) {
+			return;
+		}
+
+		pendingRemoteEditorStateRef.current = null;
+		Promise.resolve().then(() => {
+			setVisibleRemoteEditorState(pending);
+			if (pending.cursorIndex !== null) {
+				showRemoteEditorSyncLoading();
+			}
+		});
+	}, [
+		selectedDocument?.content,
+		selectedDocument?.path,
+		showRemoteEditorSyncLoading,
+		workspaceSource.kind,
+	]);
+
+	useEffect(() => {
+		return () => {
+			if (remoteApplyLoadingTimerRef.current) {
+				clearTimeout(remoteApplyLoadingTimerRef.current);
+			}
+		};
+	}, []);
+
+	const handleEditorStateChange = useCallback(
+		(state: {
+			column: number | null;
+			content: string | null;
+			cursorIndex: number | null;
+			line: number | null;
+			localEditedAt: number;
+		}) => {
+			const document = activeRemoteDocumentRef.current;
+			if (!document) return;
+
+			if (
+				typeof state.content === 'string' &&
+				state.content !== selectedDocument?.content
+			) {
+				lastLocalEditAtRef.current = state.localEditedAt;
+			}
+			publishEditorState({
+				column: state.column,
+				content: state.content,
+				contentHash: hashEditorContent(
+					state.content ?? selectedDocument?.content ?? ''
+				),
+				cursorIndex: state.cursorIndex,
+				editing: activeTab === 'editor',
+				filePath: document.path,
+				line: state.line,
+				title: document.title,
+			});
+		},
+		[activeTab, publishEditorState, selectedDocument?.content]
+	);
+
 	const handleSelectTreeNode = (documentId: string) => {
 		selectTreeNode(documentId);
 	};
@@ -218,6 +445,10 @@ export function WorkspaceScreen() {
 		void openRemoteWorkspace().then((opened) => {
 			if (opened) setActiveTab('fileTree');
 		});
+	};
+
+	const handleOpenSyncSettings = () => {
+		router.push('/settings/sync');
 	};
 
 	const handleOpenRename = () => {
@@ -378,6 +609,7 @@ export function WorkspaceScreen() {
 						onOpenDocument={handleOpenDocument}
 						onOpenFolder={handleOpenFolder}
 						onOpenRemote={handleOpenRemoteWorkspace}
+						onOpenSyncSettings={handleOpenSyncSettings}
 						onPasteFile={handlePasteFile}
 						onRenameFile={handleOpenRename}
 						onRefreshFileTree={handleRefreshFileTree}
@@ -415,7 +647,10 @@ export function WorkspaceScreen() {
 							title={selectedDocument.title}
 							value={selectedDocument.content}
 							onChange={updateSelectedDocumentContent}
+							onEditorStateChange={handleEditorStateChange}
 							onRequestCompletion={requestInlineCompletion}
+							remoteEditorState={visibleRemoteEditorState}
+							syncShowingLoader={editorSyncLoading}
 						/>
 					) : (
 						<EmptyEditorState
@@ -424,6 +659,7 @@ export function WorkspaceScreen() {
 							onCreateFile={handleOpenCreateFile}
 							onOpenFolder={handleOpenFolder}
 							onOpenRemote={handleOpenRemoteWorkspace}
+							onOpenSyncSettings={handleOpenSyncSettings}
 							topPadding={editorTopPadding}
 							workspaceSource={workspaceSource}
 						/>
@@ -432,7 +668,6 @@ export function WorkspaceScreen() {
 			</View>
 			<RenameFileModal
 				isOpen={renameModalOpen}
-				title={selectedDocument?.title ?? ''}
 				value={renameValue}
 				onChangeValue={setRenameValue}
 				onClose={() => {
@@ -493,6 +728,7 @@ function FileTreeView({
 	onOpenDocument,
 	onOpenFolder,
 	onOpenRemote,
+	onOpenSyncSettings,
 	onPasteFile,
 	onRenameFile,
 	onRefreshFileTree,
@@ -510,7 +746,7 @@ function FileTreeView({
 	bookmarkedDocumentIds: string[];
 	canCopyFile: boolean;
 	canCreateFile: boolean;
-	connectionState?: string;
+	connectionState: SyncConnectionState;
 	copyState: { documentId: string; title: string } | null;
 	documents: EditorDocument[];
 	expandedDirectoryPaths: Set<string>;
@@ -528,6 +764,7 @@ function FileTreeView({
 	onOpenDocument: (documentId: string) => void;
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
+	onOpenSyncSettings: () => void;
 	onPasteFile: () => void;
 	onRenameFile: () => void;
 	onRefreshFileTree: () => void;
@@ -557,7 +794,14 @@ function FileTreeView({
 					workspaceSource,
 					focusedTreeNode?.relativePath || selectedDocumentRelativePath
 				);
-	const showWorkspaceActions = workspaceSource.kind !== 'empty';
+	const showRemoteDisconnectedState =
+		workspaceSource.kind === 'remote' &&
+		workspaceMode === 'remote' &&
+		connectionState !== 'connected' &&
+		fileTree.length === 0 &&
+		documents.length === 0;
+	const showWorkspaceActions =
+		workspaceSource.kind !== 'empty' && !showRemoteDisconnectedState;
 	const bookmarkedNodes = useMemo(
 		() =>
 			bookmarkedDocumentIds
@@ -765,7 +1009,7 @@ function FileTreeView({
 					</View>
 				) : null}
 			</View>
-			{bookmarkedNodes.length > 0 ? (
+			{bookmarkedNodes.length > 0 && !showRemoteDisconnectedState ? (
 				<View className="px-2 pt-2">
 					<BookmarksSection
 						nodes={bookmarkedNodes}
@@ -775,49 +1019,53 @@ function FileTreeView({
 					/>
 				</View>
 			) : null}
-			<ScrollView
-				ref={scrollViewRef}
-				keyboardShouldPersistTaps="handled"
-				showsVerticalScrollIndicator={false}
-				className="flex-1 px-2 py-2"
-				contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
-			>
-				<View className="gap-1">
-					{fileTree.length > 0
-						? fileTree.map((node) => (
-								<FileTreeNodeRow
-									key={node.id}
-									node={node}
-									expandedDirectoryPaths={expandedDirectoryPaths}
-									onOpenDocument={onOpenDocument}
-									onSelectTreeNode={onSelectTreeNode}
-									onToggleDirectoryExpanded={onToggleDirectoryExpanded}
-									selectedTreeNodePath={selectedTreeNodePath}
-								/>
-							))
-						: documents.map((document) => (
-								<DocumentRow
-									key={document.id}
-									document={document}
-									onOpenDocument={onOpenDocument}
-									onSelectTreeNode={onSelectTreeNode}
-									selected={document.id === selectedTreeNodePath}
-								/>
-							))}
+			{showRemoteDisconnectedState ? (
+				<RemoteDisconnectedState onOpenSyncSettings={onOpenSyncSettings} />
+			) : (
+				<ScrollView
+					ref={scrollViewRef}
+					keyboardShouldPersistTaps="handled"
+					showsVerticalScrollIndicator={false}
+					className="flex-1 px-2 py-2"
+					contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+				>
+					<View className="gap-1">
+						{fileTree.length > 0
+							? fileTree.map((node) => (
+									<FileTreeNodeRow
+										key={node.id}
+										node={node}
+										expandedDirectoryPaths={expandedDirectoryPaths}
+										onOpenDocument={onOpenDocument}
+										onSelectTreeNode={onSelectTreeNode}
+										onToggleDirectoryExpanded={onToggleDirectoryExpanded}
+										selectedTreeNodePath={selectedTreeNodePath}
+									/>
+								))
+							: documents.map((document) => (
+									<DocumentRow
+										key={document.id}
+										document={document}
+										onOpenDocument={onOpenDocument}
+										onSelectTreeNode={onSelectTreeNode}
+										selected={document.id === selectedTreeNodePath}
+									/>
+								))}
 
-					{fileTree.length === 0 && documents.length === 0 ? (
-						<EmptyWorkspace
-							canCreateFile={canCreateFile}
-							connectionState={connectionState}
-							onCreateFile={onCreateFile}
-							onOpenFolder={onOpenFolder}
-							onOpenRemote={onOpenRemote}
-							palette={palette}
-							workspaceSource={workspaceSource}
-						/>
-					) : null}
-				</View>
-			</ScrollView>
+						{fileTree.length === 0 && documents.length === 0 ? (
+							<EmptyWorkspace
+								canCreateFile={canCreateFile}
+								connectionState={connectionState}
+								onCreateFile={onCreateFile}
+								onOpenFolder={onOpenFolder}
+								onOpenRemote={onOpenRemote}
+								palette={palette}
+								workspaceSource={workspaceSource}
+							/>
+						) : null}
+					</View>
+				</ScrollView>
+			)}
 		</View>
 	);
 }
@@ -1223,7 +1471,7 @@ function EmptyWorkspace({
 	workspaceSource,
 }: {
 	canCreateFile: boolean;
-	connectionState?: string;
+	connectionState: SyncConnectionState;
 	onCreateFile: () => void;
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
@@ -1233,6 +1481,25 @@ function EmptyWorkspace({
 	const { t } = useTranslation();
 	const canShowCreateAction =
 		workspaceSource.kind === 'directory' && canCreateFile;
+
+	if (workspaceSource.kind === 'remote') {
+		return (
+			<View className="px-3 py-6">
+				<View
+					className="gap-3 rounded-md border border-dashed border-border p-4"
+				>
+					<View className="gap-1">
+						<Text className="text-[15px] font-semibold text-foreground">
+							{t('fileTree.remoteEmpty.title')}
+						</Text>
+						<Text className="text-[13px] leading-5 text-muted-foreground">
+							{t('fileTree.remoteEmpty.detail')}
+						</Text>
+					</View>
+				</View>
+			</View>
+		);
+	}
 
 	return (
 		<View className="px-3 py-6">
@@ -1260,18 +1527,16 @@ function EmptyWorkspace({
 						onPress={onOpenFolder}
 						palette={palette}
 					/>
-					{workspaceSource.kind !== 'remote' ? (
-						<FileActionButton
-							icon={MonitorSmartphone}
-							label={
-								connectionState === 'connected'
-									? 'Open Remote'
-									: 'Connect Desktop'
-							}
-							onPress={onOpenRemote}
-							palette={palette}
-						/>
-					) : null}
+					<FileActionButton
+						icon={MonitorSmartphone}
+						label={
+							connectionState === 'connected'
+								? 'Open Remote'
+								: 'Connect Desktop'
+						}
+						onPress={onOpenRemote}
+						palette={palette}
+					/>
 				</View>
 			</View>
 		</View>
@@ -1284,7 +1549,7 @@ function EmptyFolderSelectionState({
 	onOpenRemote,
 	topPadding,
 }: {
-	connectionState?: string;
+	connectionState: SyncConnectionState;
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
 	topPadding: number;
@@ -1331,33 +1596,76 @@ function EmptyFolderSelectionState({
 	);
 }
 
+function RemoteDisconnectedState({
+	onOpenSyncSettings,
+}: {
+	onOpenSyncSettings: () => void;
+}) {
+	const { t } = useTranslation();
+	const palette = useAppThemePalette();
+
+	return (
+		<View className="flex-1 bg-background px-5 pt-8">
+			<View className="gap-4">
+				<View className="gap-2">
+					<Text className="text-[22px] font-semibold text-foreground">
+						{t('fileTree.remoteDisconnected.title')}
+					</Text>
+					<Text className="text-[14px] leading-5 text-muted-foreground">
+						{t('fileTree.remoteDisconnected.detail')}
+					</Text>
+				</View>
+				<View className="flex-row gap-2">
+					<FileActionButton
+						icon={Settings}
+						label={t('fileTree.remoteDisconnected.action')}
+						onPress={onOpenSyncSettings}
+						palette={palette}
+					/>
+				</View>
+			</View>
+		</View>
+	);
+}
+
 function EmptyEditorState({
 	canCreateFile,
 	connectionState,
 	onCreateFile,
 	onOpenFolder,
 	onOpenRemote,
+	onOpenSyncSettings,
 	topPadding,
 	workspaceSource,
 }: {
 	canCreateFile: boolean;
-	connectionState?: string;
+	connectionState: SyncConnectionState;
 	onCreateFile: () => void;
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
+	onOpenSyncSettings: () => void;
 	topPadding: number;
 	workspaceSource: EditorWorkspaceSource;
 }) {
 	const { t } = useTranslation();
 	const palette = useAppThemePalette();
+	const isRemoteWorkspace = workspaceSource.kind === 'remote';
 	const hasOpenFolder = workspaceSource.kind === 'directory';
 	const canShowCreateAction = hasOpenFolder && canCreateFile;
-	const title = hasOpenFolder
-		? t('workspace.noSelection.title')
-		: t('workspace.empty.title');
-	const detail = hasOpenFolder
-		? t('workspace.noSelection.detail')
-		: t('workspace.empty.detail');
+	const title = isRemoteWorkspace
+		? connectionState === 'connected'
+			? t('workspace.remoteNoSelection.title')
+			: t('fileTree.remoteDisconnected.title')
+		: hasOpenFolder
+			? t('workspace.noSelection.title')
+			: t('workspace.empty.title');
+	const detail = isRemoteWorkspace
+		? connectionState === 'connected'
+			? t('workspace.remoteNoSelection.detail')
+			: t('fileTree.remoteDisconnected.detail')
+		: hasOpenFolder
+			? t('workspace.noSelection.detail')
+			: t('workspace.empty.detail');
 
 	return (
 		<View
@@ -1375,7 +1683,23 @@ function EmptyEditorState({
 				</View>
 				<View className="gap-2">
 					<View className="flex-row gap-2">
-						{hasOpenFolder ? (
+						{isRemoteWorkspace ? (
+							connectionState === 'connected' ? (
+								<FileActionButton
+									icon={MonitorSmartphone}
+									label={t('fileTree.tabs.remote')}
+									onPress={onOpenRemote}
+									palette={palette}
+								/>
+							) : (
+								<FileActionButton
+									icon={Settings}
+									label={t('fileTree.remoteDisconnected.action')}
+									onPress={onOpenSyncSettings}
+									palette={palette}
+								/>
+							)
+						) : hasOpenFolder ? (
 							canShowCreateAction ? (
 								<FileActionButton
 									icon={FilePlus2}
@@ -1392,18 +1716,16 @@ function EmptyEditorState({
 									onPress={onOpenFolder}
 									palette={palette}
 								/>
-								{workspaceSource.kind !== 'remote' ? (
-									<FileActionButton
-										icon={MonitorSmartphone}
-										label={
-											connectionState === 'connected'
-												? 'Open Remote'
-												: 'Connect Desktop'
-										}
-										onPress={onOpenRemote}
-										palette={palette}
-									/>
-								) : null}
+								<FileActionButton
+									icon={MonitorSmartphone}
+									label={
+										connectionState === 'connected'
+											? 'Open Remote'
+											: 'Connect Desktop'
+									}
+									onPress={onOpenRemote}
+									palette={palette}
+								/>
 							</>
 						)}
 					</View>
@@ -1438,14 +1760,12 @@ function getWorkspaceDisplayPath(
 
 function RenameFileModal({
 	isOpen,
-	title,
 	value,
 	onChangeValue,
 	onClose,
 	onConfirm,
 }: {
 	isOpen: boolean;
-	title: string;
 	value: string;
 	onChangeValue: (nextValue: string) => void;
 	onClose: () => void;
@@ -1467,20 +1787,15 @@ function RenameFileModal({
 				/>
 			}
 		>
-			<View className="gap-3">
-				<Text className="text-[13px] leading-5 text-muted-foreground">
-					{title}
-				</Text>
-				<NativeModalTextInput
-					autoCapitalize="none"
-					autoCorrect={false}
-					autoFocus
-					value={value}
-					onChangeText={onChangeValue}
-					onSubmitEditing={onConfirm}
-					returnKeyType="done"
-				/>
-			</View>
+			<NativeModalTextInput
+				autoCapitalize="none"
+				autoCorrect={false}
+				autoFocus
+				value={value}
+				onChangeText={onChangeValue}
+				onSubmitEditing={onConfirm}
+				returnKeyType="done"
+			/>
 		</NativeModal>
 	);
 }

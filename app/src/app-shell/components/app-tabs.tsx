@@ -14,8 +14,8 @@ import {
 } from '@/features/settings';
 import CustomTabBar from './custom-tab-bar';
 
-const FADE_EXTRA_TOP = 28;
-const FADE_EXTRA_BOTTOM = 32;
+const FADE_EXTRA_TOP = 0;
+const FADE_EXTRA_BOTTOM = 18;
 
 export default function AppTabs() {
 	const { t } = useTranslation();

@@ -70,7 +70,10 @@ type EditorContextValue = {
 	selectedTreeNodePath: string | null;
 	toggleBookmark: () => Promise<void>;
 	toggleDirectoryExpanded: (directoryPath: string) => void;
-	updateSelectedDocumentContent: (content: string) => void;
+	updateSelectedDocumentContent: (
+		content: string,
+		options?: { skipRemoteWrite?: boolean }
+	) => void;
 	workspaceSource: EditorWorkspaceSource;
 	workspaceMode: 'local' | 'remote';
 	switchWorkspaceMode: (mode: 'local' | 'remote') => Promise<void>;
@@ -96,13 +99,8 @@ type PersistedWorkspace =
 	  };
 
 export function EditorProvider({ children }: { children: ReactNode }) {
-	const {
-		refreshRemoteFileTree,
-		readRemoteFile,
-		writeRemoteFile,
-		pairedHost,
-		connectionState,
-	} = useMadoraSync();
+	const { refreshRemoteFileTree, readRemoteFile, pairedHost, connectionState } =
+		useMadoraSync();
 	const aiSettings = useAiSettings();
 	const showErrorToast = useErrorToast();
 	const { saveMode } = useAppSettings();
@@ -135,6 +133,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	);
 	const [didHydrateWorkspace, setDidHydrateWorkspace] = useState(false);
 	const loadingDirectoryPathsRef = useRef(new Set<string>());
+	const rememberedExpandedDirectoryPathsRef = useRef<{
+		local: Set<string>;
+		remote: Set<string>;
+	}>({
+		local: new Set(),
+		remote: new Set(),
+	});
 
 	const selectedDocument = useMemo(
 		() =>
@@ -202,13 +207,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
-	const mapExplorerNodes = useCallback(
-		(nodes: ExplorerNode[]): EditorNode[] => {
-			return nodes.map((node) => ({
-				...node,
-				id: node.path,
-				children: mapExplorerNodes(node.children),
-			}));
+	const getRememberedExpandedDirectoryPaths = useCallback(
+		(mode: 'local' | 'remote', rootPath: string) => {
+			const remembered = rememberedExpandedDirectoryPathsRef.current[mode];
+			if (remembered.has(rootPath)) {
+				return new Set(remembered);
+			}
+
+			return new Set([rootPath]);
+		},
+		[]
+	);
+
+	const rememberExpandedDirectoryPaths = useCallback(
+		(mode: 'local' | 'remote', paths: Set<string>) => {
+			rememberedExpandedDirectoryPathsRef.current[mode] = new Set(paths);
 		},
 		[]
 	);
@@ -227,7 +240,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				let children: EditorNode[];
 				if (workspaceSource.kind === 'remote') {
 					const remoteNodes = await refreshRemoteFileTree(directoryPath);
-					children = mapExplorerNodes(remoteNodes);
+					children = mapRemoteExplorerNodes(remoteNodes);
 				} else {
 					const localResult = await readLocalDirectoryChildren(
 						directoryPath,
@@ -258,7 +271,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				loadingDirectoryPathsRef.current.delete(directoryPath);
 			}
 		},
-		[mapExplorerNodes, refreshRemoteFileTree, workspaceSource]
+		[refreshRemoteFileTree, workspaceSource]
 	);
 
 	/**
@@ -270,7 +283,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			let children: EditorNode[];
 			if (workspaceSource.kind === 'remote') {
 				const remoteNodes = await refreshRemoteFileTree(directoryPath);
-				children = mapExplorerNodes(remoteNodes);
+				children = mapRemoteExplorerNodes(remoteNodes);
 			} else {
 				const localResult = await readLocalDirectoryChildren(
 					directoryPath,
@@ -287,7 +300,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				}))
 			);
 		},
-		[mapExplorerNodes, refreshRemoteFileTree, workspaceSource]
+		[refreshRemoteFileTree, workspaceSource]
 	);
 
 	const persistDirectoryWorkspace = useCallback(
@@ -461,7 +474,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
 			setDocuments([]);
 			setFileTree([result.root]);
-			setExpandedDirectoryPaths(new Set([result.root.path]));
+			const expanded = getRememberedExpandedDirectoryPaths(
+				'local',
+				result.root.path
+			);
+			setExpandedDirectoryPaths(expanded);
+			rememberExpandedDirectoryPaths('local', expanded);
 			setSelectedDocumentId(null);
 			setSelectedTreeNodePath(result.root.path);
 			setWorkspaceSource({
@@ -485,9 +503,37 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(getErrorMessage(error, 'Failed to open local folder'));
 			return false;
 		}
-	}, [persistWorkspace]);
+	}, [
+		getRememberedExpandedDirectoryPaths,
+		persistWorkspace,
+		rememberExpandedDirectoryPaths,
+	]);
+
+	const showRemoteDisconnectedWorkspace = useCallback(() => {
+		const remoteName = pairedHost?.name ?? 'Remote Desktop';
+
+		setDocuments((current) => (current.length === 0 ? current : []));
+		setFileTree((current) => (current.length === 0 ? current : []));
+		setExpandedDirectoryPaths((current) =>
+			current.size === 0 ? current : new Set()
+		);
+		setSelectedDocumentId(null);
+		setSelectedTreeNodePath(null);
+		setWorkspaceSource({
+			kind: 'remote',
+			name: remoteName,
+			uri: remoteName,
+		});
+		setWorkspaceMode('remote');
+		setErrorMessage(null);
+	}, [pairedHost?.name]);
 
 	const openRemoteWorkspace = useCallback(async () => {
+		if (connectionState !== 'connected') {
+			showRemoteDisconnectedWorkspace();
+			return true;
+		}
+
 		try {
 			const tree = await refreshRemoteFileTree();
 			if (tree.length === 0) {
@@ -495,7 +541,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				return false;
 			}
 
-			const mappedTree = mapExplorerNodes(tree);
+			const mappedTree = mapRemoteExplorerNodes(tree);
 			const rootNode = mappedTree[0];
 			if (!rootNode) {
 				setErrorMessage('Remote workspace returned no root folder.');
@@ -504,7 +550,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
 			setDocuments([]);
 			setFileTree(mappedTree);
-			setExpandedDirectoryPaths(new Set([rootNode.path]));
+			setExpandedDirectoryPaths(
+				getRememberedExpandedDirectoryPaths('remote', rootNode.path)
+			);
 			setSelectedDocumentId(null);
 			setSelectedTreeNodePath(rootNode.path);
 			setWorkspaceSource({
@@ -518,6 +566,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			return true;
 		} catch (error) {
 			const message = getErrorMessage(error, 'Failed to open remote workspace');
+			if (isRemoteConnectionUnavailableMessage(message)) {
+				showRemoteDisconnectedWorkspace();
+				return true;
+			}
+
 			setErrorMessage(
 				message === 'No workspace open on the desktop'
 					? 'Open a workspace on the desktop before syncing remote files.'
@@ -525,10 +578,18 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			);
 			return false;
 		}
-	}, [pairedHost, refreshRemoteFileTree, mapExplorerNodes]);
+	}, [
+		connectionState,
+		getRememberedExpandedDirectoryPaths,
+		pairedHost,
+		refreshRemoteFileTree,
+		showRemoteDisconnectedWorkspace,
+	]);
 
 	const switchWorkspaceMode = useCallback(
 		async (mode: 'local' | 'remote') => {
+			rememberExpandedDirectoryPaths(workspaceMode, expandedDirectoryPaths);
+
 			if (mode === 'remote') {
 				const opened = await openRemoteWorkspace();
 				if (opened) {
@@ -576,7 +637,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 					};
 					setDocuments([]);
 					setFileTree([rootNode]);
-					setExpandedDirectoryPaths(new Set([rootUri]));
+					const expanded = getRememberedExpandedDirectoryPaths(
+						'local',
+						rootUri
+					);
+					setExpandedDirectoryPaths(expanded);
+					rememberExpandedDirectoryPaths('local', expanded);
 					setWorkspaceSource({
 						kind: 'directory',
 						name: result.root.name,
@@ -605,14 +671,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				}
 			}
 		},
-		[openRemoteWorkspace]
+		[
+			expandedDirectoryPaths,
+			getRememberedExpandedDirectoryPaths,
+			openRemoteWorkspace,
+			rememberExpandedDirectoryPaths,
+			workspaceMode,
+		]
 	);
-
-	useEffect(() => {
-		if (connectionState === 'disconnected' && workspaceMode === 'remote') {
-			void switchWorkspaceMode('local');
-		}
-	}, [connectionState, workspaceMode, switchWorkspaceMode]);
 
 	const selectDocument = useCallback(
 		async (documentId: string) => {
@@ -701,17 +767,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		[persistDirectoryWorkspace, persistWorkspace, workspaceSource]
 	);
 
-	const toggleDirectoryExpanded = useCallback((directoryPath: string) => {
-		setExpandedDirectoryPaths((current) => {
-			const next = new Set(current);
-			if (next.has(directoryPath)) {
-				next.delete(directoryPath);
-			} else {
-				next.add(directoryPath);
-			}
-			return next;
-		});
-	}, []);
+	const toggleDirectoryExpanded = useCallback(
+		(directoryPath: string) => {
+			setExpandedDirectoryPaths((current) => {
+				const next = new Set(current);
+				if (next.has(directoryPath)) {
+					next.delete(directoryPath);
+				} else {
+					next.add(directoryPath);
+				}
+				rememberExpandedDirectoryPaths(workspaceMode, next);
+				return next;
+			});
+		},
+		[rememberExpandedDirectoryPaths, workspaceMode]
+	);
 
 	useEffect(() => {
 		if (
@@ -738,12 +808,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	]);
 
 	useEffect(() => {
-		if (!didHydrateWorkspace) return;
+		if (!didHydrateWorkspace || workspaceSource.kind !== 'directory') return;
 		void SecureStore.setItemAsync(
 			EXPANDED_DIRECTORIES_KEY,
 			JSON.stringify([...expandedDirectoryPaths])
 		);
-	}, [didHydrateWorkspace, expandedDirectoryPaths]);
+	}, [didHydrateWorkspace, expandedDirectoryPaths, workspaceSource.kind]);
 
 	useEffect(() => {
 		if (!errorMessage) return;
@@ -757,7 +827,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	}, [errorMessage, showErrorToast]);
 
 	const updateSelectedDocumentContent = useCallback(
-		(content: string) => {
+		(content: string, options?: { skipRemoteWrite?: boolean }) => {
 			if (!selectedDocumentId) return;
 
 			const now = Date.now();
@@ -769,20 +839,20 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				)
 			);
 
-			if (saveMode === 'auto') {
+			if (
+				saveMode === 'auto' &&
+				!options?.skipRemoteWrite &&
+				workspaceSource.kind !== 'remote'
+			) {
 				try {
-					if (workspaceSource.kind === 'remote') {
-						void writeRemoteFile(selectedDocumentId, content);
-					} else {
-						void writeLocalFile(selectedDocumentId, content);
-					}
+					void writeLocalFile(selectedDocumentId, content);
 					setErrorMessage(null);
 				} catch (error) {
 					setErrorMessage(getErrorMessage(error, 'Failed to save file'));
 				}
 			}
 		},
-		[saveMode, selectedDocumentId, workspaceSource, writeRemoteFile]
+		[saveMode, selectedDocumentId, workspaceSource.kind]
 	);
 
 	const renameSelectedFile = useCallback(
@@ -945,16 +1015,40 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				return true;
 			}
 
+			if (workspaceSource.kind === 'remote') {
+				const tree = await refreshRemoteFileTree();
+				const mappedTree = mapRemoteExplorerNodes(tree);
+				const rootNode = mappedTree[0];
+				if (!rootNode) {
+					setFileTree([]);
+					setExpandedDirectoryPaths(new Set());
+					setSelectedDocumentId(null);
+					setSelectedTreeNodePath(null);
+					setErrorMessage(null);
+					return true;
+				}
+
+				setDocuments([]);
+				setFileTree(mappedTree);
+				setExpandedDirectoryPaths(
+					getRememberedExpandedDirectoryPaths('remote', rootNode.path)
+				);
+				setSelectedDocumentId(null);
+				setSelectedTreeNodePath(rootNode.path);
+				setWorkspaceSource({
+					kind: 'remote',
+					name: workspaceSource.name,
+					uri: rootNode.path,
+				});
+				setWorkspaceMode('remote');
+				setErrorMessage(null);
+				return true;
+			}
+
 			if (selectedDocumentId) {
 				try {
-					let updatedContent: string | null = null;
-					if (workspaceSource.kind === 'remote') {
-						const remoteFile = await readRemoteFile(selectedDocumentId);
-						updatedContent = remoteFile.content;
-					} else {
-						const localDoc = await readLocalFile(selectedDocumentId);
-						updatedContent = localDoc.content;
-					}
+					const localDoc = await readLocalFile(selectedDocumentId);
+					const updatedContent = localDoc.content;
 					if (updatedContent !== null) {
 						setDocuments((current) =>
 							current.map((doc) =>
@@ -964,28 +1058,23 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 							)
 						);
 					}
-				} catch (e) {
+				} catch {
 					// silently ignore if we can't refresh the document content
 				}
 			}
-
-			const workspaceRootUri =
-				workspaceSource.kind === 'remote'
-					? (fileTree[0]?.path ?? '')
-					: workspaceSource.uri;
 
 			const targetDirectoryUri =
 				focusedTreeNode?.kind === 'directory'
 					? focusedTreeNode.path
 					: focusedTreeNode?.kind === 'file'
 						? (getParentDirectoryUriForFile(fileTree, focusedTreeNode.path) ??
-							workspaceRootUri)
+							workspaceSource.uri)
 						: selectedDocumentId
 							? (getParentDirectoryUriForFile(fileTree, selectedDocumentId) ??
-								workspaceRootUri)
-							: workspaceRootUri;
+								workspaceSource.uri)
+							: workspaceSource.uri;
 
-			await refreshDirectoryInTree(targetDirectoryUri, workspaceRootUri);
+			await refreshDirectoryInTree(targetDirectoryUri, workspaceSource.uri);
 			setExpandedDirectoryPaths((current) => {
 				if (current.has(targetDirectoryUri)) return current;
 				const next = new Set(current);
@@ -995,15 +1084,26 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(null);
 			return true;
 		} catch (error) {
-			setErrorMessage(getErrorMessage(error, 'Failed to refresh files'));
+			const message = getErrorMessage(error, 'Failed to refresh files');
+			if (
+				workspaceSource.kind === 'remote' &&
+				isRemoteConnectionUnavailableMessage(message)
+			) {
+				showRemoteDisconnectedWorkspace();
+				return true;
+			}
+			setErrorMessage(message);
 			return false;
 		}
 	}, [
 		fileTree,
 		focusedTreeNode,
+		getRememberedExpandedDirectoryPaths,
 		persistWorkspace,
+		refreshRemoteFileTree,
 		refreshDirectoryInTree,
 		selectedDocumentId,
+		showRemoteDisconnectedWorkspace,
 		workspaceSource,
 	]);
 
@@ -1250,6 +1350,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setDocuments([]);
 				setFileTree(restoredTree);
 				setExpandedDirectoryPaths(expanded);
+				rememberedExpandedDirectoryPathsRef.current.local = new Set(expanded);
 				setWorkspaceSource({
 					kind: 'directory',
 					name: result.root.name,
@@ -1355,6 +1456,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			toggleDirectoryExpanded,
 			updateSelectedDocumentContent,
 			workspaceSource,
+			workspaceMode,
+			switchWorkspaceMode,
 		]
 	);
 
@@ -1389,6 +1492,23 @@ function isPickerCancel(error: unknown) {
 		message.includes('cancelled') ||
 		message.includes('user did not select')
 	);
+}
+
+function isRemoteConnectionUnavailableMessage(message: string) {
+	const normalized = message.toLowerCase();
+	return (
+		normalized.includes('not connected') ||
+		normalized.includes('connection closed') ||
+		normalized.includes('connection reset')
+	);
+}
+
+function mapRemoteExplorerNodes(nodes: ExplorerNode[]): EditorNode[] {
+	return nodes.map((node) => ({
+		...node,
+		id: node.path,
+		children: mapRemoteExplorerNodes(node.children),
+	}));
 }
 
 function findNodeByPath(

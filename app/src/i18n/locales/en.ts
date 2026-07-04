@@ -276,6 +276,16 @@ const en = {
 			detail: 'Open a local folder to browse and create files here.',
 			title: 'No folder selected',
 		},
+		remoteDisconnected: {
+			action: 'Open sync settings',
+			detail:
+				'Remote sync is disconnected. Reconnect or pair with the desktop app to browse remote files again.',
+			title: 'Remote sync disconnected',
+		},
+		remoteEmpty: {
+			detail: 'The desktop workspace has no files to show right now.',
+			title: 'Remote folder is empty',
+		},
 		feedback: {
 			copyCanceledDetail: 'The copied file was cleared.',
 			copyCanceledTitle: 'Copy canceled',
@@ -301,6 +311,10 @@ const en = {
 		noSelection: {
 			detail: 'Go to the Files tab to pick or create a file.',
 			title: 'No file selected',
+		},
+		remoteNoSelection: {
+			detail: 'Go to the remote folder and select a file.',
+			title: 'No remote file selected',
 		},
 	},
 	settingsHome: {
@@ -437,12 +451,14 @@ const en = {
 			title: 'Connection',
 		},
 		emptyTrusted: 'No paired devices yet.',
-		localStore: {
-			detail: 'SQLite-backed pairing state and trusted device records.',
-			title: 'Sync store',
-		},
-		metrics: {
-			trusted: 'Trusted',
+		localDevice: {
+			defaultName: 'Madora Phone',
+			detail:
+				'This name appears in desktop sync status and remote editing hints.',
+			edit: 'Edit name',
+			placeholder: 'For example, Madora Phone',
+			saving: 'Saving',
+			title: 'This app sync name',
 		},
 		pairing: {
 			detail: 'Scan the desktop QR to pair over the local network.',

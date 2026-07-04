@@ -75,6 +75,32 @@ export interface MadoraSyncPairDeviceResult {
 	pairedAt: string;
 }
 
+export interface MadoraSyncEditorState {
+	deviceId: string;
+	deviceName: string;
+	source: 'app' | 'desktop' | string;
+	filePath: string | null;
+	title: string | null;
+	content: string | null;
+	contentHash: string | null;
+	line: number | null;
+	column: number | null;
+	cursorIndex: number | null;
+	editing: boolean;
+	updatedAt: number;
+}
+
+export interface MadoraSyncEditorStateInput {
+	filePath?: string | null;
+	title?: string | null;
+	content?: string | null;
+	contentHash?: string | null;
+	line?: number | null;
+	column?: number | null;
+	cursorIndex?: number | null;
+	editing: boolean;
+}
+
 export async function madoraSyncGetConfig(): Promise<MadoraSyncConfig> {
 	return invoke<MadoraSyncConfig>('madora_sync_get_config');
 }
@@ -115,4 +141,10 @@ export async function madoraSyncPairDevice(
 
 export async function madoraSyncRestartServer(): Promise<boolean> {
 	return invoke<boolean>('madora_sync_restart_server');
+}
+
+export async function madoraSyncPublishEditorState(
+	state: MadoraSyncEditorStateInput
+): Promise<boolean> {
+	return invoke<boolean>('madora_sync_publish_editor_state', { state });
 }

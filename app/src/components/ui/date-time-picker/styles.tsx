@@ -5,7 +5,7 @@ export const dateTimePickerStyle = tva({
 });
 
 export const dateTimePickerTriggerStyle = tva({
-	base: 'border border-border rounded flex-row items-center overflow-hidden data-[hover=true]:border-primary/80 data-[focus=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:data-[hover=true]:border-border/80',
+	base: 'border border-border rounded-md bg-secondary flex-row items-center overflow-hidden data-[hover=true]:border-primary/80 data-[focus=true]:border-primary/80 data-[disabled=true]:opacity-40 data-[disabled=true]:data-[hover=true]:border-border/80',
 	variants: {
 		size: {
 			xl: 'min-h-12',
@@ -25,7 +25,7 @@ export const dateTimePickerTriggerStyle = tva({
 });
 
 export const dateTimePickerInputStyle = tva({
-	base: 'px-3 placeholder:text-muted-foreground web:w-full h-full text-foreground/90 pointer-events-none web:outline-none ios:leading-[0px] py-0',
+	base: 'px-3 placeholder:text-muted-foreground web:w-full h-full text-foreground pointer-events-none web:outline-none ios:leading-[0px] py-0',
 	parentVariants: {
 		size: {
 			xl: 'text-xl',

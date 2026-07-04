@@ -464,7 +464,7 @@ const DateTimePickerTrigger = React.forwardRef<
 	React.ComponentRef<typeof UIDateTimePicker.Trigger>,
 	IDateTimePickerTriggerProps
 >(function DateTimePickerTrigger(
-	{ className, size = 'md', variant = 'outline', ...props },
+	{ className, size = 'lg', variant = 'outline', ...props },
 	ref
 ) {
 	const { disabled, setIsOpen } = useDateTimePicker();

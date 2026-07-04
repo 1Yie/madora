@@ -207,6 +207,7 @@ pub fn run() {
             madora_sync::madora_sync_remove_paired_device,
             madora_sync::madora_sync_server_status,
             madora_sync::madora_sync_restart_server,
+            madora_sync::madora_sync_publish_editor_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

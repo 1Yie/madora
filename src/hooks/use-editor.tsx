@@ -37,16 +37,26 @@ import { useAiSettings } from '@/context/ai-settings-provider';
 import { useTheme } from '@/context/theme-provider';
 import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { showErrorToast } from '@/components/ui/toast';
+import { hashEditorContent } from '@/lib/editor-content-hash';
 
 type UseEditorOptions = {
 	fontSize?: number;
 	onChange?: (value: string) => void;
-	onCursorChange?: (line: number, col: number) => void;
+	onCursorChange?: (line: number, col: number, cursorIndex: number) => void;
 	onSave?: () => void;
+	remoteCursor?: RemoteCursorState | null;
+	syncLoading?: boolean;
 	title?: string;
 
 	value: string;
 	viewRef?: MutableRefObject<EditorView | null>;
+};
+
+export type RemoteCursorState = {
+	content?: string | null;
+	contentHash?: string | null;
+	cursorIndex: number | null;
+	label?: string | null;
 };
 
 type CompletionStatusTone = 'muted' | 'loading' | 'success' | 'error';
@@ -66,6 +76,13 @@ type CompletionPreviewState = {
 	streaming: boolean;
 	pos: number;
 	text: string;
+};
+
+type RemoteCursorDecorationState = {
+	content: string | null;
+	contentHash: string | null;
+	label: string | null;
+	pos: number;
 };
 
 type CompletionSnapshot = {
@@ -430,6 +447,65 @@ function createEditorTheme(dark: boolean, fontSize: number = 14) {
 				verticalAlign: 'top',
 				whiteSpace: 'pre-wrap',
 			},
+			'.cm-madora-remote-cursor': {
+				borderLeft:
+					'2px solid color-mix(in oklab, var(--color-primary) 72%, #22c55e)',
+				pointerEvents: 'none',
+				position: 'absolute',
+				transform: 'translateX(-1px)',
+				zIndex: '3',
+			},
+			'.cm-madora-remote-cursor-label': {
+				background: 'color-mix(in oklab, var(--color-primary) 78%, #22c55e)',
+				borderRadius: '3px',
+				color: 'white',
+				fontFamily:
+					'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+				fontSize: '10px',
+				fontWeight: '600',
+				left: '-1px',
+				lineHeight: '14px',
+				maxWidth: '120px',
+				overflow: 'hidden',
+				padding: '0 4px',
+				position: 'absolute',
+				textOverflow: 'ellipsis',
+				top: '-15px',
+				whiteSpace: 'nowrap',
+			},
+			'.cm-madora-sync-loader': {
+				alignItems: 'center',
+				display: 'inline-flex',
+				gap: '3px',
+				pointerEvents: 'none',
+				position: 'absolute',
+				zIndex: '3',
+			},
+			'.cm-madora-sync-loader i': {
+				animation: 'madora-sync-pulse 0.9s ease-in-out infinite',
+				background: 'color-mix(in oklab, var(--color-primary) 72%, #22c55e)',
+				borderRadius: '999px',
+				display: 'inline-block',
+				height: '4px',
+				opacity: '0.35',
+				width: '4px',
+			},
+			'.cm-madora-sync-loader i:nth-child(2)': {
+				animationDelay: '0.12s',
+			},
+			'.cm-madora-sync-loader i:nth-child(3)': {
+				animationDelay: '0.24s',
+			},
+			'@keyframes madora-sync-pulse': {
+				'0%, 80%, 100%': {
+					opacity: '0.3',
+					transform: 'translateY(0)',
+				},
+				'40%': {
+					opacity: '1',
+					transform: 'translateY(-2px)',
+				},
+			},
 			'.cm-tooltip': {
 				background: 'transparent !important',
 				border: 'none',
@@ -615,6 +691,119 @@ function renderCompletionPreview(
 	});
 }
 
+function ensureRemoteCursorOverlay(view: EditorView): HTMLElement {
+	let cursor = view.dom.querySelector<HTMLElement>('.cm-madora-remote-cursor');
+	if (cursor) return cursor;
+
+	cursor = document.createElement('div');
+	cursor.className = 'cm-madora-remote-cursor';
+	cursor.setAttribute('aria-hidden', 'true');
+	const label = document.createElement('div');
+	label.className = 'cm-madora-remote-cursor-label';
+	cursor.appendChild(label);
+	view.dom.appendChild(cursor);
+	return cursor;
+}
+
+function updateRemoteCursorOverlay(
+	view: EditorView,
+	remoteCursor: RemoteCursorDecorationState | null
+) {
+	const cursor = ensureRemoteCursorOverlay(view);
+	if (
+		!remoteCursor ||
+		(remoteCursor.content !== null &&
+			view.state.doc.toString() !== remoteCursor.content) ||
+		(remoteCursor.contentHash !== null &&
+			hashEditorContent(view.state.doc.toString()) !==
+				remoteCursor.contentHash) ||
+		remoteCursor.pos < 0 ||
+		remoteCursor.pos > view.state.doc.length
+	) {
+		cursor.style.display = 'none';
+		return;
+	}
+
+	const coords = view.coordsAtPos(remoteCursor.pos);
+	if (!coords) {
+		cursor.style.display = 'none';
+		return;
+	}
+
+	const editorRect = view.dom.getBoundingClientRect();
+	const label = cursor.querySelector<HTMLElement>(
+		'.cm-madora-remote-cursor-label'
+	);
+	const x = coords.left - editorRect.left;
+	const y = coords.top - editorRect.top;
+
+	cursor.style.display = 'block';
+	cursor.style.left = `${Math.round(x)}px`;
+	cursor.style.top = `${Math.round(y)}px`;
+	cursor.style.height = `${Math.max(14, coords.bottom - coords.top)}px`;
+
+	if (!label) return;
+	label.textContent = remoteCursor.label ?? '';
+	label.style.display = remoteCursor.label ? 'block' : 'none';
+	if (!remoteCursor.label) return;
+
+	requestAnimationFrame(() => {
+		if (cursor.style.display === 'none') return;
+		const labelWidth = label.offsetWidth;
+		const minLeft = 2 - x;
+		const maxLeft = editorRect.width - x - labelWidth - 2;
+		const nextLeft = Math.max(minLeft, Math.min(-1, maxLeft));
+		label.style.left = `${Math.round(nextLeft)}px`;
+	});
+}
+
+function ensureSyncLoaderOverlay(view: EditorView): HTMLElement {
+	let loader = view.dom.querySelector<HTMLElement>('.cm-madora-sync-loader');
+	if (loader) return loader;
+
+	loader = document.createElement('div');
+	loader.className = 'cm-madora-sync-loader';
+	loader.setAttribute('aria-hidden', 'true');
+	loader.appendChild(document.createElement('i'));
+	loader.appendChild(document.createElement('i'));
+	loader.appendChild(document.createElement('i'));
+	view.dom.appendChild(loader);
+	return loader;
+}
+
+function updateSyncLoaderOverlay(
+	view: EditorView,
+	visible: boolean,
+	remoteCursor: RemoteCursorDecorationState | null
+) {
+	const loader = ensureSyncLoaderOverlay(view);
+	if (
+		!visible ||
+		!remoteCursor ||
+		(remoteCursor.content !== null &&
+			view.state.doc.toString() !== remoteCursor.content) ||
+		(remoteCursor.contentHash !== null &&
+			hashEditorContent(view.state.doc.toString()) !==
+				remoteCursor.contentHash) ||
+		remoteCursor.pos < 0 ||
+		remoteCursor.pos > view.state.doc.length
+	) {
+		loader.style.display = 'none';
+		return;
+	}
+
+	const coords = view.coordsAtPos(remoteCursor.pos);
+	if (!coords) {
+		loader.style.display = 'none';
+		return;
+	}
+
+	const editorRect = view.dom.getBoundingClientRect();
+	loader.style.display = 'inline-flex';
+	loader.style.left = `${Math.round(coords.left - editorRect.left + 6)}px`;
+	loader.style.top = `${Math.round(coords.bottom - editorRect.top - 6)}px`;
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 function CompletionTooltipContent() {
 	return (
@@ -654,6 +843,8 @@ export function useEditor({
 	onChange,
 	onCursorChange,
 	onSave,
+	remoteCursor,
+	syncLoading,
 	title,
 
 	value,
@@ -671,6 +862,10 @@ export function useEditor({
 	const compositionActiveRef = useRef(false);
 	const completionCacheRef = useRef<CompletionCacheEntry | null>(null);
 	const streamingRafPendingRef = useRef(false);
+	const remoteCursorOverlayRef = useRef<RemoteCursorDecorationState | null>(
+		null
+	);
+	const syncLoadingRef = useRef(false);
 	const aiSettingsRef = useRef({
 		apiUrl: '',
 		customProtocol: 'openai' as 'anthropic' | 'google' | 'openai',
@@ -709,9 +904,11 @@ export function useEditor({
 		});
 	});
 
-	const handleCursorChange = useEffectEvent((line: number, col: number) => {
-		onCursorChange?.(line, col);
-	});
+	const handleCursorChange = useEffectEvent(
+		(line: number, col: number, cursorIndex: number) => {
+			onCursorChange?.(line, col, cursorIndex);
+		}
+	);
 
 	const syncTooltip = useEffectEvent(() => {
 		const view = viewRef.current;
@@ -1337,7 +1534,7 @@ export function useEditor({
 							abortAllCompletion();
 							const pos = update.view.state.selection.main.head;
 							const line = update.view.state.doc.lineAt(pos);
-							handleCursorChange(line.number, pos - line.from + 1);
+							handleCursorChange(line.number, pos - line.from + 1, pos);
 							return;
 						}
 
@@ -1376,7 +1573,7 @@ export function useEditor({
 									);
 									const pos = update.view.state.selection.main.head;
 									const line = update.view.state.doc.lineAt(pos);
-									handleCursorChange(line.number, pos - line.from + 1);
+									handleCursorChange(line.number, pos - line.from + 1, pos);
 								}
 								if (update.docChanged && !hasDeletionInput) {
 									scheduleCompletionRequest(update.view);
@@ -1390,6 +1587,15 @@ export function useEditor({
 							update.focusChanged ||
 							update.viewportChanged
 						) {
+							updateRemoteCursorOverlay(
+								update.view,
+								remoteCursorOverlayRef.current
+							);
+							updateSyncLoaderOverlay(
+								update.view,
+								syncLoadingRef.current,
+								remoteCursorOverlayRef.current
+							);
 							renderCompletionTooltip(
 								update.view,
 								completionStatusRef.current,
@@ -1414,7 +1620,13 @@ export function useEditor({
 		// Initialize cursor position
 		const initPos = view.state.selection.main.head;
 		const initLine = view.state.doc.lineAt(initPos);
-		handleCursorChange(initLine.number, initPos - initLine.from + 1);
+		handleCursorChange(initLine.number, initPos - initLine.from + 1, initPos);
+		updateRemoteCursorOverlay(view, remoteCursorOverlayRef.current);
+		updateSyncLoaderOverlay(
+			view,
+			syncLoadingRef.current,
+			remoteCursorOverlayRef.current
+		);
 
 		return () => {
 			requestSequenceRef.current += 1;
@@ -1470,6 +1682,44 @@ export function useEditor({
 			effects: externalSyncEffect.of(true),
 		});
 	}, [value]);
+
+	useEffect(() => {
+		const view = viewRef.current;
+		if (!view) return;
+
+		const cursorIndex = remoteCursor?.cursorIndex ?? null;
+		remoteCursorOverlayRef.current =
+			cursorIndex === null
+				? null
+				: {
+						content: remoteCursor?.content ?? null,
+						contentHash: remoteCursor?.contentHash ?? null,
+						label: remoteCursor?.label ?? null,
+						pos: cursorIndex,
+					};
+		updateRemoteCursorOverlay(view, remoteCursorOverlayRef.current);
+		updateSyncLoaderOverlay(
+			view,
+			syncLoadingRef.current,
+			remoteCursorOverlayRef.current
+		);
+	}, [
+		remoteCursor?.content,
+		remoteCursor?.contentHash,
+		remoteCursor?.cursorIndex,
+		remoteCursor?.label,
+	]);
+
+	useEffect(() => {
+		const view = viewRef.current;
+		if (!view) return;
+		syncLoadingRef.current = Boolean(syncLoading);
+		updateSyncLoaderOverlay(
+			view,
+			syncLoadingRef.current,
+			remoteCursorOverlayRef.current
+		);
+	}, [syncLoading]);
 
 	return { editorRef, viewRef };
 }

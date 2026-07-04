@@ -102,13 +102,13 @@ const DateTimePicker = React.forwardRef<
 				className="w-full"
 			>
 				<View
-					className="flex-row items-center border border-border rounded-md px-3
-						py-2 bg-background"
+					className="min-h-11 flex-row items-center rounded-md border
+						border-border bg-secondary px-3"
 				>
 					<TextInput
 						value={displayValue || placeholder}
 						editable={false}
-						className="flex-1 text-foreground text-sm"
+						className="flex-1 text-[14px] text-foreground"
 						pointerEvents="none"
 					/>
 				</View>

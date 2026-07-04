@@ -271,6 +271,17 @@ const ja = {
 				'ローカルフォルダーを開いて、ここでファイルを閲覧・作成できます。',
 			title: 'フォルダーが選択されていません',
 		},
+		remoteDisconnected: {
+			action: '同期設定を開く',
+			detail:
+				'リモート同期が切断されています。デスクトップアプリに再接続または再ペアリングすると、リモートファイルを再び表示できます。',
+			title: 'リモート同期が切断されました',
+		},
+		remoteEmpty: {
+			detail:
+				'デスクトップのワークスペースには現在表示できるファイルがありません。',
+			title: 'リモートフォルダーは空です',
+		},
 		feedback: {
 			copyCanceledDetail: 'コピー中のファイルをクリアしました。',
 			copyCanceledTitle: 'コピーをキャンセルしました',
@@ -296,6 +307,10 @@ const ja = {
 		noSelection: {
 			detail: 'ファイルタブでファイルを選択または作成してください。',
 			title: 'ファイルが選択されていません',
+		},
+		remoteNoSelection: {
+			detail: 'リモートフォルダーでファイルを選択してください。',
+			title: 'リモートファイルが選択されていません',
 		},
 	},
 	settingsHome: {
@@ -429,12 +444,14 @@ const ja = {
 			title: '接続',
 		},
 		emptyTrusted: 'まだペアリング済みのデバイスはありません。',
-		localStore: {
-			detail: 'SQLite でペアリング状態と信頼済みデバイスの記録を保存します。',
-			title: '同期ストア',
-		},
-		metrics: {
-			trusted: '信頼済み',
+		localDevice: {
+			defaultName: 'Madora Phone',
+			detail:
+				'この名前はデスクトップ側の同期状態とリモート編集中の表示に使われます。',
+			edit: '名前を変更',
+			placeholder: '例: Madora Phone',
+			saving: '保存中',
+			title: 'このアプリの同期名',
 		},
 		pairing: {
 			detail:

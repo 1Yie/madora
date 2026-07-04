@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import {
 	CheckCircle2,
+	Pencil,
 	RefreshCw,
 	Trash2,
 	Unplug,
@@ -18,6 +19,11 @@ import {
 	useResolvedThemePreference,
 } from '@/features/settings';
 import { BackButton } from '@/shared/components';
+import {
+	NativeModal,
+	NativeModalActions,
+	NativeModalTextInput,
+} from '@/components/ui/native-modal';
 import { QrScanner } from '../components/qr-scanner';
 import { useMadoraSync } from '../providers/madora-sync-provider';
 
@@ -48,20 +54,48 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 		disconnect,
 		errorMessage,
 		lastSyncAt,
+		localDeviceName,
 		pairedHost,
 		pairFromQrPayload,
 		reconnect,
 		refreshRemoteFileTree,
-		storageStats,
+		setLocalDeviceName,
 		trustedDevices,
 		removeTrustedDevice,
 	} = useMadoraSync();
 	const [scannerVisible, setScannerVisible] = useState(false);
+	const [deviceNameDraft, setDeviceNameDraft] = useState<string | null>(null);
+	const [savingDeviceName, setSavingDeviceName] = useState(false);
+	const deviceNameModalOpen = deviceNameDraft !== null;
 	const isConnected = connectionState === 'connected';
+	const visibleDeviceName = deviceNameDraft ?? localDeviceName;
+	const trimmedDeviceName = visibleDeviceName.trim();
+	const canSaveDeviceName =
+		trimmedDeviceName.length > 0 && trimmedDeviceName !== localDeviceName;
 
 	const handleScanned = async (raw: string) => {
 		setScannerVisible(false);
 		await pairFromQrPayload(raw);
+	};
+
+	const openDeviceNameModal = () => {
+		setDeviceNameDraft(localDeviceName);
+	};
+
+	const closeDeviceNameModal = () => {
+		if (savingDeviceName) return;
+		setDeviceNameDraft(null);
+	};
+
+	const handleSaveDeviceName = async () => {
+		if (!canSaveDeviceName || savingDeviceName) return;
+		setSavingDeviceName(true);
+		try {
+			await setLocalDeviceName(trimmedDeviceName);
+			setDeviceNameDraft(null);
+		} finally {
+			setSavingDeviceName(false);
+		}
 	};
 
 	return (
@@ -91,6 +125,34 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 				<Text className="text-[24px] font-semibold text-foreground">
 					{t('syncSettings.title')}
 				</Text>
+
+				<SettingsCard title={t('syncSettings.localDevice.title')}>
+					<View className="gap-3">
+						<View
+							className="rounded-md px-3 py-3"
+							style={{
+								backgroundColor: palette.surfaceMuted,
+								borderColor: palette.border,
+								borderWidth: 1,
+							}}
+						>
+							<Text className="text-[14px] font-semibold text-foreground">
+								{localDeviceName}
+							</Text>
+						</View>
+						<ActionButton
+							icon={
+								<Pencil
+									color={palette.accentForeground}
+									size={15}
+									strokeWidth={2.1}
+								/>
+							}
+							label={t('syncSettings.localDevice.edit')}
+							onPress={openDeviceNameModal}
+						/>
+					</View>
+				</SettingsCard>
 
 				<SettingsCard title={t('syncSettings.pairing.title')}>
 					<View className="gap-3">
@@ -268,27 +330,6 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 						)}
 					</View>
 				</SettingsCard>
-
-				<SettingsCard title={t('syncSettings.localStore.title')}>
-					<View
-						className="rounded-md px-3 py-3"
-						style={{
-							backgroundColor: palette.surfaceMuted,
-							borderColor: palette.border,
-							borderWidth: 1,
-						}}
-					>
-						<Text
-							className="text-[12px] font-semibold uppercase
-								text-muted-foreground"
-						>
-							{t('syncSettings.metrics.trusted')}
-						</Text>
-						<Text className="mt-1 text-[24px] font-semibold text-foreground">
-							{storageStats.trustedDevices}
-						</Text>
-					</View>
-				</SettingsCard>
 			</ScrollView>
 
 			<QrScanner
@@ -296,6 +337,43 @@ export function SyncSettingsScreen({ onBack }: { onBack?: () => void }) {
 				onScanned={handleScanned}
 				visible={scannerVisible}
 			/>
+			<NativeModal
+				isOpen={deviceNameModalOpen}
+				title={t('syncSettings.localDevice.title')}
+				onClose={closeDeviceNameModal}
+				footer={
+					<NativeModalActions
+						cancelLabel={t('common.actions.cancel')}
+						confirmLabel={t(
+							savingDeviceName
+								? 'syncSettings.localDevice.saving'
+								: 'common.actions.save'
+						)}
+						onCancel={closeDeviceNameModal}
+						onConfirm={
+							canSaveDeviceName
+								? () => void handleSaveDeviceName()
+								: closeDeviceNameModal
+						}
+					/>
+				}
+			>
+				<View className="gap-3">
+					<Text className="text-[13px] leading-5 text-muted-foreground">
+						{t('syncSettings.localDevice.detail')}
+					</Text>
+					<NativeModalTextInput
+						autoCapitalize="words"
+						autoCorrect={false}
+						autoFocus
+						onChangeText={setDeviceNameDraft}
+						onSubmitEditing={() => void handleSaveDeviceName()}
+						placeholder={t('syncSettings.localDevice.placeholder')}
+						returnKeyType="done"
+						value={visibleDeviceName}
+					/>
+				</View>
+			</NativeModal>
 		</View>
 	);
 }
