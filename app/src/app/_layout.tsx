@@ -1,7 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, type ReactNode } from 'react';
-import { StatusBar, useColorScheme } from 'react-native';
+import { StatusBar, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
@@ -13,8 +13,10 @@ import { AppTabs } from '@/app-shell';
 import { AiSettingsProvider } from '@/features/ai';
 import { EditorProvider } from '@/features/editor';
 import { MadoraSyncProvider } from '@/features/madora-sync';
+import { OnboardingScreen } from '@/features/onboarding';
 import {
 	AppSettingsProvider,
+	APP_THEME_BACKGROUND_COLORS,
 	resolveThemePreference,
 	useAppSettings,
 } from '@/features/settings';
@@ -36,9 +38,11 @@ export default function TabLayout() {
 					<ThemedAppProviders>
 						<AiSettingsProvider>
 							<MadoraSyncProvider>
-								<EditorProvider>
-									<AppTabs />
-								</EditorProvider>
+								<AppContentGate>
+									<EditorProvider>
+										<AppTabs />
+									</EditorProvider>
+								</AppContentGate>
 							</MadoraSyncProvider>
 						</AiSettingsProvider>
 					</ThemedAppProviders>
@@ -120,4 +124,29 @@ function ThemedAppProviders({ children }: { children: ReactNode }) {
 			</ThemeProvider>
 		</GluestackUIProvider>
 	);
+}
+
+function AppContentGate({ children }: { children: ReactNode }) {
+	const systemColorScheme = useColorScheme();
+	const {
+		completeOnboarding,
+		onboardingComplete,
+		settingsHydrated,
+		themePreference,
+	} = useAppSettings();
+	const effectiveColorScheme = resolveThemePreference(
+		themePreference,
+		systemColorScheme
+	);
+	const backgroundColor = APP_THEME_BACKGROUND_COLORS[effectiveColorScheme];
+
+	if (!settingsHydrated) {
+		return <View style={{ flex: 1, backgroundColor }} />;
+	}
+
+	if (!onboardingComplete) {
+		return <OnboardingScreen onComplete={completeOnboarding} />;
+	}
+
+	return <>{children}</>;
 }

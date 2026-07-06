@@ -13,6 +13,7 @@ import {
 } from 'lucide-react-native';
 
 import modelsByProvider from '@/assets/models.json';
+import { useNativeToast } from '@/components/ui/native-toast';
 import { Input, InputField } from '@/components/ui/input';
 import {
 	Select,
@@ -69,24 +70,42 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 		modelOptions.find((option) => option.value === settings.model)?.name ??
 		settings.model;
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
-	const [message, setMessage] = useState<string | null>(null);
+	const { showToast } = useNativeToast();
 
 	const saveApiKey = async () => {
-		setMessage(null);
 		try {
 			await settings.saveApiKey(apiKeyDraft);
 			setApiKeyDraft('');
-			setMessage(t('settings.editor.toasts.apiKeySaved'));
+			showToast({
+				description: t('settings.editor.toasts.apiKeySaved'),
+				title: t('common.actions.save'),
+				tone: 'success',
+			});
 		} catch (error) {
-			setMessage(error instanceof Error ? error.message : String(error));
+			showToast({
+				description: error instanceof Error ? error.message : String(error),
+				title: t('settings.editor.toasts.apiKeySaveFailed'),
+				tone: 'error',
+			});
 		}
 	};
 
 	const deleteApiKey = async () => {
-		setMessage(null);
-		await settings.deleteApiKey();
-		setApiKeyDraft('');
-		setMessage(t('settings.editor.toasts.apiKeyDeleted'));
+		try {
+			await settings.deleteApiKey();
+			setApiKeyDraft('');
+			showToast({
+				description: t('settings.editor.toasts.apiKeyDeleted'),
+				title: t('common.actions.delete'),
+				tone: 'success',
+			});
+		} catch (error) {
+			showToast({
+				description: error instanceof Error ? error.message : String(error),
+				title: t('settings.editor.toasts.apiKeyDeleteFailed'),
+				tone: 'error',
+			});
+		}
 	};
 
 	return (
@@ -314,11 +333,6 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 							/>
 						) : null}
 					</View>
-					{message ? (
-						<Text className="mt-3 text-[13px] leading-5 text-muted-foreground">
-							{message}
-						</Text>
-					) : null}
 				</SettingsCard>
 			</KeyboardAwareScrollView>
 		</View>

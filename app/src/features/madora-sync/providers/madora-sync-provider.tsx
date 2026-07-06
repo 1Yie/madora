@@ -71,6 +71,28 @@ export type EditorStateInput = {
 
 const MadoraSyncContext = createContext<MadoraSyncContextValue | null>(null);
 
+type SyncErrorKey =
+	| 'authError'
+	| 'connectionClosed'
+	| 'connectionReset'
+	| 'invalidQr'
+	| 'notConnected'
+	| 'openDatabaseFailed'
+	| 'refreshFilesFailed'
+	| 'removeTrustedFailed'
+	| 'serverError'
+	| 'unexpectedResponse'
+	| 'writeFailed';
+
+const SYNC_ERROR_MESSAGE_KEYS: Record<string, SyncErrorKey> = {
+	'Connection closed': 'connectionClosed',
+	'Connection reset': 'connectionReset',
+	'Invalid pairing QR code': 'invalidQr',
+	'Not connected': 'notConnected',
+	'Unexpected response type': 'unexpectedResponse',
+	'Write failed': 'writeFailed',
+};
+
 export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 	const { t } = useTranslation();
 	const showErrorToast = useErrorToast();
@@ -90,6 +112,22 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 	);
 
 	const clientRef = useRef<SyncClient | null>(null);
+	const syncError = useCallback(
+		(key: SyncErrorKey) => t(`syncSettings.errors.${key}`),
+		[t]
+	);
+	const getLocalizedSyncError = useCallback(
+		(error: unknown, fallbackKey: SyncErrorKey) => {
+			const message =
+				error instanceof Error
+					? error.message
+					: typeof error === 'string'
+						? error
+						: '';
+			return syncError(SYNC_ERROR_MESSAGE_KEYS[message] ?? fallbackKey);
+		},
+		[syncError]
+	);
 
 	useEffect(() => {
 		if (!errorMessage) return;
@@ -130,11 +168,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				setReady(true);
 			} catch (error) {
 				if (cancelled) return;
-				setErrorMessage(
-					error instanceof Error
-						? error.message
-						: 'Failed to open sync database'
-				);
+				setErrorMessage(getLocalizedSyncError(error, 'openDatabaseFailed'));
 			}
 		}
 
@@ -142,7 +176,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [defaultLocalDeviceName]);
+	}, [defaultLocalDeviceName, getLocalizedSyncError]);
 
 	const handleServerMessage = useCallback(
 		(message: ServerMessage) => {
@@ -156,12 +190,12 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			}
 
 			if (message.type === 'error') {
-				setErrorMessage(message.message);
+				setErrorMessage(getLocalizedSyncError(message.message, 'serverError'));
 				return;
 			}
 
 			if (message.type === 'auth_error') {
-				setErrorMessage(message.message);
+				setErrorMessage(getLocalizedSyncError(message.message, 'authError'));
 				return;
 			}
 
@@ -172,7 +206,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				setRemoteEditorState(message);
 			}
 		},
-		[db]
+		[db, getLocalizedSyncError]
 	);
 
 	const connectToHost = useCallback(
@@ -303,14 +337,14 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 		async (raw: string): Promise<boolean> => {
 			const parsed = parsePairingPayload(raw);
 			if (!parsed) {
-				setErrorMessage('Invalid pairing QR code');
+				setErrorMessage(syncError('invalidQr'));
 				return false;
 			}
 
 			setErrorMessage(null);
 			return pairWithPayload(parsed);
 		},
-		[pairWithPayload]
+		[pairWithPayload, syncError]
 	);
 
 	const disconnect = useCallback(() => {
@@ -344,21 +378,17 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 					await persistPairedHost(null);
 				}
 			} catch (error) {
-				showErrorToast(
-					error instanceof Error
-						? error.message
-						: 'Failed to remove trusted device'
-				);
+				showErrorToast(getLocalizedSyncError(error, 'removeTrustedFailed'));
 			}
 		},
-		[db, pairedHost, persistPairedHost, showErrorToast]
+		[db, getLocalizedSyncError, pairedHost, persistPairedHost, showErrorToast]
 	);
 
 	const refreshRemoteFileTree = useCallback(
 		async (path?: string) => {
 			const client = clientRef.current;
 			if (!client || !client.isConnected) {
-				const message = 'Not connected';
+				const message = syncError('notConnected');
 				setErrorMessage(message);
 				throw new Error(message);
 			}
@@ -371,69 +401,88 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				);
 				if (response.type !== 'file_list_result') {
 					if (response.type === 'error' || response.type === 'auth_error') {
-						setErrorMessage(response.message);
-						throw new Error(response.message);
+						const message = getLocalizedSyncError(
+							response.message,
+							response.type === 'auth_error' ? 'authError' : 'serverError'
+						);
+						setErrorMessage(message);
+						throw new Error(message);
 					}
-					throw new Error('Unexpected response type');
+					throw new Error(syncError('unexpectedResponse'));
 				}
 
 				handleServerMessage(response);
 				return response.tree;
 			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : 'Failed to refresh files';
+				const message = getLocalizedSyncError(error, 'refreshFilesFailed');
 				setErrorMessage(message);
 				throw new Error(message, { cause: error });
 			}
 		},
-		[handleServerMessage]
+		[getLocalizedSyncError, handleServerMessage, syncError]
 	);
 
-	const readRemoteFile = useCallback(async (path: string) => {
-		const client = clientRef.current;
-		if (!client || !client.isConnected) throw new Error('Not connected');
+	const readRemoteFile = useCallback(
+		async (path: string) => {
+			const client = clientRef.current;
+			if (!client || !client.isConnected)
+				throw new Error(syncError('notConnected'));
 
-		const response = await client.request(
-			{ type: 'file_read', path },
-			`file_read:${path}`
-		);
+			const response = await client.request(
+				{ type: 'file_read', path },
+				`file_read:${path}`
+			);
 
-		if (response.type !== 'file_read_result') {
-			if (response.type === 'error') {
-				throw new Error(response.message);
+			if (response.type !== 'file_read_result') {
+				if (response.type === 'error') {
+					throw new Error(
+						getLocalizedSyncError(response.message, 'serverError')
+					);
+				}
+				throw new Error(syncError('unexpectedResponse'));
 			}
-			throw new Error('Unexpected response type');
-		}
 
-		return {
-			content: response.content,
-			encoding: response.encoding,
-			truncated: response.truncated,
-		};
-	}, []);
+			return {
+				content: response.content,
+				encoding: response.encoding,
+				truncated: response.truncated,
+			};
+		},
+		[getLocalizedSyncError, syncError]
+	);
 
-	const writeRemoteFile = useCallback(async (path: string, content: string) => {
-		const client = clientRef.current;
-		if (!client || !client.isConnected) throw new Error('Not connected');
+	const writeRemoteFile = useCallback(
+		async (path: string, content: string) => {
+			const client = clientRef.current;
+			if (!client || !client.isConnected)
+				throw new Error(syncError('notConnected'));
 
-		const response = await client.request(
-			{ type: 'file_write', path, content },
-			`file_write:${path}`
-		);
+			const response = await client.request(
+				{ type: 'file_write', path, content },
+				`file_write:${path}`
+			);
 
-		if (response.type !== 'file_write_result') {
-			if (response.type === 'error') {
-				throw new Error(response.message);
+			if (response.type !== 'file_write_result') {
+				if (response.type === 'error') {
+					throw new Error(
+						getLocalizedSyncError(response.message, 'serverError')
+					);
+				}
+				throw new Error(syncError('unexpectedResponse'));
 			}
-			throw new Error('Unexpected response type');
-		}
 
-		if (!response.ok) {
-			throw new Error(response.error ?? 'Write failed');
-		}
+			if (!response.ok) {
+				throw new Error(
+					response.error
+						? getLocalizedSyncError(response.error, 'writeFailed')
+						: syncError('writeFailed')
+				);
+			}
 
-		return true;
-	}, []);
+			return true;
+		},
+		[getLocalizedSyncError, syncError]
+	);
 
 	const publishEditorState = useCallback(
 		(state: EditorStateInput) => {

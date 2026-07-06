@@ -1,10 +1,12 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useNativeToast } from '@/components/ui/native-toast';
 
 const ERROR_TOAST_DURATION_MS = 3000;
 
 export function useErrorToast() {
+	const { t } = useTranslation();
 	const { showToast } = useNativeToast();
 
 	return useCallback(
@@ -12,10 +14,10 @@ export function useErrorToast() {
 			showToast({
 				description: message,
 				durationMs: ERROR_TOAST_DURATION_MS,
-				title: 'Error',
+				title: t('common.feedback.error'),
 				tone: 'error',
 			});
 		},
-		[showToast]
+		[showToast, t]
 	);
 }

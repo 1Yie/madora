@@ -1,4 +1,5 @@
 export { AnimatedIcon, AnimatedSplashOverlay } from './animated-icon';
+export { AppEdgeFade } from './app-edge-fade';
 export { BackButton } from './back-button';
 export { ExternalLink } from './external-link';
 export { HintRow } from './hint-row';

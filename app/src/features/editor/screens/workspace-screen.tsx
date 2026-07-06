@@ -1773,8 +1773,8 @@ function EmptyWorkspace({
 						icon={MonitorSmartphone}
 						label={
 							connectionState === 'connected'
-								? 'Open Remote'
-								: 'Connect Desktop'
+								? t('workspace.actions.openRemote')
+								: t('workspace.actions.connectDesktop')
 						}
 						onPress={onOpenRemote}
 						palette={palette}
@@ -1825,8 +1825,8 @@ function EmptyFolderSelectionState({
 							icon={MonitorSmartphone}
 							label={
 								connectionState === 'connected'
-									? 'Open Remote'
-									: 'Connect Desktop'
+									? t('workspace.actions.openRemote')
+									: t('workspace.actions.connectDesktop')
 							}
 							onPress={onOpenRemote}
 							palette={palette}
@@ -1962,8 +1962,8 @@ function EmptyEditorState({
 									icon={MonitorSmartphone}
 									label={
 										connectionState === 'connected'
-											? 'Open Remote'
-											: 'Connect Desktop'
+											? t('workspace.actions.openRemote')
+											: t('workspace.actions.connectDesktop')
 									}
 									onPress={onOpenRemote}
 									palette={palette}

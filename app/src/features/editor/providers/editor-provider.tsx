@@ -11,6 +11,7 @@ import {
 import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
+import i18n from '@/i18n';
 import { generateCompletion, useAiSettings } from '@/features/ai';
 import { useAppSettings } from '@/features/settings';
 import { useMadoraSync } from '@/features/madora-sync';
@@ -305,7 +306,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 						loaded: true,
 					}))
 				);
-				setErrorMessage(getErrorMessage(error, 'Failed to open folder'));
+				setErrorMessage(getLocalizedEditorError(error, 'openFolderFailed'));
 			} finally {
 				loadingDirectoryPathsRef.current.delete(directoryPath);
 			}
@@ -396,7 +397,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		async (fileName: string) => {
 			try {
 				if (workspaceSource.kind !== 'directory') {
-					setErrorMessage('Open a local folder before creating files here.');
+					setErrorMessage(editorError('localFolderRequiredForFiles'));
 					return false;
 				}
 
@@ -422,7 +423,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setErrorMessage(null);
 				return true;
 			} catch (error) {
-				setErrorMessage(getErrorMessage(error, 'Failed to create local file'));
+				setErrorMessage(getLocalizedEditorError(error, 'createFileFailed'));
 				return false;
 			}
 		},
@@ -438,7 +439,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		async (directoryName: string) => {
 			try {
 				if (workspaceSource.kind !== 'directory') {
-					setErrorMessage('Open a local folder before creating folders here.');
+					setErrorMessage(editorError('localFolderRequiredForFolders'));
 					return false;
 				}
 
@@ -457,7 +458,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setErrorMessage(null);
 				return true;
 			} catch (error) {
-				setErrorMessage(getErrorMessage(error, 'Failed to create folder'));
+				setErrorMessage(getLocalizedEditorError(error, 'createFolderFailed'));
 				return false;
 			}
 		},
@@ -498,7 +499,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setErrorMessage(null);
 				return false;
 			}
-			setErrorMessage(getErrorMessage(error, 'Failed to open local file'));
+			setErrorMessage(getLocalizedEditorError(error, 'openLocalFileFailed'));
 			return false;
 		}
 	}, [persistWorkspace]);
@@ -539,7 +540,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setErrorMessage(null);
 				return false;
 			}
-			setErrorMessage(getErrorMessage(error, 'Failed to open local folder'));
+			setErrorMessage(getLocalizedEditorError(error, 'openLocalFolderFailed'));
 			return false;
 		}
 	}, [
@@ -549,7 +550,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	]);
 
 	const showRemoteDisconnectedWorkspace = useCallback(() => {
-		const remoteName = pairedHost?.name ?? 'Remote Desktop';
+		const remoteName =
+			pairedHost?.name ?? i18n.t('workspace.remoteFallbackName');
 
 		setDocuments((current) => (current.length === 0 ? current : []));
 		setFileTree((current) => (current.length === 0 ? current : []));
@@ -576,14 +578,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		try {
 			const tree = await refreshRemoteFileTree();
 			if (tree.length === 0) {
-				setErrorMessage('Remote workspace returned no files.');
+				setErrorMessage(editorError('remoteNoFiles'));
 				return false;
 			}
 
 			const mappedTree = mapRemoteExplorerNodes(tree);
 			const rootNode = mappedTree[0];
 			if (!rootNode) {
-				setErrorMessage('Remote workspace returned no root folder.');
+				setErrorMessage(editorError('remoteNoRoot'));
 				return false;
 			}
 
@@ -596,7 +598,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setSelectedTreeNodePath(rootNode.path);
 			setWorkspaceSource({
 				kind: 'remote',
-				name: pairedHost?.name ?? 'Remote Desktop',
+				name: pairedHost?.name ?? i18n.t('workspace.remoteFallbackName'),
 				uri: rootNode.path,
 			});
 			setWorkspaceMode('remote');
@@ -604,16 +606,14 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(null);
 			return true;
 		} catch (error) {
-			const message = getErrorMessage(error, 'Failed to open remote workspace');
+			const message = getErrorMessage(error, '');
 			if (isRemoteConnectionUnavailableMessage(message)) {
 				showRemoteDisconnectedWorkspace();
 				return true;
 			}
 
 			setErrorMessage(
-				message === 'No workspace open on the desktop'
-					? 'Open a workspace on the desktop before syncing remote files.'
-					: message
+				getLocalizedEditorError(error, 'openRemoteWorkspaceFailed')
 			);
 			return false;
 		}
@@ -775,7 +775,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				});
 				setErrorMessage(null);
 			} catch (error) {
-				setErrorMessage(getErrorMessage(error, 'Failed to read file'));
+				setErrorMessage(getLocalizedEditorError(error, 'readFileFailed'));
 			}
 		},
 		[
@@ -889,7 +889,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 					setErrorMessage(null);
 					return true;
 				} catch (error) {
-					setErrorMessage(getErrorMessage(error, 'Failed to save file'));
+					setErrorMessage(getLocalizedEditorError(error, 'saveFileFailed'));
 					return false;
 				}
 			};
@@ -1057,7 +1057,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				setErrorMessage(null);
 				return true;
 			} catch (error) {
-				setErrorMessage(getErrorMessage(error, 'Failed to rename local file'));
+				setErrorMessage(getLocalizedEditorError(error, 'renameFileFailed'));
 				return false;
 			}
 		},
@@ -1123,7 +1123,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(null);
 			return true;
 		} catch (error) {
-			setErrorMessage(getErrorMessage(error, 'Failed to paste local file'));
+			setErrorMessage(getLocalizedEditorError(error, 'pasteFileFailed'));
 			return false;
 		}
 	}, [
@@ -1225,7 +1225,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(null);
 			return true;
 		} catch (error) {
-			const message = getErrorMessage(error, 'Failed to refresh files');
+			const message = getErrorMessage(error, '');
 			if (
 				workspaceSource.kind === 'remote' &&
 				isRemoteConnectionUnavailableMessage(message)
@@ -1233,7 +1233,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				showRemoteDisconnectedWorkspace();
 				return true;
 			}
-			setErrorMessage(message);
+			setErrorMessage(getLocalizedEditorError(error, 'refreshFilesFailed'));
 			return false;
 		}
 	}, [
@@ -1349,7 +1349,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			setErrorMessage(null);
 			return true;
 		} catch (error) {
-			setErrorMessage(getErrorMessage(error, 'Failed to delete item'));
+			setErrorMessage(getLocalizedEditorError(error, 'deleteItemFailed'));
 			return false;
 		}
 	}, [
@@ -1635,6 +1635,54 @@ function getErrorMessage(error: unknown, fallback: string) {
 	if (error instanceof Error && error.message) return error.message;
 	if (typeof error === 'string' && error.length > 0) return error;
 	return fallback;
+}
+
+type EditorErrorKey =
+	| 'cannotResolveParentDirectory'
+	| 'createFileFailed'
+	| 'createFolderFailed'
+	| 'deleteItemFailed'
+	| 'emptyFileName'
+	| 'fileAlreadyExists'
+	| 'localFolderRequiredForFiles'
+	| 'localFolderRequiredForFolders'
+	| 'notConnected'
+	| 'openFolderFailed'
+	| 'openLocalFileFailed'
+	| 'openLocalFolderFailed'
+	| 'openRemoteWorkspaceFailed'
+	| 'pasteFileFailed'
+	| 'readFileFailed'
+	| 'refreshFilesFailed'
+	| 'remoteNoFiles'
+	| 'remoteNoRoot'
+	| 'remoteWorkspaceRequired'
+	| 'renameFileFailed'
+	| 'saveFileFailed'
+	| 'singlePathSegment'
+	| 'unexpectedResponse'
+	| 'writeFailed';
+
+const EDITOR_ERROR_MESSAGE_KEYS: Record<string, EditorErrorKey> = {
+	'A file with that name already exists.': 'fileAlreadyExists',
+	'Cannot resolve parent directory for file.': 'cannotResolveParentDirectory',
+	'File name cannot be empty.': 'emptyFileName',
+	'File name must be a single path segment.': 'singlePathSegment',
+	'No workspace open on the desktop': 'remoteWorkspaceRequired',
+	'Not connected': 'notConnected',
+	'Unexpected response type': 'unexpectedResponse',
+	'Write failed': 'writeFailed',
+};
+
+function editorError(key: EditorErrorKey) {
+	return i18n.t(`editor.errors.${key}`);
+}
+
+function getLocalizedEditorError(error: unknown, fallbackKey: EditorErrorKey) {
+	const message = getErrorMessage(error, '');
+	const mappedKey = EDITOR_ERROR_MESSAGE_KEYS[message];
+	if (mappedKey) return editorError(mappedKey);
+	return editorError(fallbackKey);
 }
 
 function isPickerCancel(error: unknown) {

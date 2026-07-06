@@ -75,9 +75,12 @@ const APP_THEME_PALETTES: Record<ResolvedThemePreference, AppThemePalette> = {
 };
 
 type AppSettingsContextValue = {
+	completeOnboarding: () => void;
 	editorFontSize: number;
 	localePreference: LocalePreference;
+	onboardingComplete: boolean;
 	saveMode: SaveMode;
+	settingsHydrated: boolean;
 	themePreference: ThemePreference;
 	setEditorFontSize: (fontSize: number) => void;
 	setLocalePreference: (locale: LocalePreference) => void;
@@ -88,6 +91,7 @@ type AppSettingsContextValue = {
 const SETTINGS_PREFIX = 'madora-mobile.settings';
 const EDITOR_FONT_SIZE_KEY = `${SETTINGS_PREFIX}.editorFontSize`;
 const LOCALE_KEY = `${SETTINGS_PREFIX}.locale`;
+const ONBOARDING_COMPLETE_KEY = `${SETTINGS_PREFIX}.onboardingComplete`;
 const SAVE_MODE_KEY = `${SETTINGS_PREFIX}.saveMode`;
 const THEME_KEY = `${SETTINGS_PREFIX}.theme`;
 
@@ -146,7 +150,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 	);
 	const [localePreference, setLocalePreferenceState] =
 		useState<LocalePreference>('system');
+	const [onboardingComplete, setOnboardingCompleteState] = useState(false);
 	const [saveMode, setSaveModeState] = useState<SaveMode>('auto');
+	const [settingsHydrated, setSettingsHydrated] = useState(false);
 	const [themePreference, setThemePreferenceState] =
 		useState<ThemePreference>('system');
 
@@ -154,13 +160,19 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 		let cancelled = false;
 
 		async function hydrate() {
-			const [storedFontSize, storedLocale, storedSaveMode, storedTheme] =
-				await Promise.all([
-					getStoredValue(EDITOR_FONT_SIZE_KEY),
-					getStoredValue(LOCALE_KEY),
-					getStoredValue(SAVE_MODE_KEY),
-					getStoredValue(THEME_KEY),
-				]);
+			const [
+				storedFontSize,
+				storedLocale,
+				storedOnboardingComplete,
+				storedSaveMode,
+				storedTheme,
+			] = await Promise.all([
+				getStoredValue(EDITOR_FONT_SIZE_KEY),
+				getStoredValue(LOCALE_KEY),
+				getStoredValue(ONBOARDING_COMPLETE_KEY),
+				getStoredValue(SAVE_MODE_KEY),
+				getStoredValue(THEME_KEY),
+			]);
 
 			if (cancelled) return;
 
@@ -172,12 +184,14 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 				setLocalePreferenceState(storedLocale);
 				void i18n.changeLanguage(resolveLocalePreference(storedLocale));
 			}
+			setOnboardingCompleteState(storedOnboardingComplete === 'true');
 			if (isSaveMode(storedSaveMode)) {
 				setSaveModeState(storedSaveMode);
 			}
 			if (isThemePreference(storedTheme)) {
 				setThemePreferenceState(storedTheme);
 			}
+			setSettingsHydrated(true);
 		}
 
 		void hydrate();
@@ -199,6 +213,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 		void i18n.changeLanguage(resolveLocalePreference(locale));
 	}, []);
 
+	const completeOnboarding = useCallback(() => {
+		setOnboardingCompleteState(true);
+		void setStoredValue(ONBOARDING_COMPLETE_KEY, 'true');
+	}, []);
+
 	const setSaveMode = useCallback((nextSaveMode: SaveMode) => {
 		setSaveModeState(nextSaveMode);
 		void setStoredValue(SAVE_MODE_KEY, nextSaveMode);
@@ -211,9 +230,12 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
 	const value = useMemo<AppSettingsContextValue>(
 		() => ({
+			completeOnboarding,
 			editorFontSize,
 			localePreference,
+			onboardingComplete,
 			saveMode,
+			settingsHydrated,
 			setEditorFontSize,
 			setLocalePreference,
 			setSaveMode,
@@ -221,9 +243,12 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 			themePreference,
 		}),
 		[
+			completeOnboarding,
 			editorFontSize,
 			localePreference,
+			onboardingComplete,
 			saveMode,
+			settingsHydrated,
 			setEditorFontSize,
 			setLocalePreference,
 			setSaveMode,

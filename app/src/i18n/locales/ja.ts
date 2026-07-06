@@ -10,6 +10,10 @@ const ja = {
 			refresh: '更新',
 			save: '保存',
 		},
+		feedback: {
+			error: 'エラー',
+			success: '成功',
+		},
 		labels: {
 			apiKey: 'API Key',
 			apiUrl: 'API URL',
@@ -47,6 +51,53 @@ const ja = {
 			ko: '한국어',
 			system: 'デバイスに従う',
 			zhCN: '简体中文',
+		},
+	},
+	onboarding: {
+		footnote:
+			'言語、保存方式、同期、AI Provider はあとから設定で変更できます。',
+		languageTitle: '言語を選択',
+		nextAction: '次へ',
+		primaryAction: 'ワークスペースへ',
+		skipAction: 'スキップ',
+		stepLabel: '{{current}} / {{total}}',
+		taglineBottom: 'powered by AI',
+		taglineTop: 'Markdown editing,',
+		title: 'Madora へようこそ',
+		controls: {
+			manualSave: {
+				description:
+					'保存カプセルを表示し、未保存のワークスペースから離れる前に確認します。',
+				title: '手動保存',
+			},
+		},
+		items: {
+			ai: {
+				detail:
+					'執筆中にインライン補完を使いたいときは、ローカルの AI Provider を設定できます。',
+				hint: '設定 → AI で Provider、モデル、エンドポイント、API Key を選択できます。',
+				title: 'AI 補完',
+			},
+			sync: {
+				detail:
+					'ローカルネットワークで Madora デスクトップとペアリングし、リモートワークスペースを参照できます。',
+				hint: '設定 → 同期でデスクトップの QR コードを読み取り、あとから再接続できます。',
+				title: 'デスクトップ同期',
+			},
+			workspace: {
+				detail:
+					'ローカルフォルダーを開き、Markdown ファイルを作成してこの端末で編集を続けられます。',
+				hint: 'ファイルツリーでフォルダーを選択し、ファイル作成や編集/プレビュー切り替えができます。',
+				title: 'ローカルワークスペース',
+			},
+		},
+		ready: {
+			detail:
+				'これらの設定はあとから設定画面で変更できます。まずはフォルダーを開くか、デスクトップ同期をペアリングしてください。',
+			title: '書き始める準備ができました',
+		},
+		summary: {
+			title: '選択した設定',
 		},
 	},
 	settings: {
@@ -204,6 +255,7 @@ const ja = {
 			toasts: {
 				apiKeyDeleted: 'API Key をシステムのセキュアストレージから削除しました',
 				apiKeyDeleteFailed: 'API Key の削除に失敗しました',
+				apiKeyRequired: '先に API Key を入力してください',
 				apiKeySaved: 'API Key をシステムのセキュアストレージに保存しました',
 				apiKeySaveFailed: 'API Key の保存に失敗しました',
 			},
@@ -300,6 +352,10 @@ const ja = {
 		title: 'ファイルツリー',
 	},
 	workspace: {
+		actions: {
+			connectDesktop: 'デスクトップに接続',
+			openRemote: 'リモートを開く',
+		},
 		empty: {
 			detail:
 				'先にローカルフォルダーを開き、その中の Markdown ファイルを作成または選択してください。',
@@ -317,6 +373,7 @@ const ja = {
 			detail: 'リモートフォルダーでファイルを選択してください。',
 			title: 'リモートファイルが選択されていません',
 		},
+		remoteFallbackName: 'デスクトップワークスペース',
 		unsavedChanges: {
 			cancel: '編集を続ける',
 			continueSwitch: '切り替えを続行',
@@ -417,6 +474,39 @@ const ja = {
 			followSystem: 'システムに従う',
 		},
 	},
+	editor: {
+		errors: {
+			cannotResolveParentDirectory:
+				'ファイルの親フォルダーを解決できませんでした。',
+			createFileFailed: 'ファイルの作成に失敗しました。',
+			createFolderFailed: 'フォルダーの作成に失敗しました。',
+			deleteItemFailed: '項目の削除に失敗しました。',
+			emptyFileName: 'ファイル名を入力してください。',
+			fileAlreadyExists: '同じ名前のファイルが既に存在します。',
+			localFolderRequiredForFiles:
+				'ここでファイルを作成するには、先にローカルフォルダーを開いてください。',
+			localFolderRequiredForFolders:
+				'ここでフォルダーを作成するには、先にローカルフォルダーを開いてください。',
+			notConnected: 'デスクトップに接続されていません。',
+			openFolderFailed: 'フォルダーを開けませんでした。',
+			openLocalFileFailed: 'ローカルファイルを開けませんでした。',
+			openLocalFolderFailed: 'ローカルフォルダーを開けませんでした。',
+			openRemoteWorkspaceFailed: 'リモートワークスペースを開けませんでした。',
+			pasteFileFailed: 'ファイルの貼り付けに失敗しました。',
+			readFileFailed: 'ファイルの読み込みに失敗しました。',
+			refreshFilesFailed: 'ファイルの更新に失敗しました。',
+			remoteNoFiles: 'リモートワークスペースからファイルが返されませんでした。',
+			remoteNoRoot:
+				'リモートワークスペースからルートフォルダーが返されませんでした。',
+			remoteWorkspaceRequired:
+				'リモートファイルを同期する前に、デスクトップでワークスペースを開いてください。',
+			renameFileFailed: 'ローカルファイルの名前変更に失敗しました。',
+			saveFileFailed: 'ファイルの保存に失敗しました。',
+			singlePathSegment: 'ファイル名にパス区切り文字は使用できません。',
+			unexpectedResponse: 'デスクトップから予期しない応答が返されました。',
+			writeFailed: 'ファイルの書き込みに失敗しました。',
+		},
+	},
 	markdownEditor: {
 		loading: 'CodeMirror を読み込み中',
 		loadFailed: 'CodeMirror エディターの読み込みに失敗しました。',
@@ -464,6 +554,20 @@ const ja = {
 			title: '接続',
 		},
 		emptyTrusted: 'まだペアリング済みのデバイスはありません。',
+		errors: {
+			authError:
+				'デスクトップの認証に失敗しました。QR から再ペアリングしてください。',
+			connectionClosed: 'デスクトップとの接続が閉じられました。',
+			connectionReset: 'デスクトップとの接続がリセットされました。',
+			invalidQr: '無効なペアリング QR コードです。',
+			notConnected: 'デスクトップに接続されていません。',
+			openDatabaseFailed: '同期データベースを開けませんでした。',
+			refreshFilesFailed: 'リモートファイルの更新に失敗しました。',
+			removeTrustedFailed: '信頼済みデバイスの削除に失敗しました。',
+			serverError: 'デスクトップ同期サービスからエラーが返されました。',
+			unexpectedResponse: 'デスクトップから予期しない応答が返されました。',
+			writeFailed: 'リモートファイルの書き込みに失敗しました。',
+		},
 		localDevice: {
 			defaultName: 'Madora Phone',
 			detail:
@@ -478,7 +582,7 @@ const ja = {
 				'デスクトップの QR をスキャンしてローカルネットワークでペアリングします。',
 			eyebrow: 'デバイス',
 			instructions:
-				'Madora デスクトップを開き、設定 → 同步 から表示される QR コードをスキャンしてください。',
+				'Madora デスクトップを開き、設定 → 同期 から表示される QR コードをスキャンしてください。',
 			pair: 'QR からペアリング',
 			ready: 'ペアリング可能',
 			repair: 'QR で再ペアリング',

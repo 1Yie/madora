@@ -10,6 +10,10 @@ const en = {
 			refresh: 'Refresh',
 			save: 'Save',
 		},
+		feedback: {
+			error: 'Error',
+			success: 'Success',
+		},
 		labels: {
 			apiKey: 'API Key',
 			apiUrl: 'API URL',
@@ -47,6 +51,53 @@ const en = {
 			ko: '한국어',
 			system: 'Follow Device',
 			zhCN: '简体中文',
+		},
+	},
+	onboarding: {
+		footnote:
+			'You can change language, save behavior, sync, and AI providers later in Settings.',
+		languageTitle: 'Choose a language',
+		nextAction: 'Next',
+		primaryAction: 'Enter workspace',
+		skipAction: 'Skip',
+		stepLabel: '{{current}} / {{total}}',
+		taglineBottom: 'powered by AI',
+		taglineTop: 'Markdown editing,',
+		title: 'Welcome to Madora',
+		controls: {
+			manualSave: {
+				description:
+					'Show a save capsule and confirm unsaved workspace changes before leaving.',
+				title: 'Manual Save',
+			},
+		},
+		items: {
+			ai: {
+				detail:
+					'Configure a local provider when you want inline completion while writing.',
+				hint: 'Open Settings → AI to choose a provider, model, endpoint, and API key.',
+				title: 'AI completion',
+			},
+			sync: {
+				detail:
+					'Pair with Madora desktop over your local network to browse remote workspaces.',
+				hint: 'Open Settings → Sync, scan the desktop QR code, and reconnect later from the same page.',
+				title: 'Desktop sync',
+			},
+			workspace: {
+				detail:
+					'Open a local folder, create Markdown files, and keep editing on device.',
+				hint: 'Use the Files tab to choose a folder, create files, and switch between editor and preview.',
+				title: 'Local workspace',
+			},
+		},
+		ready: {
+			detail:
+				'You can revisit these choices any time from Settings. Start by opening a folder or pairing desktop sync.',
+			title: 'Ready to write',
+		},
+		summary: {
+			title: 'Selected settings',
 		},
 	},
 	settings: {
@@ -210,6 +261,7 @@ const en = {
 			toasts: {
 				apiKeyDeleted: 'API key removed from system secure storage',
 				apiKeyDeleteFailed: 'Failed to remove API key',
+				apiKeyRequired: 'Please enter the API key first',
 				apiKeySaved: 'API key saved to system secure storage',
 				apiKeySaveFailed: 'Failed to save API key',
 			},
@@ -304,6 +356,10 @@ const en = {
 		title: 'File tree',
 	},
 	workspace: {
+		actions: {
+			connectDesktop: 'Connect Desktop',
+			openRemote: 'Open Remote',
+		},
 		empty: {
 			detail:
 				'Open a local folder first, then create or select a Markdown file inside it.',
@@ -321,6 +377,7 @@ const en = {
 			detail: 'Go to the remote folder and select a file.',
 			title: 'No remote file selected',
 		},
+		remoteFallbackName: 'Desktop workspace',
 		unsavedChanges: {
 			cancel: 'Keep Editing',
 			continueSwitch: 'Continue Switching',
@@ -425,6 +482,38 @@ const en = {
 			followSystem: 'Follow system',
 		},
 	},
+	editor: {
+		errors: {
+			cannotResolveParentDirectory:
+				'Could not resolve the parent folder for this file.',
+			createFileFailed: 'Failed to create file.',
+			createFolderFailed: 'Failed to create folder.',
+			deleteItemFailed: 'Failed to delete item.',
+			emptyFileName: 'File name cannot be empty.',
+			fileAlreadyExists: 'A file with that name already exists.',
+			localFolderRequiredForFiles:
+				'Open a local folder before creating files here.',
+			localFolderRequiredForFolders:
+				'Open a local folder before creating folders here.',
+			notConnected: 'Not connected to the desktop.',
+			openFolderFailed: 'Failed to open folder.',
+			openLocalFileFailed: 'Failed to open local file.',
+			openLocalFolderFailed: 'Failed to open local folder.',
+			openRemoteWorkspaceFailed: 'Failed to open remote workspace.',
+			pasteFileFailed: 'Failed to paste file.',
+			readFileFailed: 'Failed to read file.',
+			refreshFilesFailed: 'Failed to refresh files.',
+			remoteNoFiles: 'Remote workspace returned no files.',
+			remoteNoRoot: 'Remote workspace returned no root folder.',
+			remoteWorkspaceRequired:
+				'Open a workspace on the desktop before syncing remote files.',
+			renameFileFailed: 'Failed to rename local file.',
+			saveFileFailed: 'Failed to save file.',
+			singlePathSegment: 'File name must be a single path segment.',
+			unexpectedResponse: 'The desktop returned an unexpected response.',
+			writeFailed: 'Failed to write file.',
+		},
+	},
 	markdownEditor: {
 		loading: 'Loading CodeMirror',
 		loadFailed: 'CodeMirror editor failed to load.',
@@ -472,6 +561,19 @@ const en = {
 			title: 'Connection',
 		},
 		emptyTrusted: 'No paired devices yet.',
+		errors: {
+			authError: 'Desktop authentication failed. Pair again from QR.',
+			connectionClosed: 'Desktop connection closed.',
+			connectionReset: 'Desktop connection reset.',
+			invalidQr: 'Invalid pairing QR code.',
+			notConnected: 'Not connected to the desktop.',
+			openDatabaseFailed: 'Failed to open the sync database.',
+			refreshFilesFailed: 'Failed to refresh remote files.',
+			removeTrustedFailed: 'Failed to remove trusted device.',
+			serverError: 'The desktop sync service returned an error.',
+			unexpectedResponse: 'The desktop returned an unexpected response.',
+			writeFailed: 'Failed to write remote file.',
+		},
 		localDevice: {
 			defaultName: 'Madora Phone',
 			detail:
@@ -485,7 +587,7 @@ const en = {
 			detail: 'Scan the desktop QR to pair over the local network.',
 			eyebrow: 'Devices',
 			instructions:
-				'Open Madora desktop -> Settings -> Sync, then scan the QR code shown there.',
+				'Open Madora desktop → Settings → Sync, then scan the QR code shown there.',
 			pair: 'Pair from QR',
 			ready: 'Ready to pair',
 			repair: 'Re-pair via QR',

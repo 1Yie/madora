@@ -8,6 +8,7 @@ import {
 	type ReactNode,
 } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import i18n from '@/i18n';
 import {
 	createProviderConfigMap,
 	DEFAULT_PROVIDER,
@@ -220,7 +221,7 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 		async (apiKey: string) => {
 			const trimmedApiKey = apiKey.trim();
 			if (trimmedApiKey.length === 0) {
-				throw new Error('API key is required.');
+				throw new Error(i18n.t('settings.editor.toasts.apiKeyRequired'));
 			}
 			await SecureStore.setItemAsync(
 				keyFor(API_KEY_PREFIX, provider),

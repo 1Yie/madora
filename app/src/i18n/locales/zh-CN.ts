@@ -10,6 +10,10 @@ const zhCN = {
 			refresh: '刷新',
 			save: '保存',
 		},
+		feedback: {
+			error: '错误',
+			success: '成功',
+		},
 		labels: {
 			apiKey: 'API Key',
 			apiUrl: 'API 地址',
@@ -46,6 +50,48 @@ const zhCN = {
 			ko: '한국어',
 			system: '跟随设备',
 			zhCN: '简体中文',
+		},
+	},
+	onboarding: {
+		footnote: '语言、保存方式、同步和 AI Provider 都可以稍后在设置里修改。',
+		languageTitle: '选择语言',
+		nextAction: '下一步',
+		primaryAction: '进入工作区',
+		skipAction: '跳过',
+		stepLabel: '{{current}} / {{total}}',
+		taglineBottom: 'powered by AI',
+		taglineTop: 'Markdown editing,',
+		title: '欢迎使用 Madora',
+		controls: {
+			manualSave: {
+				description: '显示右上角保存胶囊，离开未保存工作区前先确认。',
+				title: '手动保存',
+			},
+		},
+		items: {
+			ai: {
+				detail: '需要写作时自动补全文本时，可以配置本机 AI Provider。',
+				hint: '进入 设置 → AI，可以选择 Provider、模型、接口地址和 API Key。',
+				title: 'AI 补全',
+			},
+			sync: {
+				detail: '通过局域网配对 Madora 桌面端，继续浏览远程工作区。',
+				hint: '进入 设置 → 同步，扫描桌面端二维码；后续也可以在这里重连。',
+				title: '桌面端同步',
+			},
+			workspace: {
+				detail: '打开本地文件夹，创建 Markdown 文件，并在手机上继续编辑。',
+				hint: '在文件树里选择文件夹、创建文件，并在编辑和预览之间切换。',
+				title: '本地工作区',
+			},
+		},
+		ready: {
+			detail:
+				'这些设置之后都能在设置里修改。可以先打开文件夹，或配对桌面端同步。',
+			title: '准备开始写作',
+		},
+		summary: {
+			title: '已选择的设置',
 		},
 	},
 	settings: {
@@ -181,6 +227,7 @@ const zhCN = {
 			toasts: {
 				apiKeyDeleted: '已从系统安全存储删除 API Key',
 				apiKeyDeleteFailed: '删除 API Key 失败',
+				apiKeyRequired: '请先输入 API Key',
 				apiKeySaved: 'API Key 已保存到系统安全存储',
 				apiKeySaveFailed: '保存 API Key 失败',
 			},
@@ -272,6 +319,10 @@ const zhCN = {
 		title: '文件树',
 	},
 	workspace: {
+		actions: {
+			connectDesktop: '连接桌面端',
+			openRemote: '打开远程',
+		},
 		empty: {
 			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
 			title: '还未选择文件夹',
@@ -288,6 +339,7 @@ const zhCN = {
 			detail: '请前往远程文件夹选择一个文件。',
 			title: '还未选择远程文件',
 		},
+		remoteFallbackName: '桌面端工作区',
 		unsavedChanges: {
 			cancel: '继续编辑',
 			continueSwitch: '继续切换',
@@ -381,6 +433,34 @@ const zhCN = {
 			followSystem: '跟随系统',
 		},
 	},
+	editor: {
+		errors: {
+			cannotResolveParentDirectory: '无法解析文件所在文件夹。',
+			createFileFailed: '创建文件失败。',
+			createFolderFailed: '创建文件夹失败。',
+			deleteItemFailed: '删除项目失败。',
+			emptyFileName: '文件名不能为空。',
+			fileAlreadyExists: '已存在同名文件。',
+			localFolderRequiredForFiles: '请先打开本地文件夹，再在这里创建文件。',
+			localFolderRequiredForFolders: '请先打开本地文件夹，再在这里创建文件夹。',
+			notConnected: '未连接到桌面端。',
+			openFolderFailed: '打开文件夹失败。',
+			openLocalFileFailed: '打开本地文件失败。',
+			openLocalFolderFailed: '打开本地文件夹失败。',
+			openRemoteWorkspaceFailed: '打开远程工作区失败。',
+			pasteFileFailed: '粘贴文件失败。',
+			readFileFailed: '读取文件失败。',
+			refreshFilesFailed: '刷新文件失败。',
+			remoteNoFiles: '远程工作区没有返回文件。',
+			remoteNoRoot: '远程工作区没有返回根文件夹。',
+			remoteWorkspaceRequired: '请先在桌面端打开工作区，再同步远程文件。',
+			renameFileFailed: '重命名本地文件失败。',
+			saveFileFailed: '保存文件失败。',
+			singlePathSegment: '文件名不能包含路径分隔符。',
+			unexpectedResponse: '桌面端返回了无法识别的响应。',
+			writeFailed: '写入文件失败。',
+		},
+	},
 	markdownEditor: {
 		loading: '正在加载 CodeMirror',
 		loadFailed: 'CodeMirror 编辑器加载失败。',
@@ -427,6 +507,19 @@ const zhCN = {
 			title: '连接',
 		},
 		emptyTrusted: '还没有配对设备。',
+		errors: {
+			authError: '桌面端认证失败，请重新扫码配对。',
+			connectionClosed: '桌面端连接已断开。',
+			connectionReset: '桌面端连接已重置。',
+			invalidQr: '无效的配对二维码。',
+			notConnected: '尚未连接到桌面端。',
+			openDatabaseFailed: '打开同步数据库失败。',
+			refreshFilesFailed: '刷新远程文件失败。',
+			removeTrustedFailed: '移除信任设备失败。',
+			serverError: '桌面端同步服务返回错误。',
+			unexpectedResponse: '桌面端返回了无法识别的响应。',
+			writeFailed: '写入远程文件失败。',
+		},
 		localDevice: {
 			defaultName: 'Madora 手机',
 			detail: '这个名称会显示在桌面端的同步状态和远程编辑提示中。',
@@ -438,7 +531,7 @@ const zhCN = {
 		pairing: {
 			detail: '扫描桌面端二维码，通过局域网完成配对。',
 			eyebrow: '设备',
-			instructions: '打开 Madora 桌面端 -> 设置 -> 同步。',
+			instructions: '打开 Madora 桌面端 → 设置 → 同步。',
 			pair: '扫码配对',
 			ready: '准备配对',
 			repair: '重新扫码',

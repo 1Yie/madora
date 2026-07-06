@@ -10,6 +10,10 @@ const ko = {
 			refresh: '새로고침',
 			save: '저장',
 		},
+		feedback: {
+			error: '오류',
+			success: '성공',
+		},
 		labels: {
 			apiKey: 'API Key',
 			apiUrl: 'API URL',
@@ -47,6 +51,53 @@ const ko = {
 			ko: '한국어',
 			system: '기기 따르기',
 			zhCN: '简体中文',
+		},
+	},
+	onboarding: {
+		footnote:
+			'언어, 저장 방식, 동기화, AI Provider는 나중에 설정에서 변경할 수 있습니다.',
+		languageTitle: '언어 선택',
+		nextAction: '다음',
+		primaryAction: '작업 공간으로 이동',
+		skipAction: '건너뛰기',
+		stepLabel: '{{current}} / {{total}}',
+		taglineBottom: 'powered by AI',
+		taglineTop: 'Markdown editing,',
+		title: 'Madora에 오신 것을 환영합니다',
+		controls: {
+			manualSave: {
+				description:
+					'저장 캡슐을 표시하고 저장되지 않은 작업 공간을 떠나기 전에 확인합니다.',
+				title: '수동 저장',
+			},
+		},
+		items: {
+			ai: {
+				detail:
+					'작성 중 인라인 완성이 필요할 때 이 기기의 AI Provider를 설정할 수 있습니다.',
+				hint: '설정 → AI에서 Provider, 모델, 엔드포인트, API Key를 선택할 수 있습니다.',
+				title: 'AI 완성',
+			},
+			sync: {
+				detail:
+					'로컬 네트워크에서 Madora 데스크톱과 페어링해 원격 작업 공간을 탐색합니다.',
+				hint: '설정 → 동기화에서 데스크톱 QR 코드를 스캔하고 나중에 다시 연결할 수 있습니다.',
+				title: '데스크톱 동기화',
+			},
+			workspace: {
+				detail:
+					'로컬 폴더를 열고 Markdown 파일을 만든 뒤 이 기기에서 계속 편집합니다.',
+				hint: '파일 트리에서 폴더를 선택하고 파일을 만들며 편집/미리보기를 전환할 수 있습니다.',
+				title: '로컬 작업 공간',
+			},
+		},
+		ready: {
+			detail:
+				'이 설정은 나중에 설정에서 변경할 수 있습니다. 먼저 폴더를 열거나 데스크톱 동기화를 페어링하세요.',
+			title: '작성할 준비가 되었습니다',
+		},
+		summary: {
+			title: '선택한 설정',
 		},
 	},
 	settings: {
@@ -205,6 +256,7 @@ const ko = {
 			toasts: {
 				apiKeyDeleted: '시스템 보안 저장소에서 API Key를 삭제했습니다',
 				apiKeyDeleteFailed: 'API Key 삭제에 실패했습니다',
+				apiKeyRequired: '먼저 API Key를 입력하세요',
 				apiKeySaved: '시스템 보안 저장소에 API Key를 저장했습니다',
 				apiKeySaveFailed: 'API Key 저장에 실패했습니다',
 			},
@@ -298,6 +350,10 @@ const ko = {
 		title: '파일 트리',
 	},
 	workspace: {
+		actions: {
+			connectDesktop: '데스크톱 연결',
+			openRemote: '원격 열기',
+		},
 		empty: {
 			detail:
 				'먼저 로컬 폴더를 연 뒤, 그 안에서 Markdown 파일을 만들거나 선택하세요.',
@@ -315,6 +371,7 @@ const ko = {
 			detail: '원격 폴더에서 파일을 선택하세요.',
 			title: '선택된 원격 파일이 없습니다',
 		},
+		remoteFallbackName: '데스크톱 워크스페이스',
 		unsavedChanges: {
 			cancel: '계속 편집',
 			continueSwitch: '계속 전환',
@@ -415,6 +472,37 @@ const ko = {
 			followSystem: '시스템 따르기',
 		},
 	},
+	editor: {
+		errors: {
+			cannotResolveParentDirectory: '파일의 상위 폴더를 확인할 수 없습니다.',
+			createFileFailed: '파일을 만들지 못했습니다.',
+			createFolderFailed: '폴더를 만들지 못했습니다.',
+			deleteItemFailed: '항목을 삭제하지 못했습니다.',
+			emptyFileName: '파일 이름을 입력하세요.',
+			fileAlreadyExists: '같은 이름의 파일이 이미 있습니다.',
+			localFolderRequiredForFiles:
+				'여기에서 파일을 만들려면 먼저 로컬 폴더를 여세요.',
+			localFolderRequiredForFolders:
+				'여기에서 폴더를 만들려면 먼저 로컬 폴더를 여세요.',
+			notConnected: '데스크톱에 연결되어 있지 않습니다.',
+			openFolderFailed: '폴더를 열지 못했습니다.',
+			openLocalFileFailed: '로컬 파일을 열지 못했습니다.',
+			openLocalFolderFailed: '로컬 폴더를 열지 못했습니다.',
+			openRemoteWorkspaceFailed: '원격 작업 공간을 열지 못했습니다.',
+			pasteFileFailed: '파일을 붙여넣지 못했습니다.',
+			readFileFailed: '파일을 읽지 못했습니다.',
+			refreshFilesFailed: '파일을 새로 고치지 못했습니다.',
+			remoteNoFiles: '원격 작업 공간에서 파일을 반환하지 않았습니다.',
+			remoteNoRoot: '원격 작업 공간에서 루트 폴더를 반환하지 않았습니다.',
+			remoteWorkspaceRequired:
+				'원격 파일을 동기화하기 전에 데스크톱에서 작업 공간을 여세요.',
+			renameFileFailed: '로컬 파일 이름을 변경하지 못했습니다.',
+			saveFileFailed: '파일을 저장하지 못했습니다.',
+			singlePathSegment: '파일 이름에는 경로 구분자를 사용할 수 없습니다.',
+			unexpectedResponse: '데스크톱에서 예상하지 못한 응답을 반환했습니다.',
+			writeFailed: '파일을 쓰지 못했습니다.',
+		},
+	},
 	markdownEditor: {
 		loading: 'CodeMirror 불러오는 중',
 		loadFailed: 'CodeMirror 편집기를 불러오지 못했습니다.',
@@ -462,6 +550,19 @@ const ko = {
 			title: '연결',
 		},
 		emptyTrusted: '아직 페어링된 기기가 없습니다.',
+		errors: {
+			authError: '데스크톱 인증에 실패했습니다. QR로 다시 페어링하세요.',
+			connectionClosed: '데스크톱 연결이 닫혔습니다.',
+			connectionReset: '데스크톱 연결이 재설정되었습니다.',
+			invalidQr: '잘못된 페어링 QR 코드입니다.',
+			notConnected: '데스크톱에 연결되어 있지 않습니다.',
+			openDatabaseFailed: '동기화 데이터베이스를 열지 못했습니다.',
+			refreshFilesFailed: '원격 파일을 새로고침하지 못했습니다.',
+			removeTrustedFailed: '신뢰할 수 있는 기기를 제거하지 못했습니다.',
+			serverError: '데스크톱 동기화 서비스에서 오류를 반환했습니다.',
+			unexpectedResponse: '데스크톱에서 예상하지 못한 응답을 반환했습니다.',
+			writeFailed: '원격 파일을 쓰지 못했습니다.',
+		},
 		localDevice: {
 			defaultName: 'Madora Phone',
 			detail: '이 이름은 데스크톱 동기화 상태와 원격 편집 표시에서 사용됩니다.',
