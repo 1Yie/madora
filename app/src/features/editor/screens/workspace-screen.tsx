@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
+	BackHandler,
 	DeviceEventEmitter,
 	Keyboard,
 	PressableProps,
@@ -32,6 +33,8 @@ import {
 	Settings,
 	Trash2,
 	X,
+	Save,
+	AlertTriangle,
 } from 'lucide-react-native';
 
 import { MarkdownEditor } from '../components/markdown-editor';
@@ -51,15 +54,22 @@ import type {
 } from '../types';
 import {
 	WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
+	WORKSPACE_LEAVE_REQUEST_EVENT,
+	WORKSPACE_ROUTE_SWITCH_REQUEST_EVENT,
 	WORKSPACE_TAB_REQUEST_EVENT,
 	WORKSPACE_TAB_STATE_EVENT,
 	type WorkspaceTab,
 } from '../lib/workspace-tab-events';
 import {
+	shouldPromptUnsavedAction,
+	type UnsavedPromptIntent,
+} from '../lib/unsaved-switch-prompt';
+import {
 	APP_THEME_BACKGROUND_COLORS,
 	useAppSettings,
 	useAppThemePalette,
 	useResolvedThemePreference,
+	type ResolvedThemePreference,
 } from '@/features/settings';
 import { useMadoraSync } from '@/features/madora-sync';
 import type { EditorStateMessage } from '@/features/madora-sync/lib/protocol';
@@ -85,14 +95,17 @@ const WORKSPACE_TOAST_DURATION_MS = 2200;
 const LOCAL_EDIT_PROTECTION_MS = 1_200;
 const REMOTE_APPLY_LOADING_MS = 420;
 
+type UnsavedDialogIntent = UnsavedPromptIntent;
+
 export function WorkspaceScreen() {
 	const insets = useSafeAreaInsets();
 	const { t } = useTranslation();
 	const resolvedTheme = useResolvedThemePreference();
-	const { editorFontSize } = useAppSettings();
+	const { editorFontSize, saveMode } = useAppSettings();
 	const [activeTab, setActiveTab] = useState<WorkspaceTab>('editor');
 	const [keyboardHeight, setKeyboardHeight] = useState(0);
 	const {
+		activeDocumentDirty,
 		bookmarkedDocumentIds,
 		workspaceMode,
 		switchWorkspaceMode,
@@ -102,11 +115,14 @@ export function WorkspaceScreen() {
 		createLocalDirectory,
 		createLocalFile,
 		deleteSelectedEntry,
+		discardUnsavedDocuments,
 		documents,
 		expandedDirectoryPaths,
 		fileTree,
 		focusedTreeNode,
+		hasUnsavedDocuments,
 		isFocusedTreeNodeBookmarked,
+		isSavingActiveDocument,
 		openLocalFolder,
 		openRemoteWorkspace,
 		pasteCopiedFile,
@@ -114,6 +130,8 @@ export function WorkspaceScreen() {
 		renameSelectedFile,
 		refreshFileTree,
 		requestInlineCompletion,
+		saveActiveDocument,
+		saveAllUnsavedDocuments,
 		selectDocument,
 		selectTreeNode,
 		selectedDocument,
@@ -147,6 +165,10 @@ export function WorkspaceScreen() {
 	const remoteApplyLoadingTimerRef = useRef<ReturnType<
 		typeof setTimeout
 	> | null>(null);
+	const [unsavedDialogIntent, setUnsavedDialogIntent] =
+		useState<UnsavedDialogIntent | null>(null);
+	const pendingNavigationRef = useRef<(() => void) | null>(null);
+	const switchPromptAcknowledgedRef = useRef(false);
 
 	const editorTopPadding = insets.top;
 	const editorBottomPadding =
@@ -154,6 +176,114 @@ export function WorkspaceScreen() {
 		(keyboardHeight > 0
 			? keyboardHeight + EDITOR_KEYBOARD_CONTROLS_BOTTOM_PADDING
 			: EDITOR_FLOATING_CONTROLS_BOTTOM_PADDING);
+	const clearAcknowledgedSwitchDirtyKeys = useCallback(() => {
+		switchPromptAcknowledgedRef.current = false;
+	}, []);
+
+	const promptUnsavedBefore = useCallback(
+		(intent: UnsavedDialogIntent, continueNavigation: () => void) => {
+			const shouldPrompt = shouldPromptUnsavedAction({
+				activeDocumentDirty,
+				hasUnsavedDocuments,
+				intent,
+				saveMode,
+				switchPromptAcknowledged: switchPromptAcknowledgedRef.current,
+			});
+			if (!shouldPrompt) {
+				continueNavigation();
+				return;
+			}
+			pendingNavigationRef.current = continueNavigation;
+			setUnsavedDialogIntent(intent);
+		},
+		[activeDocumentDirty, hasUnsavedDocuments, saveMode]
+	);
+
+	const checkUnsavedBeforeNavigate = useCallback(
+		(continueNavigation: () => void) => {
+			promptUnsavedBefore('leave', continueNavigation);
+		},
+		[promptUnsavedBefore]
+	);
+
+	const checkUnsavedBeforeSwitch = useCallback(
+		(continueNavigation: () => void) => {
+			promptUnsavedBefore('switch', continueNavigation);
+		},
+		[promptUnsavedBefore]
+	);
+
+	const handleSaveActiveDocument = useCallback(() => {
+		void saveActiveDocument().then((saved) => {
+			if (saved) {
+				if (workspaceSource.kind === 'remote' && selectedDocument) {
+					publishEditorState({
+						column: null,
+						content: selectedDocument.content,
+						contentHash: hashEditorContent(selectedDocument.content),
+						cursorIndex: null,
+						editing: activeTab === 'editor',
+						filePath: selectedDocument.path,
+						line: null,
+						title: selectedDocument.title,
+					});
+				}
+				showWorkspaceToast(
+					showToast,
+					t('workspace.feedback.savedTitle'),
+					t('workspace.feedback.savedDetail')
+				);
+			}
+		});
+	}, [
+		activeTab,
+		publishEditorState,
+		saveActiveDocument,
+		selectedDocument,
+		showToast,
+		t,
+		workspaceSource.kind,
+	]);
+
+	const handleUnsavedSaveAndExit = useCallback(() => {
+		const pending = pendingNavigationRef.current;
+		setUnsavedDialogIntent(null);
+		pendingNavigationRef.current = null;
+		void saveAllUnsavedDocuments().then((saved) => {
+			if (saved) {
+				pending?.();
+				return;
+			}
+			setUnsavedDialogIntent('leave');
+			pendingNavigationRef.current = pending;
+		});
+	}, [saveAllUnsavedDocuments]);
+
+	const handleUnsavedDiscardAndExit = useCallback(() => {
+		const pending = pendingNavigationRef.current;
+		setUnsavedDialogIntent(null);
+		pendingNavigationRef.current = null;
+		discardUnsavedDocuments();
+		pending?.();
+	}, [discardUnsavedDocuments]);
+
+	const handleUnsavedContinueSwitch = useCallback(() => {
+		const pending = pendingNavigationRef.current;
+		switchPromptAcknowledgedRef.current = true;
+		setUnsavedDialogIntent(null);
+		pendingNavigationRef.current = null;
+		pending?.();
+	}, []);
+
+	const handleUnsavedCancelExit = useCallback(() => {
+		setUnsavedDialogIntent(null);
+		pendingNavigationRef.current = null;
+	}, []);
+
+	useEffect(() => {
+		if (activeDocumentDirty || !selectedDocument) return;
+		clearAcknowledgedSwitchDirtyKeys();
+	}, [activeDocumentDirty, clearAcknowledgedSwitchDirtyKeys, selectedDocument]);
 
 	const showRemoteEditorSyncLoading = useCallback(() => {
 		setEditorSyncLoading(true);
@@ -171,13 +301,51 @@ export function WorkspaceScreen() {
 			WORKSPACE_TAB_REQUEST_EVENT,
 			(tab) => {
 				if (tab === 'editor' || tab === 'fileTree') {
-					setActiveTab(tab);
+					if (tab === activeTab) {
+						if (tab === 'editor') {
+							clearAcknowledgedSwitchDirtyKeys();
+						}
+						return;
+					}
+					checkUnsavedBeforeSwitch(() => setActiveTab(tab));
 				}
 			}
 		);
 
 		return () => subscription.remove();
-	}, []);
+	}, [activeTab, checkUnsavedBeforeSwitch, clearAcknowledgedSwitchDirtyKeys]);
+
+	useEffect(() => {
+		if (activeTab === 'editor') {
+			clearAcknowledgedSwitchDirtyKeys();
+		}
+	}, [activeTab, clearAcknowledgedSwitchDirtyKeys]);
+
+	useEffect(() => {
+		const subscription = DeviceEventEmitter.addListener(
+			WORKSPACE_LEAVE_REQUEST_EVENT,
+			(continueNavigation) => {
+				if (typeof continueNavigation === 'function') {
+					checkUnsavedBeforeNavigate(continueNavigation);
+				}
+			}
+		);
+
+		return () => subscription.remove();
+	}, [checkUnsavedBeforeNavigate]);
+
+	useEffect(() => {
+		const subscription = DeviceEventEmitter.addListener(
+			WORKSPACE_ROUTE_SWITCH_REQUEST_EVENT,
+			(continueNavigation) => {
+				if (typeof continueNavigation === 'function') {
+					checkUnsavedBeforeSwitch(continueNavigation);
+				}
+			}
+		);
+
+		return () => subscription.remove();
+	}, [checkUnsavedBeforeSwitch]);
 
 	useEffect(() => {
 		const showSubscription = Keyboard.addListener(
@@ -200,13 +368,42 @@ export function WorkspaceScreen() {
 		DeviceEventEmitter.emit(WORKSPACE_TAB_STATE_EVENT, activeTab);
 	}, [activeTab]);
 
+	useFocusEffect(
+		useCallback(() => {
+			const subscription = BackHandler.addEventListener(
+				'hardwareBackPress',
+				() => {
+					if (
+						(!hasUnsavedDocuments && !activeDocumentDirty) ||
+						saveMode !== 'manual'
+					) {
+						return false;
+					}
+					if (unsavedDialogIntent) return true;
+					setUnsavedDialogIntent('leave');
+					pendingNavigationRef.current = () => {
+						BackHandler.exitApp();
+					};
+					return true;
+				}
+			);
+			return () => subscription.remove();
+		}, [
+			activeDocumentDirty,
+			hasUnsavedDocuments,
+			saveMode,
+			unsavedDialogIntent,
+		])
+	);
+
 	useEffect(() => {
 		DeviceEventEmitter.emit(
 			WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
 			createModalOpen ||
 				createFolderModalOpen ||
 				deleteDialogOpen ||
-				renameModalOpen
+				renameModalOpen ||
+				Boolean(unsavedDialogIntent)
 		);
 
 		return () => {
@@ -217,6 +414,7 @@ export function WorkspaceScreen() {
 		createModalOpen,
 		deleteDialogOpen,
 		renameModalOpen,
+		unsavedDialogIntent,
 	]);
 
 	useEffect(() => {
@@ -261,6 +459,7 @@ export function WorkspaceScreen() {
 	}, [
 		activeTab,
 		publishEditorState,
+		selectedDocument,
 		selectedDocument?.path,
 		selectedDocument?.title,
 		workspaceSource.kind,
@@ -338,10 +537,12 @@ export function WorkspaceScreen() {
 
 		pendingRemoteEditorStateRef.current = remoteEditorState;
 		updateSelectedDocumentContent(nextContent, {
+			markSaved: true,
 			skipRemoteWrite: true,
 		});
 	}, [
 		remoteEditorState,
+		selectedDocument,
 		selectedDocument?.content,
 		selectedDocument?.path,
 		showRemoteEditorSyncLoading,
@@ -369,6 +570,7 @@ export function WorkspaceScreen() {
 			}
 		});
 	}, [
+		selectedDocument,
 		selectedDocument?.content,
 		selectedDocument?.path,
 		showRemoteEditorSyncLoading,
@@ -400,9 +602,10 @@ export function WorkspaceScreen() {
 			) {
 				lastLocalEditAtRef.current = state.localEditedAt;
 			}
+			const publishedContent = saveMode === 'auto' ? state.content : null;
 			publishEditorState({
 				column: state.column,
-				content: state.content,
+				content: publishedContent,
 				contentHash: hashEditorContent(
 					state.content ?? selectedDocument?.content ?? ''
 				),
@@ -413,7 +616,7 @@ export function WorkspaceScreen() {
 				title: document.title,
 			});
 		},
-		[activeTab, publishEditorState, selectedDocument?.content]
+		[activeTab, publishEditorState, saveMode, selectedDocument?.content]
 	);
 
 	const handleSelectTreeNode = (documentId: string) => {
@@ -421,8 +624,15 @@ export function WorkspaceScreen() {
 	};
 
 	const handleOpenDocument = (documentId: string) => {
-		void selectDocument(documentId);
-		setActiveTab('editor');
+		if (documentId === selectedDocument?.id) {
+			if (activeTab === 'editor') return;
+			checkUnsavedBeforeSwitch(() => setActiveTab('editor'));
+			return;
+		}
+		checkUnsavedBeforeSwitch(() => {
+			void selectDocument(documentId);
+			setActiveTab('editor');
+		});
 	};
 
 	const handleOpenCreateFile = () => {
@@ -436,19 +646,31 @@ export function WorkspaceScreen() {
 	};
 
 	const handleOpenFolder = () => {
-		void openLocalFolder().then((opened) => {
-			if (opened) setActiveTab('fileTree');
+		checkUnsavedBeforeNavigate(() => {
+			void openLocalFolder().then((opened) => {
+				if (opened) setActiveTab('fileTree');
+			});
 		});
 	};
 
 	const handleOpenRemoteWorkspace = () => {
-		void openRemoteWorkspace().then((opened) => {
-			if (opened) setActiveTab('fileTree');
+		checkUnsavedBeforeNavigate(() => {
+			void openRemoteWorkspace().then((opened) => {
+				if (opened) setActiveTab('fileTree');
+			});
 		});
 	};
 
 	const handleOpenSyncSettings = () => {
-		router.push('/settings/sync');
+		checkUnsavedBeforeNavigate(() => {
+			router.push('/settings/sync');
+		});
+	};
+
+	const handleSwitchWorkspaceMode = (mode: 'local' | 'remote') => {
+		checkUnsavedBeforeNavigate(() => {
+			void switchWorkspaceMode(mode);
+		});
 	};
 
 	const handleOpenRename = () => {
@@ -501,7 +723,7 @@ export function WorkspaceScreen() {
 	const handlePasteFile = () => {
 		void pasteCopiedFile().then((pasted) => {
 			if (pasted) {
-				setActiveTab('editor');
+				checkUnsavedBeforeSwitch(() => setActiveTab('editor'));
 				showWorkspaceToast(
 					showToast,
 					t('fileTree.feedback.pastedTitle'),
@@ -536,23 +758,25 @@ export function WorkspaceScreen() {
 	};
 
 	const handleLocateSelectedDocument = () => {
-		const located = locateSelectedDocumentInTree();
-		if (located) {
-			setActiveTab('fileTree');
-			setLocateRequestId((current) => current + 1);
+		checkUnsavedBeforeSwitch(() => {
+			const located = locateSelectedDocumentInTree();
+			if (located) {
+				setActiveTab('fileTree');
+				setLocateRequestId((current) => current + 1);
+				showWorkspaceToast(
+					showToast,
+					t('fileTree.feedback.locatedTitle'),
+					t('fileTree.feedback.locatedDetail')
+				);
+				return;
+			}
+
 			showWorkspaceToast(
 				showToast,
-				t('fileTree.feedback.locatedTitle'),
-				t('fileTree.feedback.locatedDetail')
+				t('fileTree.feedback.locateUnavailableTitle'),
+				t('fileTree.feedback.locateUnavailableDetail')
 			);
-			return;
-		}
-
-		showWorkspaceToast(
-			showToast,
-			t('fileTree.feedback.locateUnavailableTitle'),
-			t('fileTree.feedback.locateUnavailableDetail')
-		);
+		});
 	};
 
 	const handleToggleBookmark = () => {
@@ -624,7 +848,7 @@ export function WorkspaceScreen() {
 						selectedTreeNodePath={selectedTreeNodePath}
 						workspaceSource={workspaceSource}
 						workspaceMode={workspaceMode}
-						switchWorkspaceMode={switchWorkspaceMode}
+						switchWorkspaceMode={handleSwitchWorkspaceMode}
 					/>
 				</View>
 
@@ -638,20 +862,30 @@ export function WorkspaceScreen() {
 					}}
 				>
 					{selectedDocument ? (
-						<MarkdownEditor
-							contentBottomPadding={editorBottomPadding}
-							contentTopPadding={editorTopPadding}
-							filePath={selectedDocument.path}
-							fontSize={editorFontSize}
-							theme={resolvedTheme}
-							title={selectedDocument.title}
-							value={selectedDocument.content}
-							onChange={updateSelectedDocumentContent}
-							onEditorStateChange={handleEditorStateChange}
-							onRequestCompletion={requestInlineCompletion}
-							remoteEditorState={visibleRemoteEditorState}
-							syncShowingLoader={editorSyncLoading}
-						/>
+						<>
+							<MarkdownEditor
+								contentBottomPadding={editorBottomPadding}
+								contentTopPadding={editorTopPadding}
+								filePath={selectedDocument.path}
+								fontSize={editorFontSize}
+								onSave={handleSaveActiveDocument}
+								theme={resolvedTheme}
+								title={selectedDocument.title}
+								value={selectedDocument.content}
+								onChange={updateSelectedDocumentContent}
+								onEditorStateChange={handleEditorStateChange}
+								onRequestCompletion={requestInlineCompletion}
+								remoteEditorState={visibleRemoteEditorState}
+								syncShowingLoader={editorSyncLoading}
+							/>
+							{saveMode === 'manual' && activeDocumentDirty ? (
+								<SaveCapsule
+									insetsTop={insets.top}
+									saving={isSavingActiveDocument}
+									onPress={handleSaveActiveDocument}
+								/>
+							) : null}
+						</>
 					) : (
 						<EmptyEditorState
 							canCreateFile={workspaceSource.kind === 'directory'}
@@ -701,6 +935,14 @@ export function WorkspaceScreen() {
 				isOpen={deleteDialogOpen}
 				onClose={() => setDeleteDialogOpen(false)}
 				onConfirm={handleDeleteEntry}
+			/>
+			<UnsavedExitDialog
+				intent={unsavedDialogIntent ?? 'leave'}
+				isOpen={Boolean(unsavedDialogIntent)}
+				onCancel={handleUnsavedCancelExit}
+				onContinue={handleUnsavedContinueSwitch}
+				onDiscard={handleUnsavedDiscardAndExit}
+				onSave={handleUnsavedSaveAndExit}
 			/>
 		</View>
 	);
@@ -1918,6 +2160,210 @@ function DeleteEntryDialog({
 				{t('fileTree.delete.detail', { name: entryName })}
 			</Text>
 		</NativeModal>
+	);
+}
+
+const SAVE_CAPSULE_TOP_OFFSET = 8;
+const SAVE_CAPSULE_RIGHT_OFFSET = 16;
+type SaveCapsulePalette = {
+	borderColor: string;
+	mutedTextColor: string;
+	surfaceColor: string;
+	textColor: string;
+};
+
+function SaveCapsule({
+	insetsTop,
+	saving,
+	onPress,
+}: {
+	insetsTop: number;
+	saving: boolean;
+	onPress: () => void;
+}) {
+	const { t } = useTranslation();
+	const resolvedTheme = useResolvedThemePreference();
+	const palette = getSaveCapsulePalette(resolvedTheme);
+
+	return (
+		<View
+			pointerEvents="box-none"
+			className="absolute"
+			style={{
+				top: insetsTop + SAVE_CAPSULE_TOP_OFFSET,
+				right: SAVE_CAPSULE_RIGHT_OFFSET,
+				zIndex: 20,
+			}}
+		>
+			<View
+				className="rounded-full p-1 shadow-lg shadow-black/25"
+				style={{
+					backgroundColor: palette.surfaceColor,
+					borderColor: palette.borderColor,
+					borderWidth: 1,
+					opacity: saving ? 0.7 : 1,
+				}}
+			>
+				<Pressable
+					accessibilityLabel={t('markdownEditor.saveCapsule.save')}
+					disabled={saving}
+					onPress={onPress}
+					className="flex-row items-center gap-1.5 rounded-full px-3 py-1"
+				>
+					{saving ? (
+						<Spinner color={palette.textColor} size="small" />
+					) : (
+						<Save color={palette.textColor} size={14} strokeWidth={2.2} />
+					)}
+					<Text
+						className="text-[12px]"
+						style={{
+							color: saving ? palette.mutedTextColor : palette.textColor,
+						}}
+					>
+						{saving
+							? t('markdownEditor.saveCapsule.saving')
+							: t('markdownEditor.saveCapsule.save')}
+					</Text>
+				</Pressable>
+			</View>
+		</View>
+	);
+}
+
+function getSaveCapsulePalette(
+	theme: ResolvedThemePreference
+): SaveCapsulePalette {
+	if (theme === 'dark') {
+		return {
+			borderColor: 'rgba(255, 255, 255, 0.08)',
+			mutedTextColor: 'rgba(245, 245, 245, 0.65)',
+			surfaceColor: '#1a1a1a',
+			textColor: '#f5f5f5',
+		};
+	}
+
+	return {
+		borderColor: 'rgba(17, 24, 39, 0.08)',
+		mutedTextColor: 'rgba(17, 24, 39, 0.58)',
+		surfaceColor: '#ffffff',
+		textColor: '#111827',
+	};
+}
+
+function UnsavedExitDialog({
+	intent,
+	isOpen,
+	onCancel,
+	onContinue,
+	onDiscard,
+	onSave,
+}: {
+	intent: UnsavedDialogIntent;
+	isOpen: boolean;
+	onCancel: () => void;
+	onContinue: () => void;
+	onDiscard: () => void;
+	onSave: () => void;
+}) {
+	const { t } = useTranslation();
+	const palette = useAppThemePalette();
+	const isSwitchIntent = intent === 'switch';
+
+	return (
+		<NativeModal
+			isOpen={isOpen}
+			title={t('workspace.unsavedChanges.title')}
+			onClose={onCancel}
+			footer={
+				<View className="flex-row flex-wrap justify-end gap-2">
+					<UnsavedExitDialogButton
+						label={t('workspace.unsavedChanges.cancel')}
+						onPress={onCancel}
+						palette={palette}
+						variant="outline"
+					/>
+					{isSwitchIntent ? (
+						<UnsavedExitDialogButton
+							label={t('workspace.unsavedChanges.continueSwitch')}
+							onPress={onContinue}
+							palette={palette}
+							variant="primary"
+						/>
+					) : (
+						<>
+							<UnsavedExitDialogButton
+								label={t('workspace.unsavedChanges.discard')}
+								onPress={onDiscard}
+								palette={palette}
+								variant="destructive"
+							/>
+							<UnsavedExitDialogButton
+								label={t('workspace.unsavedChanges.save')}
+								onPress={onSave}
+								palette={palette}
+								variant="primary"
+							/>
+						</>
+					)}
+				</View>
+			}
+		>
+			<View className="flex-row items-start gap-2.5">
+				<AlertTriangle
+					color={palette.mutedForeground}
+					size={16}
+					strokeWidth={2.2}
+				/>
+				<Text className="flex-1 text-[13px] leading-5 text-muted-foreground">
+					{t(
+						isSwitchIntent
+							? 'workspace.unsavedChanges.switchDetail'
+							: 'workspace.unsavedChanges.detail'
+					)}
+				</Text>
+			</View>
+		</NativeModal>
+	);
+}
+
+function UnsavedExitDialogButton({
+	label,
+	onPress,
+	palette,
+	variant,
+}: {
+	label: string;
+	onPress: () => void;
+	palette: ReturnType<typeof useAppThemePalette>;
+	variant: 'destructive' | 'outline' | 'primary';
+}) {
+	const isOutline = variant === 'outline';
+	const isDestructive = variant === 'destructive';
+	const destructiveColor = '#dc2626';
+	const backgroundColor = isOutline
+		? 'transparent'
+		: isDestructive
+			? destructiveColor
+			: palette.accentSurface;
+	const borderColor = isOutline ? palette.border : backgroundColor;
+	const textColor = isOutline
+		? palette.foreground
+		: isDestructive
+			? '#ffffff'
+			: palette.accentForeground;
+
+	return (
+		<Pressable
+			accessibilityLabel={label}
+			onPress={onPress}
+			className="min-h-10 items-center justify-center rounded-md border px-3.5"
+			style={{ backgroundColor, borderColor }}
+		>
+			<Text className="text-[13px] font-semibold" style={{ color: textColor }}>
+				{label}
+			</Text>
+		</Pressable>
 	);
 }
 

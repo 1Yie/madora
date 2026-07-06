@@ -6,6 +6,7 @@ const zhCN = {
 			close: '关闭',
 			delete: '删除',
 			disconnect: '断开连接',
+			discard: '不保存',
 			refresh: '刷新',
 			save: '保存',
 		},
@@ -275,6 +276,10 @@ const zhCN = {
 			detail: '先打开一个本地文件夹，之后在这里浏览和新建文件。',
 			title: '还未选择文件夹',
 		},
+		feedback: {
+			savedDetail: '文件已保存到磁盘。',
+			savedTitle: '已保存',
+		},
 		noSelection: {
 			detail: '请前往 文件树 选择或创建文件。',
 			title: '还未选择文件',
@@ -282,6 +287,15 @@ const zhCN = {
 		remoteNoSelection: {
 			detail: '请前往远程文件夹选择一个文件。',
 			title: '还未选择远程文件',
+		},
+		unsavedChanges: {
+			cancel: '继续编辑',
+			continueSwitch: '继续切换',
+			detail: '工作区中有文件尚未保存。退出前是否先保存？',
+			discard: '不保存退出',
+			save: '保存并退出',
+			switchDetail: '当前工作区有文件尚未保存，继续切换不会自动保存这些修改。',
+			title: '有未保存的修改',
 		},
 	},
 	settingsHome: {
@@ -376,6 +390,11 @@ const zhCN = {
 		completion: {
 			accept: '确认',
 			loading: '正在补全',
+		},
+		saveCapsule: {
+			save: '保存',
+			saving: '保存中',
+			saved: '已保存',
 		},
 		toolbar: {
 			copyFile: '复制文件',

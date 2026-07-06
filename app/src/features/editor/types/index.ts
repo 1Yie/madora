@@ -18,6 +18,11 @@ export interface EditorDocument {
 	content: string;
 	fileKind: EditorFileKind;
 	id: string;
+	/**
+	 * Snapshot of the content as last written to disk. Kept in memory only —
+	 * not persisted. Used to compute whether the document has unsaved changes.
+	 */
+	lastSavedContent?: string;
 	path: string;
 	readOnly: boolean;
 	relativePath: string;

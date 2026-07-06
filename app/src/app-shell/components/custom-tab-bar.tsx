@@ -25,6 +25,7 @@ import {
 	useMarkdownToolbar,
 	WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT,
 	WORKSPACE_EDITOR_OVERLAY_ACTIVE_EVENT,
+	WORKSPACE_ROUTE_SWITCH_REQUEST_EVENT,
 	WORKSPACE_TAB_REQUEST_EVENT,
 	WORKSPACE_TAB_STATE_EVENT,
 	type MarkdownCompletionControl,
@@ -113,8 +114,19 @@ export default function CustomTabBar({
 		}
 	};
 
+	const requestWorkspaceRouteSwitch = (continueNavigation: () => void) => {
+		if (activeRoute?.name !== 'index') {
+			continueNavigation();
+			return;
+		}
+
+		DeviceEventEmitter.emit(
+			WORKSPACE_ROUTE_SWITCH_REQUEST_EVENT,
+			continueNavigation
+		);
+	};
+
 	const selectWorkspaceTab = (tab: WorkspaceTab) => {
-		setWorkspaceTab(tab);
 		if (activeRoute?.name !== 'index') {
 			navigateToRoute('index');
 			setTimeout(
@@ -224,7 +236,7 @@ export default function CustomTabBar({
 			} else if (targetTab === 'fileTree') {
 				selectWorkspaceTab('fileTree');
 			} else if (targetTab === 'settings') {
-				navigateToRoute('settings');
+				requestWorkspaceRouteSwitch(() => navigateToRoute('settings'));
 			}
 		}
 	};
@@ -419,7 +431,9 @@ export default function CustomTabBar({
 									descriptors[settingsRoute.key].options.title ??
 									settingsRoute.name
 								}
-								onPress={() => navigateToRoute('settings')}
+								onPress={() =>
+									requestWorkspaceRouteSwitch(() => navigateToRoute('settings'))
+								}
 								palette={palette}
 								onLayout={handleLayout}
 								hasLayout={layouts[activeTabKey] !== undefined}

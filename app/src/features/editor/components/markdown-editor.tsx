@@ -26,6 +26,10 @@ import {
 	APP_THEME_BACKGROUND_COLORS,
 	type ResolvedThemePreference,
 } from '@/features/settings';
+import {
+	getInlineCompletionDecision,
+	shouldRequestInlineCompletion,
+} from '../lib/inline-completion-guard';
 import { WORKSPACE_EDITOR_INPUT_ACTIVE_EVENT } from '../lib/workspace-tab-events';
 import { useSetMarkdownToolbar } from '../providers/markdown-toolbar-provider';
 import { MarkdownPreview } from './markdown-preview';
@@ -39,6 +43,7 @@ type SaveMode = 'auto' | 'manual';
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 type EditorMode = 'edit' | 'preview';
 type RemoteEditorState = EditorStateMessage | null;
+const STALE_DOCUMENT_UPDATE_IGNORE_MS = 1_000;
 
 type FormatKey =
 	| 'bold'
@@ -107,6 +112,10 @@ export function MarkdownEditor({
 	const lastLocalValueRef = useRef(value);
 	const emittedValuesRef = useRef(new Set<string>());
 	const suppressContentUpdateRef = useRef<string | null>(null);
+	const staleContentUpdateRef = useRef<{
+		until: number;
+		value: string;
+	} | null>(null);
 	const latestRemoteCursorRef = useRef<{
 		content: string | null;
 		contentHash: string | null;
@@ -185,11 +194,21 @@ export function MarkdownEditor({
 		documentKeyRef.current = nextDocumentKey;
 
 		if (documentChanged) {
+			const previousValue = lastLocalValueRef.current;
 			lastLocalValueRef.current = value;
 			emittedValuesRef.current.clear();
 			suppressContentUpdateRef.current = value;
+			staleContentUpdateRef.current =
+				previousValue === value
+					? null
+					: {
+							until: Date.now() + STALE_DOCUMENT_UPDATE_IGNORE_MS,
+							value: previousValue,
+						};
 			setEditorContent(value);
-			void apiRef.current?.editor.resetValue(value);
+			if (apiRef.current) {
+				void resetEditorValueToEnd(apiRef.current, value);
+			}
 			clearCompletion();
 			return;
 		}
@@ -205,8 +224,11 @@ export function MarkdownEditor({
 
 		lastLocalValueRef.current = value;
 		suppressContentUpdateRef.current = value;
+		staleContentUpdateRef.current = null;
 		setEditorContent(value);
-		void apiRef.current?.editor.setValue(value);
+		if (apiRef.current) {
+			void setEditorValueToEnd(apiRef.current, value);
+		}
 		clearCompletion();
 	}, [clearCompletion, filePath, title, value]);
 
@@ -225,7 +247,12 @@ export function MarkdownEditor({
 	const scheduleCompletion = useCallback(
 		(nextValue: string) => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
-			if (!onRequestCompletion || nextValue.trim().length === 0) {
+			if (
+				!shouldRequestInlineCompletion({
+					canRequest: Boolean(onRequestCompletion),
+					value: nextValue,
+				})
+			) {
 				clearCompletion();
 				return;
 			}
@@ -259,24 +286,31 @@ export function MarkdownEditor({
 					} catch {
 						completion = '';
 					}
-					if (
-						requestSequenceRef.current !== sequence ||
-						lastLocalValueRef.current !== snapshot.value
-					) {
+					const latestCursor = await api.editor.getCursor('head');
+					const decision = getInlineCompletionDecision({
+						completion,
+						currentSequence: requestSequenceRef.current,
+						lastLocalValue: lastLocalValueRef.current,
+						latestCursorIndex: latestCursor.index,
+						requestSequence: sequence,
+						snapshotCursorIndex: snapshot.cursor,
+						snapshotValue: snapshot.value,
+					});
+
+					if (decision === 'stale') {
 						if (requestSequenceRef.current === sequence) {
 							completionAnchorRef.current = null;
 						}
 						return;
 					}
 
-					const latestCursor = await api.editor.getCursor('head');
-					if (latestCursor.index !== snapshot.cursor) {
+					if (decision === 'cursor-moved') {
 						completionAnchorRef.current = null;
 						setCompletionStatus('idle');
 						return;
 					}
 
-					if (completion.length > 0) {
+					if (decision === 'show') {
 						api.injectJavaScript(
 							`window.__madoraShowGhost && window.__madoraShowGhost(${JSON.stringify(completion)}); true;`
 						);
@@ -295,8 +329,17 @@ export function MarkdownEditor({
 	const handleContentUpdate = useCallback(
 		(nextValue: string) => {
 			const localEditedAt = Date.now();
+			const staleUpdate = staleContentUpdateRef.current;
+			if (staleUpdate && localEditedAt > staleUpdate.until) {
+				staleContentUpdateRef.current = null;
+			} else if (staleUpdate?.value === nextValue) {
+				clearCompletion();
+				return;
+			}
+
 			if (suppressContentUpdateRef.current === nextValue) {
 				suppressContentUpdateRef.current = null;
+				staleContentUpdateRef.current = null;
 				lastLocalValueRef.current = nextValue;
 				clearCompletion();
 				return;
@@ -377,9 +420,9 @@ export function MarkdownEditor({
 			void api.editor.setFontSize(fontSize);
 			void api.editor.registerShortcut('Mod-s', 'save');
 			void api.editor.registerShortcut('Escape', 'dismissCompletion');
-			void api.focus();
+			void moveCursorToEnd(api, value, { focus: true });
 		},
-		[contentBottomPadding, contentTopPadding, fontSize, theme]
+		[contentBottomPadding, contentTopPadding, fontSize, theme, value]
 	);
 
 	const handleShortcut = useCallback(
@@ -505,6 +548,12 @@ export function MarkdownEditor({
 
 		return { status: 'idle' };
 	}, [acceptCompletion, completionStatus, effectiveMode, t]);
+	const remoteCursorIndex = remoteEditorState?.cursorIndex ?? null;
+	const remoteCursorContent = remoteEditorState?.content ?? null;
+	const remoteCursorContentHash = remoteEditorState?.contentHash ?? null;
+	const remoteCursorDeviceName = remoteEditorState?.deviceName ?? null;
+	const remoteCursorFilePath = remoteEditorState?.filePath ?? null;
+	const remoteCursorUpdatedAt = remoteEditorState?.updatedAt ?? null;
 
 	useEffect(() => {
 		setMarkdownToolbar({
@@ -519,9 +568,8 @@ export function MarkdownEditor({
 	useEffect(() => {
 		const api = apiRef.current;
 		if (!api) return;
-		const cursorIndex = remoteEditorState?.cursorIndex ?? null;
-		if (cursorIndex === null) {
-			if (!remoteEditorState || remoteEditorState.filePath !== filePath) {
+		if (remoteCursorIndex === null) {
+			if (!remoteCursorFilePath || remoteCursorFilePath !== filePath) {
 				latestRemoteCursorRef.current = null;
 				api.injectJavaScript(
 					'window.__madoraSetRemoteCursor && window.__madoraSetRemoteCursor(null); true;'
@@ -531,10 +579,10 @@ export function MarkdownEditor({
 		}
 
 		latestRemoteCursorRef.current = {
-			content: remoteEditorState?.content ?? null,
-			contentHash: remoteEditorState?.contentHash ?? null,
-			label: remoteEditorState?.deviceName ?? null,
-			pos: cursorIndex,
+			content: remoteCursorContent,
+			contentHash: remoteCursorContentHash,
+			label: remoteCursorDeviceName,
+			pos: remoteCursorIndex,
 		};
 		api.injectJavaScript(
 			`window.__madoraSetRemoteCursor && window.__madoraSetRemoteCursor(${JSON.stringify(
@@ -543,12 +591,12 @@ export function MarkdownEditor({
 		);
 	}, [
 		filePath,
-		remoteEditorState?.cursorIndex,
-		remoteEditorState?.content,
-		remoteEditorState?.contentHash,
-		remoteEditorState?.deviceName,
-		remoteEditorState?.filePath,
-		remoteEditorState?.updatedAt,
+		remoteCursorContent,
+		remoteCursorContentHash,
+		remoteCursorDeviceName,
+		remoteCursorFilePath,
+		remoteCursorIndex,
+		remoteCursorUpdatedAt,
 	]);
 
 	useEffect(() => {
@@ -733,6 +781,29 @@ async function insertImage(api: WebViewAPI, placeholder: string) {
 async function focusEditor(api: WebViewAPI) {
 	await api.focus();
 	await api.editor.scrollToCursor(24);
+}
+
+async function moveCursorToEnd(
+	api: WebViewAPI,
+	value: string,
+	options: { focus?: boolean } = {}
+) {
+	const end = value.length;
+	await api.editor.setSelection(end, end);
+	if (options.focus) {
+		await api.focus();
+	}
+	await api.editor.scrollToCursor(24);
+}
+
+async function setEditorValueToEnd(api: WebViewAPI, value: string) {
+	await api.editor.setValue(value);
+	await moveCursorToEnd(api, value);
+}
+
+async function resetEditorValueToEnd(api: WebViewAPI, value: string) {
+	await api.editor.resetValue(value);
+	await moveCursorToEnd(api, value);
 }
 
 async function reportEditorState(

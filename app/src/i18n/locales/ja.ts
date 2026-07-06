@@ -6,6 +6,7 @@ const ja = {
 			close: '閉じる',
 			delete: '削除',
 			disconnect: '切断',
+			discard: '保存しない',
 			refresh: '更新',
 			save: '保存',
 		},
@@ -304,6 +305,10 @@ const ja = {
 				'先にローカルフォルダーを開き、その中の Markdown ファイルを作成または選択してください。',
 			title: 'ファイルが選択されていません',
 		},
+		feedback: {
+			savedDetail: 'ファイルをディスクに保存しました。',
+			savedTitle: '保存しました',
+		},
 		noSelection: {
 			detail: 'ファイルタブでファイルを選択または作成してください。',
 			title: 'ファイルが選択されていません',
@@ -311,6 +316,16 @@ const ja = {
 		remoteNoSelection: {
 			detail: 'リモートフォルダーでファイルを選択してください。',
 			title: 'リモートファイルが選択されていません',
+		},
+		unsavedChanges: {
+			cancel: '編集を続ける',
+			continueSwitch: '切り替えを続行',
+			detail: 'ワークスペースに未保存の変更があります。終了前に保存しますか？',
+			discard: '保存せずに終了',
+			save: '保存して終了',
+			switchDetail:
+				'ワークスペースに未保存の変更があります。続行すると保存せずに切り替えます。',
+			title: '未保存の変更',
 		},
 	},
 	settingsHome: {
@@ -411,6 +426,11 @@ const ja = {
 		completion: {
 			accept: '確定',
 			loading: '補完中',
+		},
+		saveCapsule: {
+			save: '保存',
+			saving: '保存中',
+			saved: '保存済み',
 		},
 		toolbar: {
 			copyFile: 'ファイルをコピー',

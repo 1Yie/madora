@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import {
 	AndroidScoped,
@@ -216,6 +216,7 @@ export async function readLocalFile(
 			content,
 			fileKind: getFileKind(title),
 			id: fileUri,
+			lastSavedContent: content,
 			path: fileUri,
 			readOnly: false,
 			relativePath: getRelativePath(rootUri ?? null, fileUri),
@@ -232,6 +233,7 @@ export async function readLocalFile(
 		content,
 		fileKind: getFileKind(title),
 		id: file.uri,
+		lastSavedContent: content,
 		path: file.uri,
 		readOnly: false,
 		relativePath: getRelativePath(rootUri ?? null, file.uri),
@@ -242,7 +244,16 @@ export async function readLocalFile(
 
 export async function writeLocalFile(uri: string, content: string) {
 	if (Platform.OS === 'android' && isContentUri(uri)) {
-		await NativeFileSystem.writeFile(uri, content);
+		const file = new File(uri);
+		const handle = file.open(FileMode.Truncate);
+		try {
+			const bytes = new TextEncoder().encode(content);
+			if (bytes.length > 0) {
+				handle.writeBytes(bytes);
+			}
+		} finally {
+			handle.close();
+		}
 		return;
 	}
 

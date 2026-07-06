@@ -8,6 +8,7 @@ import {
 	useState,
 	type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 import { generateCompletion, useAiSettings } from '@/features/ai';
@@ -29,6 +30,14 @@ import {
 	renameLocalFile,
 	writeLocalFile,
 } from '../services/local-file-system';
+import {
+	discardDocumentChanges,
+	getDirtyDocuments,
+	hasDirtyDocuments,
+	isDocumentDirty,
+	markDocumentSaved,
+	updateDocumentContent,
+} from '../lib/editor-document-state';
 import type {
 	EditorDocument,
 	EditorNode,
@@ -36,6 +45,7 @@ import type {
 } from '../types';
 
 type EditorContextValue = {
+	activeDocumentDirty: boolean;
 	bookmarkedDocumentIds: string[];
 	cancelCopiedFile: () => void;
 	copySelectedFile: () => Promise<boolean>;
@@ -46,12 +56,15 @@ type EditorContextValue = {
 	createLocalDirectory: (directoryName: string) => Promise<boolean>;
 	createLocalFile: (fileName: string) => Promise<boolean>;
 	deleteSelectedEntry: () => Promise<boolean>;
+	discardUnsavedDocuments: () => void;
 	documents: EditorDocument[];
 	errorMessage: string | null;
 	expandedDirectoryPaths: Set<string>;
 	fileTree: EditorNode[];
 	focusedTreeNode: EditorNode | null;
+	hasUnsavedDocuments: boolean;
 	isFocusedTreeNodeBookmarked: boolean;
+	isSavingActiveDocument: boolean;
 	openLocalFile: () => Promise<boolean>;
 	openLocalFolder: () => Promise<boolean>;
 	openRemoteWorkspace: () => Promise<boolean>;
@@ -63,6 +76,8 @@ type EditorContextValue = {
 	locateSelectedDocumentInTree: () => boolean;
 	renameSelectedFile: (nextName: string) => Promise<boolean>;
 	refreshFileTree: () => Promise<boolean>;
+	saveActiveDocument: () => Promise<boolean>;
+	saveAllUnsavedDocuments: () => Promise<boolean>;
 	selectDocument: (documentId: string) => Promise<void>;
 	selectTreeNode: (nodePath: string) => void;
 	selectedDocument: EditorDocument | null;
@@ -72,7 +87,7 @@ type EditorContextValue = {
 	toggleDirectoryExpanded: (directoryPath: string) => void;
 	updateSelectedDocumentContent: (
 		content: string,
-		options?: { skipRemoteWrite?: boolean }
+		options?: { markSaved?: boolean; skipRemoteWrite?: boolean }
 	) => void;
 	workspaceSource: EditorWorkspaceSource;
 	workspaceMode: 'local' | 'remote';
@@ -99,8 +114,13 @@ type PersistedWorkspace =
 	  };
 
 export function EditorProvider({ children }: { children: ReactNode }) {
-	const { refreshRemoteFileTree, readRemoteFile, pairedHost, connectionState } =
-		useMadoraSync();
+	const {
+		refreshRemoteFileTree,
+		readRemoteFile,
+		writeRemoteFile,
+		pairedHost,
+		connectionState,
+	} = useMadoraSync();
 	const aiSettings = useAiSettings();
 	const showErrorToast = useErrorToast();
 	const { saveMode } = useAppSettings();
@@ -132,6 +152,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		}
 	);
 	const [didHydrateWorkspace, setDidHydrateWorkspace] = useState(false);
+	const [isSavingActiveDocument, setIsSavingActiveDocument] = useState(false);
 	const loadingDirectoryPathsRef = useRef(new Set<string>());
 	const rememberedExpandedDirectoryPathsRef = useRef<{
 		local: Set<string>;
@@ -140,6 +161,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		local: new Set(),
 		remote: new Set(),
 	});
+	/**
+	 * Per-document write serialization. On Android (SAF content URIs) writes are
+	 * fully async via NativeFileSystem.writeFile; if we fire them
+	 * fire-and-forget on every keystroke, out-of-order completion leaves an
+	 * intermediate snapshot on disk — e.g. the user clears all text, but an
+	 * earlier in-flight write of a partial state lands last. Chaining each
+	 * document's writes onto this promise map guarantees the LAST edit wins.
+	 */
+	const writeQueueRef = useRef<Map<string, Promise<unknown>>>(new Map());
 
 	const selectedDocument = useMemo(
 		() =>
@@ -175,6 +205,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	const isFocusedTreeNodeBookmarked = Boolean(
 		focusedTreeNode?.kind === 'file' &&
 		bookmarkedDocumentIds.includes(focusedTreeNode.path)
+	);
+
+	const activeDocumentDirty = useMemo(() => {
+		return isDocumentDirty(selectedDocument);
+	}, [selectedDocument]);
+
+	const hasUnsavedDocuments = useMemo(
+		() => hasDirtyDocuments(documents),
+		[documents]
 	);
 
 	const persistWorkspace = useCallback(
@@ -713,6 +752,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 						content: remoteFile.content || '',
 						fileKind: node?.fileKind ?? 'text',
 						id: documentId,
+						lastSavedContent: remoteFile.content || '',
 						path: documentId,
 						readOnly: false,
 						relativePath:
@@ -826,33 +866,130 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		return () => clearTimeout(timeoutId);
 	}, [errorMessage, showErrorToast]);
 
+	/**
+	 * Write a single document's content and mark its `lastSavedContent` snapshot
+	 * so dirty-state tracking resets. Writes for the same document are serialized
+	 * so the most recent edit is always the last one to land.
+	 * Errors surface via `errorMessage`.
+	 */
+	const persistDocumentContent = useCallback(
+		(documentId: string, content: string): Promise<boolean> => {
+			const isRemoteDocument = workspaceSource.kind === 'remote';
+
+			const run = async (): Promise<boolean> => {
+				try {
+					if (isRemoteDocument) {
+						await writeRemoteFile(documentId, content);
+					} else {
+						await writeLocalFile(documentId, content);
+					}
+					setDocuments((current) =>
+						markDocumentSaved(current, documentId, content)
+					);
+					setErrorMessage(null);
+					return true;
+				} catch (error) {
+					setErrorMessage(getErrorMessage(error, 'Failed to save file'));
+					return false;
+				}
+			};
+
+			const previous =
+				writeQueueRef.current.get(documentId) ?? Promise.resolve();
+			const next = previous.then(run, run);
+			writeQueueRef.current.set(documentId, next);
+			// Drop the entry once settled so the map doesn't grow unbounded.
+			next.finally(() => {
+				if (writeQueueRef.current.get(documentId) === next) {
+					writeQueueRef.current.delete(documentId);
+				}
+			});
+			return next;
+		},
+		[workspaceSource.kind, writeRemoteFile]
+	);
+
+	const saveActiveDocument = useCallback(async (): Promise<boolean> => {
+		if (!selectedDocument) return false;
+		if (!activeDocumentDirty) return true;
+
+		setIsSavingActiveDocument(true);
+		try {
+			return await persistDocumentContent(
+				selectedDocument.id,
+				selectedDocument.content
+			);
+		} finally {
+			setIsSavingActiveDocument(false);
+		}
+	}, [activeDocumentDirty, persistDocumentContent, selectedDocument]);
+
+	const saveAllUnsavedDocuments = useCallback(async (): Promise<boolean> => {
+		const dirtyDocuments = getDirtyDocuments(documents);
+
+		let allSucceeded = true;
+		for (const document of dirtyDocuments) {
+			const succeeded = await persistDocumentContent(
+				document.id,
+				document.content
+			);
+			if (!succeeded) allSucceeded = false;
+		}
+		return allSucceeded;
+	}, [documents, persistDocumentContent]);
+
+	useEffect(() => {
+		const subscription = AppState.addEventListener('change', (nextState) => {
+			if (nextState === 'active' || saveMode !== 'auto') return;
+
+			for (const document of getDirtyDocuments(documents)) {
+				void persistDocumentContent(document.id, document.content);
+			}
+		});
+
+		return () => subscription.remove();
+	}, [documents, persistDocumentContent, saveMode]);
+
+	/**
+	 * Drop dirty flags so unsaved-changes guards stop firing. Used when the user
+	 * chooses "discard" on the exit-confirmation dialog.
+	 */
+	const discardUnsavedDocuments = useCallback(() => {
+		setDocuments((current) => discardDocumentChanges(current, Date.now()));
+	}, []);
+
 	const updateSelectedDocumentContent = useCallback(
-		(content: string, options?: { skipRemoteWrite?: boolean }) => {
+		(
+			content: string,
+			options?: { markSaved?: boolean; skipRemoteWrite?: boolean }
+		) => {
 			if (!selectedDocumentId) return;
 
 			const now = Date.now();
+			// Update React state. `lastSavedContent` is intentionally left alone
+			// here — it is only mutated by `persistDocumentContent` on a successful
+			// disk write, so dirty tracking reflects what is actually on disk.
 			setDocuments((current) =>
-				current.map((document) =>
-					document.id === selectedDocumentId
-						? { ...document, content, updatedAt: now }
-						: document
+				updateDocumentContent(
+					current,
+					selectedDocumentId,
+					content,
+					now,
+					options
 				)
 			);
 
-			if (
-				saveMode === 'auto' &&
-				!options?.skipRemoteWrite &&
-				workspaceSource.kind !== 'remote'
-			) {
-				try {
-					void writeLocalFile(selectedDocumentId, content);
-					setErrorMessage(null);
-				} catch (error) {
-					setErrorMessage(getErrorMessage(error, 'Failed to save file'));
-				}
+			// Auto-save mode: write to disk immediately on every edit. We do NOT
+			// debounce — on mobile the app can be killed at any moment, and any
+			// pending debounce timer would be dropped, losing the user's edits.
+			// writeLocalFile awaits the native write so errors are surfaced.
+			if (saveMode !== 'auto' || options?.skipRemoteWrite) {
+				return;
 			}
+
+			void persistDocumentContent(selectedDocumentId, content);
 		},
-		[saveMode, selectedDocumentId, workspaceSource.kind]
+		[persistDocumentContent, saveMode, selectedDocumentId]
 	);
 
 	const renameSelectedFile = useCallback(
@@ -1053,7 +1190,11 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 						setDocuments((current) =>
 							current.map((doc) =>
 								doc.id === selectedDocumentId
-									? { ...doc, content: updatedContent }
+									? {
+											...doc,
+											content: updatedContent,
+											lastSavedContent: updatedContent,
+										}
 									: doc
 							)
 						);
@@ -1392,6 +1533,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
 	const value = useMemo<EditorContextValue>(
 		() => ({
+			activeDocumentDirty,
 			bookmarkedDocumentIds,
 			cancelCopiedFile,
 			copySelectedFile,
@@ -1399,12 +1541,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			createLocalDirectory: createDirectoryInWorkspace,
 			createLocalFile,
 			deleteSelectedEntry,
+			discardUnsavedDocuments,
 			documents,
 			errorMessage,
 			expandedDirectoryPaths,
 			fileTree,
 			focusedTreeNode,
+			hasUnsavedDocuments,
 			isFocusedTreeNodeBookmarked,
+			isSavingActiveDocument,
 			openLocalFile,
 			openLocalFolder,
 			openRemoteWorkspace,
@@ -1413,6 +1558,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			locateSelectedDocumentInTree,
 			renameSelectedFile,
 			refreshFileTree,
+			saveActiveDocument,
+			saveAllUnsavedDocuments,
 			selectDocument,
 			selectTreeNode,
 			selectedDocument,
@@ -1426,6 +1573,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			switchWorkspaceMode,
 		}),
 		[
+			activeDocumentDirty,
 			bookmarkedDocumentIds,
 			cancelCopiedFile,
 			copySelectedFile,
@@ -1433,12 +1581,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			createDirectoryInWorkspace,
 			createLocalFile,
 			deleteSelectedEntry,
+			discardUnsavedDocuments,
 			documents,
 			errorMessage,
 			expandedDirectoryPaths,
 			fileTree,
 			focusedTreeNode,
+			hasUnsavedDocuments,
 			isFocusedTreeNodeBookmarked,
+			isSavingActiveDocument,
 			openLocalFile,
 			openLocalFolder,
 			openRemoteWorkspace,
@@ -1447,6 +1598,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			locateSelectedDocumentInTree,
 			renameSelectedFile,
 			refreshFileTree,
+			saveActiveDocument,
+			saveAllUnsavedDocuments,
 			selectDocument,
 			selectTreeNode,
 			selectedDocument,

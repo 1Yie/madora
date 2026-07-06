@@ -6,6 +6,7 @@ const ko = {
 			close: '닫기',
 			delete: '삭제',
 			disconnect: '연결 해제',
+			discard: '저장 안 함',
 			refresh: '새로고침',
 			save: '저장',
 		},
@@ -302,6 +303,10 @@ const ko = {
 				'먼저 로컬 폴더를 연 뒤, 그 안에서 Markdown 파일을 만들거나 선택하세요.',
 			title: '선택된 파일이 없습니다',
 		},
+		feedback: {
+			savedDetail: '파일이 디스크에 저장되었습니다.',
+			savedTitle: '저장됨',
+		},
 		noSelection: {
 			detail: '파일 탭에서 파일을 선택하거나 만드세요.',
 			title: '선택된 파일이 없습니다',
@@ -309,6 +314,17 @@ const ko = {
 		remoteNoSelection: {
 			detail: '원격 폴더에서 파일을 선택하세요.',
 			title: '선택된 원격 파일이 없습니다',
+		},
+		unsavedChanges: {
+			cancel: '계속 편집',
+			continueSwitch: '계속 전환',
+			detail:
+				'워크스페이스에 저장되지 않은 변경 사항이 있습니다. 나가기 전에 저장하시겠습니까?',
+			discard: '저장하지 않고 나가기',
+			save: '저장하고 나가기',
+			switchDetail:
+				'워크스페이스에 저장되지 않은 변경 사항이 있습니다. 계속하면 저장하지 않고 전환합니다.',
+			title: '저장되지 않은 변경 사항',
 		},
 	},
 	settingsHome: {
@@ -408,6 +424,11 @@ const ko = {
 		completion: {
 			accept: '적용',
 			loading: '완성 중',
+		},
+		saveCapsule: {
+			save: '저장',
+			saving: '저장 중',
+			saved: '저장됨',
 		},
 		toolbar: {
 			copyFile: '파일 복사',

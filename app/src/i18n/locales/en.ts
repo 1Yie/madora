@@ -6,6 +6,7 @@ const en = {
 			close: 'Close',
 			delete: 'Delete',
 			disconnect: 'Disconnect',
+			discard: "Don't Save",
 			refresh: 'Refresh',
 			save: 'Save',
 		},
@@ -308,6 +309,10 @@ const en = {
 				'Open a local folder first, then create or select a Markdown file inside it.',
 			title: 'No file selected',
 		},
+		feedback: {
+			savedDetail: 'File saved to disk.',
+			savedTitle: 'Saved',
+		},
 		noSelection: {
 			detail: 'Go to the Files tab to pick or create a file.',
 			title: 'No file selected',
@@ -315,6 +320,17 @@ const en = {
 		remoteNoSelection: {
 			detail: 'Go to the remote folder and select a file.',
 			title: 'No remote file selected',
+		},
+		unsavedChanges: {
+			cancel: 'Keep Editing',
+			continueSwitch: 'Continue Switching',
+			detail:
+				'Some files in the workspace have unsaved changes. Save before leaving?',
+			discard: 'Leave Without Saving',
+			save: 'Save and Leave',
+			switchDetail:
+				'Some files in the workspace have unsaved changes. Continuing will switch views without saving them.',
+			title: 'Unsaved Changes',
 		},
 	},
 	settingsHome: {
@@ -418,6 +434,11 @@ const en = {
 		completion: {
 			accept: 'Accept',
 			loading: 'Completing',
+		},
+		saveCapsule: {
+			save: 'Save',
+			saving: 'Saving',
+			saved: 'Saved',
 		},
 		toolbar: {
 			copyFile: 'Copy file',
