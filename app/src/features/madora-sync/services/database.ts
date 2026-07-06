@@ -1,30 +1,20 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import { desc, eq, ne } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/expo-sqlite';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 import type { TrustedDevice } from '../types';
+import deleteTrustedDeviceSql from './sql/delete-trusted-device.sql';
+import enableWalSql from './sql/enable-wal.sql';
+import initializeSyncSchemaSql from './sql/initialize-sync-schema.sql';
+import insertSettingIfMissingSql from './sql/insert-setting-if-missing.sql';
+import listTrustedDevicesSql from './sql/list-trusted-devices.sql';
+import readUserVersionSql from './sql/read-user-version.sql';
+import readSettingsSql from './sql/read-settings.sql';
+import setSchemaVersionSql from './sql/set-schema-version.sql';
+import upsertTrustedDeviceSql from './sql/upsert-trusted-device.sql';
+import writeSettingSql from './sql/write-setting.sql';
 
 export const MADORA_SYNC_DB_NAME = 'madora-sync.db';
 
 export const LOCAL_DEVICE_ID = 'device-mobile-local';
-const TARGET_SCHEMA_VERSION = 3;
-const CREATE_SYNC_SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY NOT NULL,
-    value TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS devices (
-    id TEXT PRIMARY KEY NOT NULL,
-    name TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    last_seen INTEGER NOT NULL,
-    trusted INTEGER NOT NULL,
-    token TEXT NOT NULL,
-    address TEXT NOT NULL
-  );
-`;
 function getInitialSettings(defaultLocalDeviceName: string) {
 	return {
 		last_sync_at: '',
@@ -35,39 +25,20 @@ function getInitialSettings(defaultLocalDeviceName: string) {
 	} satisfies Record<string, string>;
 }
 
-export const syncSettingsTable = sqliteTable('settings', {
-	key: text('key').primaryKey().notNull(),
-	value: text('value').notNull(),
-});
-
-export const syncDevicesTable = sqliteTable('devices', {
-	address: text('address').notNull(),
-	id: text('id').primaryKey().notNull(),
-	kind: text('kind', { enum: ['desktop', 'mobile'] }).notNull(),
-	lastSeen: integer('last_seen').notNull(),
-	name: text('name').notNull(),
-	token: text('token').notNull(),
-	trusted: integer('trusted', { mode: 'boolean' }).notNull(),
-});
-
-function getSyncDatabase(db: SQLiteDatabase) {
-	return drizzle(db);
-}
-
 export async function initializeDatabase(
 	db: SQLiteDatabase,
 	defaultLocalDeviceName: string
 ) {
 	const versionRow = await db.getFirstAsync<{ user_version: number }>(
-		'PRAGMA user_version'
+		readUserVersionSql
 	);
 	const currentVersion = versionRow?.user_version ?? 0;
 
 	if (currentVersion === 0) {
-		await db.execAsync('PRAGMA journal_mode = WAL');
+		await db.execAsync(enableWalSql);
 	}
 
-	await db.execAsync(CREATE_SYNC_SCHEMA_SQL);
+	await db.execAsync(initializeSyncSchemaSql);
 	await deleteTrustedDevice(db, LOCAL_DEVICE_ID);
 
 	for (const [key, value] of Object.entries(
@@ -76,12 +47,13 @@ export async function initializeDatabase(
 		await insertSettingIfMissing(db, key, value);
 	}
 
-	await db.execAsync(`PRAGMA user_version = ${TARGET_SCHEMA_VERSION}`);
+	await db.execAsync(setSchemaVersionSql);
 }
 
 export async function readSettings(db: SQLiteDatabase) {
-	const orm = getSyncDatabase(db);
-	const rows = await orm.select().from(syncSettingsTable);
+	const rows = await db.getAllAsync<{ key: string; value: string }>(
+		readSettingsSql
+	);
 
 	return rows.reduce<Record<string, string>>((settings, row) => {
 		settings[row.key] = row.value;
@@ -94,22 +66,7 @@ export async function writeSetting(
 	key: string,
 	value: string
 ) {
-	const orm = getSyncDatabase(db);
-	const existing = await orm
-		.select({ key: syncSettingsTable.key })
-		.from(syncSettingsTable)
-		.where(eq(syncSettingsTable.key, key))
-		.limit(1);
-
-	if (existing.length > 0) {
-		await orm
-			.update(syncSettingsTable)
-			.set({ value })
-			.where(eq(syncSettingsTable.key, key));
-		return;
-	}
-
-	await orm.insert(syncSettingsTable).values({ key, value });
+	await db.runAsync(writeSettingSql, key, value);
 }
 
 async function insertSettingIfMissing(
@@ -117,25 +74,14 @@ async function insertSettingIfMissing(
 	key: string,
 	value: string
 ) {
-	const orm = getSyncDatabase(db);
-	const existing = await orm
-		.select({ key: syncSettingsTable.key })
-		.from(syncSettingsTable)
-		.where(eq(syncSettingsTable.key, key))
-		.limit(1);
-
-	if (existing.length === 0) {
-		await orm.insert(syncSettingsTable).values({ key, value });
-	}
+	await db.runAsync(insertSettingIfMissingSql, key, value);
 }
 
 export async function listTrustedDevices(db: SQLiteDatabase) {
-	const orm = getSyncDatabase(db);
-	const rows = await orm
-		.select()
-		.from(syncDevicesTable)
-		.where(ne(syncDevicesTable.id, LOCAL_DEVICE_ID))
-		.orderBy(desc(syncDevicesTable.lastSeen));
+	const rows = await db.getAllAsync<TrustedDeviceRow>(
+		listTrustedDevicesSql,
+		LOCAL_DEVICE_ID
+	);
 
 	return rows.map(deviceRowToTrustedDevice);
 }
@@ -144,38 +90,33 @@ export async function upsertTrustedDevice(
 	db: SQLiteDatabase,
 	device: TrustedDevice
 ) {
-	const orm = getSyncDatabase(db);
-	const existing = await orm
-		.select({ id: syncDevicesTable.id })
-		.from(syncDevicesTable)
-		.where(eq(syncDevicesTable.id, device.id))
-		.limit(1);
-
-	if (existing.length > 0) {
-		await orm
-			.update(syncDevicesTable)
-			.set({
-				address: device.address,
-				lastSeen: device.lastSeen,
-				name: device.name,
-				token: device.token,
-				trusted: device.trusted,
-			})
-			.where(eq(syncDevicesTable.id, device.id));
-		return;
-	}
-
-	await orm.insert(syncDevicesTable).values(device);
+	await db.runAsync(
+		upsertTrustedDeviceSql,
+		device.id,
+		device.name,
+		device.kind,
+		device.lastSeen,
+		device.trusted ? 1 : 0,
+		device.token,
+		device.address
+	);
 }
 
 export async function deleteTrustedDevice(db: SQLiteDatabase, id: string) {
-	const orm = getSyncDatabase(db);
-	await orm.delete(syncDevicesTable).where(eq(syncDevicesTable.id, id));
+	await db.runAsync(deleteTrustedDeviceSql, id);
 }
 
-function deviceRowToTrustedDevice(
-	device: typeof syncDevicesTable.$inferSelect
-): TrustedDevice {
+type TrustedDeviceRow = {
+	address: string;
+	id: string;
+	kind: 'desktop' | 'mobile';
+	lastSeen: number;
+	name: string;
+	token: string;
+	trusted: number;
+};
+
+function deviceRowToTrustedDevice(device: TrustedDeviceRow): TrustedDevice {
 	return {
 		address: device.address,
 		id: device.id,
@@ -183,6 +124,6 @@ function deviceRowToTrustedDevice(
 		lastSeen: device.lastSeen,
 		name: device.name,
 		token: device.token,
-		trusted: device.trusted,
+		trusted: Boolean(device.trusted),
 	};
 }

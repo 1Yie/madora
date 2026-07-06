@@ -745,7 +745,8 @@ async function wrapSelection(
 	const selected = await api.editor.getSelection();
 	const text = selected || placeholder;
 	await api.editor.replaceSelection(`${before}${text}${after}`);
-	await api.editor.setSelection(
+	await setSelectionSafely(
+		api,
 		selectionStart.index + before.length,
 		selectionStart.index + before.length + text.length
 	);
@@ -758,7 +759,8 @@ async function insertLink(api: WebViewAPI, placeholder: string) {
 	const text = selected || placeholder;
 	const insert = `[${text}](url)`;
 	await api.editor.replaceSelection(insert);
-	await api.editor.setSelection(
+	await setSelectionSafely(
+		api,
 		selectionStart.index + text.length + 3,
 		selectionStart.index + insert.length - 1
 	);
@@ -771,7 +773,8 @@ async function insertImage(api: WebViewAPI, placeholder: string) {
 	const alt = selected || placeholder;
 	const insert = `![${alt}](url)`;
 	await api.editor.replaceSelection(insert);
-	await api.editor.setSelection(
+	await setSelectionSafely(
+		api,
 		selectionStart.index + alt.length + 4,
 		selectionStart.index + insert.length - 1
 	);
@@ -779,8 +782,12 @@ async function insertImage(api: WebViewAPI, placeholder: string) {
 }
 
 async function focusEditor(api: WebViewAPI) {
-	await api.focus();
-	await api.editor.scrollToCursor(24);
+	try {
+		await api.focus();
+		await api.editor.scrollToCursor(24);
+	} catch {
+		// Best effort: Android WebView can reject while IME composition is settling.
+	}
 }
 
 async function moveCursorToEnd(
@@ -789,11 +796,19 @@ async function moveCursorToEnd(
 	options: { focus?: boolean } = {}
 ) {
 	const end = value.length;
-	await api.editor.setSelection(end, end);
+	await setSelectionSafely(api, end, end);
 	if (options.focus) {
-		await api.focus();
+		try {
+			await api.focus();
+		} catch {
+			// Best effort: focus may reject while the WebView is reloading.
+		}
 	}
-	await api.editor.scrollToCursor(24);
+	try {
+		await api.editor.scrollToCursor(24);
+	} catch {
+		// Best effort after clamped selection.
+	}
 }
 
 async function setEditorValueToEnd(api: WebViewAPI, value: string) {
@@ -804,6 +819,43 @@ async function setEditorValueToEnd(api: WebViewAPI, value: string) {
 async function resetEditorValueToEnd(api: WebViewAPI, value: string) {
 	await api.editor.resetValue(value);
 	await moveCursorToEnd(api, value);
+}
+
+async function setSelectionSafely(
+	api: WebViewAPI,
+	anchor: number,
+	head = anchor
+) {
+	const docLength = await getEditorDocumentLength(api);
+	const safeAnchor = clampPosition(anchor, docLength);
+	const safeHead = clampPosition(head, docLength);
+
+	try {
+		await api.editor.setSelection(safeAnchor, safeHead);
+		return;
+	} catch {
+		const latestLength = await getEditorDocumentLength(api).catch(() => 0);
+		await api.editor
+			.setSelection(
+				clampPosition(safeAnchor, latestLength),
+				clampPosition(safeHead, latestLength)
+			)
+			.catch(() => undefined);
+	}
+}
+
+async function getEditorDocumentLength(api: WebViewAPI) {
+	try {
+		const currentValue = await api.editor.getValue();
+		return currentValue.length;
+	} catch {
+		return 0;
+	}
+}
+
+function clampPosition(position: number, docLength: number) {
+	if (!Number.isFinite(position)) return 0;
+	return Math.max(0, Math.min(Math.trunc(position), docLength));
 }
 
 async function reportEditorState(

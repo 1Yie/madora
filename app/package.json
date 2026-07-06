@@ -22,7 +22,6 @@
 		"@legendapp/motion": "^2.4.0",
 		"@lobehub/icons": "^5.8.0",
 		"@react-navigation/bottom-tabs": "^7.18.4",
-		"drizzle-orm": "^1.0.0-rc.4",
 		"expo": "~57.0.1",
 		"expo-camera": "~57.0.0",
 		"expo-constants": "~57.0.2",

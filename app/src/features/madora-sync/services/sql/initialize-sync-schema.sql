@@ -1,0 +1,14 @@
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS devices (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  last_seen INTEGER NOT NULL,
+  trusted INTEGER NOT NULL,
+  token TEXT NOT NULL,
+  address TEXT NOT NULL
+);

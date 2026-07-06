@@ -184,7 +184,9 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 				const syncedAt = Date.now();
 				setLastSyncAt(syncedAt);
 				if (db) {
-					void writeSetting(db, 'last_sync_at', String(syncedAt));
+					void writeSetting(db, 'last_sync_at', String(syncedAt)).catch(
+						() => undefined
+					);
 				}
 				return;
 			}
