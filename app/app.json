@@ -51,6 +51,7 @@
 				}
 			],
 			"./plugins/with-android-abi-filters",
+			"./plugins/with-network-security-config",
 			"@actualwave/react-native-codeditor",
 			"expo-secure-store"
 		],
