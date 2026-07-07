@@ -2,7 +2,7 @@ const {
 	createRunOncePlugin,
 	withAndroidManifest,
 	withDangerousMod,
-	AndroidConfig: { Paths, Resources },
+	AndroidConfig: { Paths },
 } = require('@expo/config-plugins');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -46,13 +46,14 @@ function addNetworkSecurityConfig(config) {
 
 		const app = application[0];
 		app.$ = app.$ || {};
-		app.$.android = app.$.android || {};
 
 		// networkSecurityConfig takes precedence over usesCleartextTraffic.
 		// Keep usesCleartextTraffic="true" too, as a fallback for API < 24
 		// where NSC is unavailable.
-		app.$.android.usesCleartextTraffic = 'true';
-		app.$.android.networkSecurityConfig = `@xml/${NSC_FILENAME.replace(
+		// Expo's manifest object uses flat prefixed keys
+		// (e.g. 'android:foo'), not a nested 'android' object.
+		app.$['android:usesCleartextTraffic'] = 'true';
+		app.$['android:networkSecurityConfig'] = `@xml/${NSC_FILENAME.replace(
 			/\.\w+$/,
 			''
 		)}`;
@@ -71,6 +72,7 @@ function writeNetworkSecurityConfigFile(config) {
 			const xmlFolder = path.join(resourceFolder, 'xml');
 			fs.mkdirSync(xmlFolder, { recursive: true });
 			fs.writeFileSync(path.join(xmlFolder, NSC_FILENAME), NSC_XML);
+			return config;
 		},
 	]);
 }
