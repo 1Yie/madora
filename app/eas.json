@@ -14,12 +14,18 @@
 			}
 		},
 		"preview-arm64-v8a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*arm64-v8a*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "arm64-v8a"
 			},
 			"extends": "preview"
 		},
 		"preview-armeabi-v7a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*armeabi-v7a*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "armeabi-v7a"
 			},
@@ -32,24 +38,36 @@
 			"distribution": "internal"
 		},
 		"preview-device-arm64-v8a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*arm64-v8a*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "arm64-v8a"
 			},
 			"extends": "preview-device"
 		},
 		"preview-device-armeabi-v7a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*armeabi-v7a*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "armeabi-v7a"
 			},
 			"extends": "preview-device"
 		},
 		"preview-device-x86_64": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*x86_64*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "x86_64"
 			},
 			"extends": "preview-device"
 		},
 		"preview-x86_64": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*x86_64*.apk"
+			},
 			"env": {
 				"MADORA_APP_ANDROID_ABIS": "x86_64"
 			},
@@ -60,6 +78,39 @@
 				"buildType": "app-bundle"
 			},
 			"autoIncrement": true
+		},
+		"release": {
+			"android": {
+				"buildType": "apk"
+			},
+			"distribution": "internal"
+		},
+		"release-arm64-v8a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*arm64-v8a*.apk"
+			},
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "arm64-v8a"
+			},
+			"extends": "release"
+		},
+		"release-armeabi-v7a": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*armeabi-v7a*.apk"
+			},
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "armeabi-v7a"
+			},
+			"extends": "release"
+		},
+		"release-x86_64": {
+			"android": {
+				"applicationArchivePath": "android/app/build/outputs/apk/release/*x86_64*.apk"
+			},
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "x86_64"
+			},
+			"extends": "release"
 		}
 	},
 	"cli": {

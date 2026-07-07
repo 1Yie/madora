@@ -4,7 +4,7 @@ import path from 'path';
 import process from 'node:process';
 
 const platform = process.env.PLATFORM ?? 'android';
-const profile = process.env.PROFILE ?? 'preview';
+const profile = process.env.PROFILE ?? 'release';
 const androidAbi = process.env.ANDROID_ABI ?? 'all';
 const desktopVersion = JSON.parse(
 	fs.readFileSync('package.json', 'utf8')
@@ -14,13 +14,15 @@ const mobileVersion = JSON.parse(
 ).version;
 
 const ANDROID_ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86_64'];
+const storeBuild = profile === 'store' || profile === 'production';
+const easBaseProfile = storeBuild ? 'production' : profile;
 
 function githubOutput(name, value) {
 	fs.appendFileSync(process.env.GITHUB_OUTPUT, `${name}=${value}\n`, 'utf8');
 }
 
 function getAndroidAbis() {
-	if (profile === 'production') return ['aab'];
+	if (storeBuild) return ['aab'];
 	if (androidAbi === 'all') return ANDROID_ABIS;
 	if (androidAbi === 'universal') return ['universal'];
 	if (ANDROID_ABIS.includes(androidAbi)) return [androidAbi];
@@ -29,8 +31,8 @@ function getAndroidAbis() {
 }
 
 function getAndroidProfile(abi) {
-	if (abi === 'aab' || abi === 'universal') return profile;
-	return `${profile}-${abi}`;
+	if (abi === 'aab' || abi === 'universal') return easBaseProfile;
+	return `${easBaseProfile}-${abi}`;
 }
 
 function getAndroidArtifactExtension(abi) {
@@ -38,7 +40,7 @@ function getAndroidArtifactExtension(abi) {
 }
 
 function getIosArtifactExtension() {
-	return profile === 'preview' ? 'tar.gz' : 'ipa';
+	return easBaseProfile === 'preview' ? 'tar.gz' : 'ipa';
 }
 
 function addAndroidBuilds(builds) {
@@ -61,7 +63,7 @@ function addAndroidBuilds(builds) {
 
 function addIosBuild(builds) {
 	const extension = getIosArtifactExtension();
-	const label = profile === 'preview' ? 'simulator' : profile;
+	const label = easBaseProfile === 'preview' ? 'simulator' : easBaseProfile;
 	const artifactSlug = `madora-mobile-${mobileVersion}-ios-${label}`;
 
 	builds.push({
@@ -69,7 +71,7 @@ function addIosBuild(builds) {
 		artifact_slug: artifactSlug,
 		name: `iOS ${label}`,
 		platform: 'ios',
-		profile,
+		profile: easBaseProfile,
 	});
 }
 

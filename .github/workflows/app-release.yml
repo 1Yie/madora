@@ -16,11 +16,12 @@ on:
         description: EAS build profile
         required: true
         type: choice
-        default: preview
+        default: release
         options:
+          - release
           - preview
           - preview-device
-          - production
+          - store
       android_abi:
         description: Android ABI for APK builds
         required: true
