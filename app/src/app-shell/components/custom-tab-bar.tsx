@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ComponentProps, ComponentType, ReactNode } from 'react';
-import type { Tabs } from 'expo-router';
+import { router, type Tabs } from 'expo-router';
 import Animated, {
 	useSharedValue,
 	useAnimatedStyle,
@@ -108,6 +108,11 @@ export default function CustomTabBar({
 			target: route.key,
 			canPreventDefault: true,
 		});
+
+		if (!event.defaultPrevented && routeName === 'settings') {
+			router.navigate('/settings');
+			return;
+		}
 
 		if (!event.defaultPrevented && activeRoute?.name !== routeName) {
 			navigation.navigate(route.name);

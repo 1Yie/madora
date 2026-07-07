@@ -277,7 +277,7 @@ const ko = {
 					title: '소프트웨어 업데이트',
 				},
 			},
-			currentVersionDescription: '현재 버전: {{version}}',
+			currentVersionDescription: '{{version}}',
 			stats: {
 				author: '작성자',
 				sourceCode: '소스 코드',
@@ -329,6 +329,11 @@ const ko = {
 				'원격 동기화 연결이 끊어졌습니다. 데스크톱 앱에 다시 연결하거나 페어링하면 원격 파일을 다시 볼 수 있습니다.',
 			title: '원격 동기화 연결 끊김',
 		},
+		remoteNotConnected: {
+			action: '동기화 설정 열기',
+			detail: '데스크톱 앱에 연결하면 원격 폴더를 탐색할 수 있습니다.',
+			title: '데스크톱에 연결되지 않음',
+		},
 		remoteEmpty: {
 			detail: '데스크톱 워크스페이스에 현재 표시할 파일이 없습니다.',
 			title: '원격 폴더가 비어 있습니다',
@@ -355,9 +360,8 @@ const ko = {
 			openRemote: '원격 열기',
 		},
 		empty: {
-			detail:
-				'먼저 로컬 폴더를 연 뒤, 그 안에서 Markdown 파일을 만들거나 선택하세요.',
-			title: '선택된 파일이 없습니다',
+			detail: '로컬 폴더를 열어 여기서 파일을 탐색하고 만들 수 있습니다.',
+			title: '선택된 폴더가 없습니다',
 		},
 		feedback: {
 			savedDetail: '파일이 디스크에 저장되었습니다.',
@@ -397,7 +401,7 @@ const ko = {
 				title: '모양',
 			},
 			about: {
-				detail: 'Madora Mobile의 버전, 기능, 로컬 우선 정책.',
+				detail: 'Madora의 버전, 기능, 로컬 우선 정책.',
 				title: '정보',
 			},
 			editor: {
@@ -410,7 +414,7 @@ const ko = {
 	settingsDetail: {
 		about: {
 			detail:
-				'Madora Mobile은 편집, 미리보기, AI Provider 호출을 로컬 우선으로 처리합니다.',
+				'Madora는 편집, 미리보기, AI Provider 호출을 로컬 우선으로 처리합니다.',
 			items: {
 				desktopParity: {
 					detail: '모바일은 데스크톱 기능에 맞춰 순차적으로 보완하고 있습니다.',
@@ -423,7 +427,7 @@ const ko = {
 				},
 				product: {
 					detail: 'Markdown 편집, 미리보기, 동기화, AI 완성.',
-					title: 'Madora Mobile',
+					title: 'Madora',
 				},
 			},
 			title: '정보',

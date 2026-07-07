@@ -396,10 +396,10 @@ export function MadoraSyncSettings() {
 						title={t('settings.sync.madora.cards.pairing.title')}
 					>
 						<div className="space-y-4">
-							<div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+							<div className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
 								<div
-									className="flex items-center justify-center rounded-lg border
-										bg-background p-4"
+									className="flex min-h-[220px] items-center justify-center
+										rounded-lg border bg-background p-4"
 								>
 									{pairingQr?.payload ? (
 										<QRCodeSVG
@@ -423,7 +423,7 @@ export function MadoraSyncSettings() {
 								</div>
 								<div
 									className="rounded-lg border bg-background px-4 py-4
-										text-center tabular-nums lg:text-left"
+										text-center tabular-nums sm:text-left"
 								>
 									<div className="text-xs text-muted-foreground">
 										{t('settings.sync.madora.fields.pairingCode')}

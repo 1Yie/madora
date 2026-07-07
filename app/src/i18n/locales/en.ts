@@ -283,7 +283,7 @@ const en = {
 					title: 'Software Update',
 				},
 			},
-			currentVersionDescription: 'Current version: {{version}}',
+			currentVersionDescription: '{{version}}',
 			stats: {
 				author: 'Author',
 				sourceCode: 'Source Code',
@@ -335,6 +335,11 @@ const en = {
 				'Remote sync is disconnected. Reconnect or pair with the desktop app to browse remote files again.',
 			title: 'Remote sync disconnected',
 		},
+		remoteNotConnected: {
+			action: 'Open sync settings',
+			detail: 'Connect to the desktop app to browse remote folders.',
+			title: 'Not connected to desktop',
+		},
 		remoteEmpty: {
 			detail: 'The desktop workspace has no files to show right now.',
 			title: 'Remote folder is empty',
@@ -361,9 +366,8 @@ const en = {
 			openRemote: 'Open Remote',
 		},
 		empty: {
-			detail:
-				'Open a local folder first, then create or select a Markdown file inside it.',
-			title: 'No file selected',
+			detail: 'Open a local folder to browse and create files here.',
+			title: 'No folder selected',
 		},
 		feedback: {
 			savedDetail: 'File saved to disk.',
@@ -404,8 +408,7 @@ const en = {
 				title: 'Appearance',
 			},
 			about: {
-				detail:
-					'Madora Mobile version, capabilities, and local-first behavior.',
+				detail: 'Madora version, capabilities, and local-first behavior.',
 				title: 'About',
 			},
 			editor: {
@@ -418,7 +421,7 @@ const en = {
 	settingsDetail: {
 		about: {
 			detail:
-				'Madora Mobile keeps editing, preview, and AI provider calls local first.',
+				'Madora keeps editing, preview, and AI provider calls local first.',
 			items: {
 				desktopParity: {
 					detail: 'Mobile is being brought in line with desktop capabilities.',
@@ -431,7 +434,7 @@ const en = {
 				},
 				product: {
 					detail: 'Markdown editing, preview, sync, and AI completion.',
-					title: 'Madora Mobile',
+					title: 'Madora',
 				},
 			},
 			title: 'About',

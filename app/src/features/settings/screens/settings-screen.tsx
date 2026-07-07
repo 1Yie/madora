@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -9,6 +9,7 @@ import {
 	Check,
 	ChevronRight,
 	Cloud,
+	ExternalLink as ExternalLinkIcon,
 	Info,
 	Moon,
 	Palette,
@@ -18,6 +19,7 @@ import {
 	Sun,
 } from 'lucide-react-native';
 
+import licenses from '@/assets/licenses.json';
 import {
 	Slider,
 	SliderFilledTrack,
@@ -48,6 +50,13 @@ type SettingsIcon = ComponentType<{
 	size?: number;
 	strokeWidth?: number;
 }>;
+type LicenseEntry = {
+	license: string;
+	name: string;
+	url: string;
+};
+
+const LICENSE_ENTRIES = licenses as LicenseEntry[];
 
 const SETTINGS_SECTIONS: {
 	detailKey: string;
@@ -279,22 +288,42 @@ function AboutSettingsScreen() {
 		<SettingsShell header={<BackButton />}>
 			<SettingsHeader title={t('settings.sections.about.label')} />
 
-			<SettingsCard title="Madora Mobile">
-				<SettingsInfoRow
-					detail={t('settings.about.currentVersionDescription', {
-						version: appVersion,
-					})}
-					title={t('settings.about.stats.version')}
-				/>
-				<SettingsInfoRow
-					detail={t('settings.about.cards.update.description')}
-					title={t('settings.about.cards.update.title')}
-				/>
-				<SettingsInfoRow
-					detail={t('settings.about.cards.licenses.description')}
-					title={t('settings.about.cards.licenses.title')}
-				/>
+			<SettingsCard
+				detail={t('settings.about.currentVersionDescription', {
+					version: appVersion,
+				})}
+				title="Madora"
+			>
+				<View className="gap-1">
+					<Text className="text-[15px] font-semibold text-foreground">
+						{t('settings.about.cards.update.title')}
+					</Text>
+					<Text className="text-[13px] leading-5 text-muted-foreground">
+						{t('settings.about.cards.update.description')}
+					</Text>
+				</View>
 			</SettingsCard>
+			<SettingsLinkCard
+				detail={t('settings.about.cards.licenses.description')}
+				onPress={() => router.push('/settings/licenses')}
+				title={t('settings.about.cards.licenses.title')}
+			/>
+		</SettingsShell>
+	);
+}
+
+export function SettingsLicensesScreen() {
+	const { t } = useTranslation();
+
+	return (
+		<SettingsShell header={<BackButton />}>
+			<SettingsHeader title={t('settings.about.cards.licenses.title')} />
+
+			<View className="gap-2">
+				{LICENSE_ENTRIES.map((entry) => (
+					<LicenseEntryCard key={entry.name} entry={entry} />
+				))}
+			</View>
 		</SettingsShell>
 	);
 }
@@ -392,6 +421,40 @@ function SettingsRow({
 			>
 				<Icon color={palette.icon} size={18} strokeWidth={2.1} />
 			</View>
+			<View className="flex-1 gap-1 pr-3">
+				<Text className="text-[16px] font-semibold text-foreground">
+					{title}
+				</Text>
+				<Text className="text-[13px] leading-5 text-muted-foreground">
+					{detail}
+				</Text>
+			</View>
+			<ChevronRight color={palette.iconMuted} size={18} strokeWidth={2.2} />
+		</Pressable>
+	);
+}
+
+function SettingsLinkCard({
+	detail,
+	onPress,
+	title,
+}: {
+	detail: string;
+	onPress: () => void;
+	title: string;
+}) {
+	const palette = useAppThemePalette();
+
+	return (
+		<Pressable
+			onPress={onPress}
+			className="min-h-[84px] flex-row items-center rounded-lg p-4"
+			style={{
+				backgroundColor: palette.surface,
+				borderColor: palette.border,
+				borderWidth: 1,
+			}}
+		>
 			<View className="flex-1 gap-1 pr-3">
 				<Text className="text-[16px] font-semibold text-foreground">
 					{title}
@@ -508,16 +571,35 @@ function OptionRow({
 	);
 }
 
-function SettingsInfoRow({ detail, title }: { detail: string; title: string }) {
+function LicenseEntryCard({ entry }: { entry: LicenseEntry }) {
+	const palette = useAppThemePalette();
+
 	return (
-		<View
-			className="gap-1 border-t border-border pt-3 first:border-t-0 first:pt-0"
+		<Pressable
+			accessibilityRole="link"
+			onPress={() => {
+				void Linking.openURL(entry.url);
+			}}
+			className="min-h-[64px] flex-row items-center rounded-lg p-4"
+			style={{
+				backgroundColor: palette.surface,
+				borderColor: palette.border,
+				borderWidth: 1,
+			}}
 		>
-			<Text className="text-[15px] font-semibold text-foreground">{title}</Text>
-			<Text className="text-[13px] leading-5 text-muted-foreground">
-				{detail}
-			</Text>
-		</View>
+			<View className="flex-1 gap-0.5">
+				<Text
+					className="text-[15px] font-semibold text-foreground"
+					numberOfLines={1}
+				>
+					{entry.name}
+				</Text>
+				<Text className="text-[12px] text-muted-foreground" numberOfLines={1}>
+					{entry.license}
+				</Text>
+			</View>
+			<ExternalLinkIcon color={palette.iconMuted} size={15} strokeWidth={2.1} />
+		</Pressable>
 	);
 }
 

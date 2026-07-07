@@ -277,7 +277,7 @@ const ja = {
 					title: 'ソフトウェアアップデート',
 				},
 			},
-			currentVersionDescription: '現在のバージョン：{{version}}',
+			currentVersionDescription: '{{version}}',
 			stats: {
 				author: '作者',
 				sourceCode: 'ソースコード',
@@ -330,6 +330,12 @@ const ja = {
 				'リモート同期が切断されています。デスクトップアプリに再接続または再ペアリングすると、リモートファイルを再び表示できます。',
 			title: 'リモート同期が切断されました',
 		},
+		remoteNotConnected: {
+			action: '同期設定を開く',
+			detail:
+				'デスクトップアプリに接続すると、リモートフォルダーを表示できます。',
+			title: 'デスクトップに未接続です',
+		},
 		remoteEmpty: {
 			detail:
 				'デスクトップのワークスペースには現在表示できるファイルがありません。',
@@ -358,8 +364,8 @@ const ja = {
 		},
 		empty: {
 			detail:
-				'先にローカルフォルダーを開き、その中の Markdown ファイルを作成または選択してください。',
-			title: 'ファイルが選択されていません',
+				'ローカルフォルダーを開いて、ここでファイルを閲覧・作成できます。',
+			title: 'フォルダーが選択されていません',
 		},
 		feedback: {
 			savedDetail: 'ファイルをディスクに保存しました。',
@@ -398,7 +404,7 @@ const ja = {
 				title: '外観',
 			},
 			about: {
-				detail: 'Madora Mobile のバージョン、機能、ローカルファーストの方針。',
+				detail: 'Madora のバージョン、機能、ローカルファーストの方針。',
 				title: '概要',
 			},
 			editor: {
@@ -411,7 +417,7 @@ const ja = {
 	settingsDetail: {
 		about: {
 			detail:
-				'Madora Mobile は編集、プレビュー、AI Provider の呼び出しをローカル優先で行います。',
+				'Madora は編集、プレビュー、AI Provider の呼び出しをローカル優先で行います。',
 			items: {
 				desktopParity: {
 					detail: 'モバイル版はデスクトップ版の機能に順次合わせていきます。',
@@ -424,7 +430,7 @@ const ja = {
 				},
 				product: {
 					detail: 'Markdown 編集、プレビュー、同期、AI 補完。',
-					title: 'Madora Mobile',
+					title: 'Madora',
 				},
 			},
 			title: '概要',

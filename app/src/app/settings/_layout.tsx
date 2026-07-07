@@ -33,8 +33,16 @@ export default function SettingsLayout() {
 				options={{ title: t('settings.editor.cards.ai.title') }}
 			/>
 			<Stack.Screen
+				name="sync"
+				options={{ title: t('settings.sections.sync.label') }}
+			/>
+			<Stack.Screen
 				name="about"
 				options={{ title: t('settings.sections.about.label') }}
+			/>
+			<Stack.Screen
+				name="licenses"
+				options={{ title: t('settings.about.cards.licenses.title') }}
 			/>
 		</Stack>
 	);

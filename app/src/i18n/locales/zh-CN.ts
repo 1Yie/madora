@@ -247,7 +247,7 @@ const zhCN = {
 					title: '软件更新',
 				},
 			},
-			currentVersionDescription: '当前版本：{{version}}',
+			currentVersionDescription: '{{version}}',
 			stats: {
 				author: '作者',
 				sourceCode: '源代码',
@@ -297,6 +297,11 @@ const zhCN = {
 			action: '前往同步设置',
 			detail: '远程同步已断开。重新配对或连接桌面端后，可以继续浏览远程文件。',
 			title: '远程同步已断开',
+		},
+		remoteNotConnected: {
+			action: '前往同步设置',
+			detail: '连接桌面端后，可以浏览远程文件夹。',
+			title: '未连接到桌面端',
 		},
 		remoteEmpty: {
 			detail: '桌面端工作区当前没有可显示的文件。',
@@ -363,7 +368,7 @@ const zhCN = {
 				title: '外观',
 			},
 			about: {
-				detail: 'Madora Mobile 的版本、能力和本地优先策略。',
+				detail: 'Madora 的版本、能力和本地优先策略。',
 				title: '关于',
 			},
 			editor: {
@@ -375,7 +380,7 @@ const zhCN = {
 	},
 	settingsDetail: {
 		about: {
-			detail: 'Madora Mobile 会优先在本地完成编辑、预览和 AI Provider 调用。',
+			detail: 'Madora 会优先在本地完成编辑、预览和 AI Provider 调用。',
 			items: {
 				desktopParity: {
 					detail: '移动端正在按 Desktop 的能力逐步补齐。',
@@ -387,7 +392,7 @@ const zhCN = {
 				},
 				product: {
 					detail: 'Markdown 编辑、预览、同步和 AI 补全。',
-					title: 'Madora Mobile',
+					title: 'Madora',
 				},
 			},
 			title: '关于',

@@ -1,0 +1,242 @@
+[
+	{
+		"license": "MIT",
+		"name": "@actualwave/react-native-codeditor",
+		"url": "https://github.com/burdiuz/react-native-codeditor#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "@expo/html-elements",
+		"url": "https://github.com/expo/expo/tree/main/packages/html-elements"
+	},
+	{
+		"license": "MIT",
+		"name": "@expo/ui",
+		"url": "https://docs.expo.dev/versions/latest/sdk/ui"
+	},
+	{
+		"license": "MIT",
+		"name": "@gluestack-ui/core",
+		"url": "https://github.com/gluestack/gluestack-ui"
+	},
+	{
+		"license": "MIT",
+		"name": "@gluestack-ui/utils",
+		"url": "https://github.com/gluestack/gluestack-ui"
+	},
+	{
+		"license": "MIT",
+		"name": "@legendapp/motion",
+		"url": "https://github.com/LegendApp/legend-motion#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "@lobehub/icons",
+		"url": "https://github.com/lobehub/lobe-icons"
+	},
+	{
+		"license": "MIT",
+		"name": "@react-navigation/bottom-tabs",
+		"url": "https://github.com/react-navigation/react-navigation"
+	},
+	{
+		"license": "MIT",
+		"name": "expo",
+		"url": "https://github.com/expo/expo/tree/main/packages/expo"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-camera",
+		"url": "https://docs.expo.dev/versions/latest/sdk/camera"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-constants",
+		"url": "https://docs.expo.dev/versions/latest/sdk/constants"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-device",
+		"url": "https://docs.expo.dev/versions/latest/sdk/device"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-file-system",
+		"url": "https://docs.expo.dev/versions/latest/sdk/filesystem"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-font",
+		"url": "https://docs.expo.dev/versions/latest/sdk/font"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-glass-effect",
+		"url": "https://docs.expo.dev/versions/latest/sdk/glass-effect"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-image",
+		"url": "https://docs.expo.dev/versions/latest/sdk/image"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-linking",
+		"url": "https://docs.expo.dev/versions/latest/sdk/linking"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-router",
+		"url": "https://docs.expo.dev/routing/introduction"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-secure-store",
+		"url": "https://docs.expo.dev/versions/latest/sdk/securestore"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-splash-screen",
+		"url": "https://docs.expo.dev/versions/latest/sdk/splash-screen"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-sqlite",
+		"url": "https://docs.expo.dev/versions/latest/sdk/sqlite"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-status-bar",
+		"url": "https://docs.expo.dev/versions/latest/sdk/status-bar"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-symbols",
+		"url": "https://docs.expo.dev/versions/latest/sdk/symbols"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-system-ui",
+		"url": "https://docs.expo.dev/versions/latest/sdk/system-ui"
+	},
+	{
+		"license": "MIT",
+		"name": "expo-web-browser",
+		"url": "https://docs.expo.dev/versions/latest/sdk/webbrowser"
+	},
+	{
+		"license": "MIT",
+		"name": "i18next",
+		"url": "https://www.i18next.com"
+	},
+	{
+		"license": "MIT",
+		"name": "katex",
+		"url": "https://katex.org"
+	},
+	{
+		"license": "ISC",
+		"name": "lucide-react-native",
+		"url": "https://lucide.dev"
+	},
+	{
+		"license": "MIT",
+		"name": "marked",
+		"url": "https://marked.js.org"
+	},
+	{
+		"license": "MIT",
+		"name": "nativewind",
+		"url": "https://nativewind.dev"
+	},
+	{
+		"license": "MIT",
+		"name": "react",
+		"url": "https://react.dev"
+	},
+	{
+		"license": "Apache-2.0",
+		"name": "react-aria",
+		"url": "https://github.com/adobe/react-spectrum"
+	},
+	{
+		"license": "MIT",
+		"name": "react-dom",
+		"url": "https://react.dev"
+	},
+	{
+		"license": "MIT",
+		"name": "react-i18next",
+		"url": "https://github.com/i18next/react-i18next"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native",
+		"url": "https://reactnative.dev"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-css",
+		"url": "https://github.com/nativewind/react-native-css#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-file-access",
+		"url": "https://github.com/alpha0010/react-native-file-access#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-gesture-handler",
+		"url": "https://docs.swmansion.com/react-native-gesture-handler"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-keyboard-controller",
+		"url": "https://kirillzyusko.github.io/react-native-keyboard-controller"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-reanimated",
+		"url": "https://docs.swmansion.com/react-native-reanimated"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-safe-area-context",
+		"url": "https://github.com/AppAndFlow/react-native-safe-area-context#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-screens",
+		"url": "https://github.com/software-mansion/react-native-screens#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-svg",
+		"url": "https://github.com/react-native-community/react-native-svg"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-web",
+		"url": "https://github.com/necolas/react-native-web"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-webview",
+		"url": "https://github.com/react-native-webview/react-native-webview#readme"
+	},
+	{
+		"license": "MIT",
+		"name": "react-native-worklets",
+		"url": "https://docs.swmansion.com/react-native-worklets"
+	},
+	{
+		"license": "Apache-2.0",
+		"name": "react-stately",
+		"url": "https://github.com/adobe/react-spectrum"
+	},
+	{
+		"license": "MIT",
+		"name": "tailwind-variants",
+		"url": "https://github.com/nextui-org/tailwind-variants"
+	}
+]

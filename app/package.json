@@ -1,6 +1,6 @@
 {
 	"name": "app",
-	"version": "1.0.0",
+	"version": "0.0.1",
 	"private": true,
 	"main": "expo-router/entry",
 	"scripts": {
@@ -13,7 +13,6 @@
 		"web": "expo start --web"
 	},
 	"dependencies": {
-		"@10play/tentap-editor": "^1.0.1",
 		"@actualwave/react-native-codeditor": "^1.1.0",
 		"@expo/html-elements": "^0.12.5",
 		"@expo/ui": "~57.0.1",

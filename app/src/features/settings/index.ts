@@ -2,6 +2,7 @@ export {
 	SettingsBackButton,
 	SettingsDetailScreen,
 	SettingsHomeScreen,
+	SettingsLicensesScreen,
 } from './screens/settings-screen';
 export { SettingsCard } from './components/settings-card';
 export {

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type ReactNode,
+} from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import {
 	BackHandler,
@@ -47,6 +54,11 @@ import {
 } from '@/components/ui/native-modal';
 import { useNativeToast } from '@/components/ui/native-toast';
 import { Spinner } from '@/components/ui/spinner';
+import {
+	FileTreeModeTabs,
+	type WorkspaceMode,
+} from '../components/file-tree-mode-tabs';
+import { RemoteNotConnectedState } from '../components/remote-not-connected-state';
 import type {
 	EditorDocument,
 	EditorNode,
@@ -152,6 +164,8 @@ export function WorkspaceScreen() {
 	const [renameModalOpen, setRenameModalOpen] = useState(false);
 	const [renameValue, setRenameValue] = useState('');
 	const [refreshingFileTree, setRefreshingFileTree] = useState(false);
+	const [switchingWorkspaceMode, setSwitchingWorkspaceMode] =
+		useState<WorkspaceMode | null>(null);
 	const [locateRequestId, setLocateRequestId] = useState(0);
 	const [editorSyncLoading, setEditorSyncLoading] = useState(false);
 	const [visibleRemoteEditorState, setVisibleRemoteEditorState] =
@@ -663,13 +677,21 @@ export function WorkspaceScreen() {
 
 	const handleOpenSyncSettings = () => {
 		checkUnsavedBeforeNavigate(() => {
-			router.push('/settings/sync');
+			router.navigate('/settings');
+			setTimeout(() => {
+				router.push('/settings/sync');
+			}, 0);
 		});
 	};
 
-	const handleSwitchWorkspaceMode = (mode: 'local' | 'remote') => {
+	const handleSwitchWorkspaceMode = (mode: WorkspaceMode) => {
+		if (mode === workspaceMode || switchingWorkspaceMode) return;
+
 		checkUnsavedBeforeNavigate(() => {
-			void switchWorkspaceMode(mode);
+			setSwitchingWorkspaceMode(mode);
+			void switchWorkspaceMode(mode).finally(() => {
+				setSwitchingWorkspaceMode(null);
+			});
 		});
 	};
 
@@ -841,6 +863,7 @@ export function WorkspaceScreen() {
 						onToggleBookmark={handleToggleBookmark}
 						onToggleDirectoryExpanded={toggleDirectoryExpanded}
 						refreshing={refreshingFileTree}
+						switchingWorkspaceMode={switchingWorkspaceMode}
 						selectedDocumentId={selectedDocument?.id ?? null}
 						selectedDocumentRelativePath={
 							selectedDocument?.relativePath ?? null
@@ -978,6 +1001,7 @@ function FileTreeView({
 	onToggleBookmark,
 	onToggleDirectoryExpanded,
 	refreshing,
+	switchingWorkspaceMode,
 	selectedDocumentId,
 	selectedDocumentRelativePath,
 	selectedTreeNodePath,
@@ -1014,12 +1038,13 @@ function FileTreeView({
 	onToggleBookmark: () => void;
 	onToggleDirectoryExpanded: (directoryPath: string) => void;
 	refreshing: boolean;
+	switchingWorkspaceMode: WorkspaceMode | null;
 	selectedDocumentId: string | null;
 	selectedDocumentRelativePath: string | null;
 	selectedTreeNodePath: string | null;
 	workspaceSource: EditorWorkspaceSource;
-	workspaceMode: 'local' | 'remote';
-	switchWorkspaceMode: (mode: 'local' | 'remote') => void;
+	workspaceMode: WorkspaceMode;
+	switchWorkspaceMode: (mode: WorkspaceMode) => void;
 }) {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
@@ -1029,6 +1054,8 @@ function FileTreeView({
 		workspaceSource.kind === 'empty' &&
 		fileTree.length === 0 &&
 		documents.length === 0;
+	const showUnselectedRemoteState =
+		showUnselectedFolderState && workspaceMode === 'remote';
 	const workspacePath =
 		workspaceSource.kind === 'empty'
 			? t('fileTree.title')
@@ -1036,14 +1063,22 @@ function FileTreeView({
 					workspaceSource,
 					focusedTreeNode?.relativePath || selectedDocumentRelativePath
 				);
-	const showRemoteDisconnectedState =
+	const showRemoteNotConnectedState =
 		workspaceSource.kind === 'remote' &&
 		workspaceMode === 'remote' &&
 		connectionState !== 'connected' &&
 		fileTree.length === 0 &&
 		documents.length === 0;
+	const showRemoteEmptyState =
+		workspaceSource.kind === 'remote' &&
+		workspaceMode === 'remote' &&
+		connectionState === 'connected' &&
+		fileTree.length === 0 &&
+		documents.length === 0;
 	const showWorkspaceActions =
-		workspaceSource.kind !== 'empty' && !showRemoteDisconnectedState;
+		workspaceSource.kind !== 'empty' &&
+		!showRemoteNotConnectedState &&
+		!showRemoteEmptyState;
 	const bookmarkedNodes = useMemo(
 		() =>
 			bookmarkedDocumentIds
@@ -1075,238 +1110,234 @@ function FileTreeView({
 		});
 	}, [locateRequestId, selectedVisibleIndex]);
 
-	if (showUnselectedFolderState) {
-		return (
-			<EmptyFolderSelectionState
-				connectionState={connectionState}
-				onOpenFolder={onOpenFolder}
-				onOpenRemote={onOpenRemote}
-				topPadding={insets.top}
-			/>
-		);
-	}
-
 	return (
 		<View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-			<View style={{ borderBottomColor: palette.border, borderBottomWidth: 1 }}>
-				<View className="flex-row items-center px-4 pt-3 pb-1 gap-2">
-					<Pressable
-						onPress={() => switchWorkspaceMode('local')}
-						className={`flex-1 items-center justify-center rounded-md py-1.5 ${
-							workspaceMode === 'local' ? 'bg-primary' : 'bg-muted'
-						}`}
-					>
-						<Text
-							className={`text-[13px] font-semibold
-								${workspaceMode === 'local' ? 'text-primary-foreground' : 'text-muted-foreground'}`}
-						>
-							{t('fileTree.tabs.local', '本地文件夹')}
-						</Text>
-					</Pressable>
-					<Pressable
-						onPress={() => switchWorkspaceMode('remote')}
-						className={`flex-1 items-center justify-center rounded-md py-1.5 ${
-							workspaceMode === 'remote' ? 'bg-primary' : 'bg-muted'
-						}`}
-					>
-						<Text
-							className={`text-[13px] font-semibold
-								${workspaceMode === 'remote' ? 'text-primary-foreground' : 'text-muted-foreground'}`}
-						>
-							{t('fileTree.tabs.remote', '远程文件夹')}
-						</Text>
-					</Pressable>
-				</View>
+			<FileTreeModeTabs
+				pendingValue={switchingWorkspaceMode}
+				value={workspaceMode}
+				onValueChange={switchWorkspaceMode}
+			/>
 
-				<View className="flex-row items-center justify-between gap-3 px-4 py-3">
-					<Text
-						className="min-w-0 flex-1 text-[15px] font-semibold text-foreground"
-						numberOfLines={1}
-					>
-						{workspacePath}
-					</Text>
-					{showWorkspaceActions && workspaceSource.kind !== 'remote' ? (
-						<FileToolbarIconButton
-							icon={FolderOpen}
-							label={t('fileTree.actions.openFolder')}
-							onPress={onOpenFolder}
-							palette={palette}
-						/>
-					) : null}
-				</View>
-				{showWorkspaceActions ? (
+			{switchingWorkspaceMode ? (
+				<FileTreeModeLoadingState />
+			) : showUnselectedFolderState ? (
+				showUnselectedRemoteState ? (
+					<RemoteNotConnectedState onOpenSyncSettings={onOpenSyncSettings} />
+				) : (
+					<EmptyFolderSelectionState
+						connectionState={connectionState}
+						onOpenFolder={onOpenFolder}
+						onOpenRemote={onOpenRemote}
+					/>
+				)
+			) : (
+				<>
 					<View
-						className="flex-row flex-wrap items-center gap-1 px-2 py-1.5"
-						style={{ borderTopColor: palette.border, borderTopWidth: 1 }}
+						style={{
+							borderBottomColor: palette.border,
+							borderBottomWidth:
+								showRemoteEmptyState || showRemoteNotConnectedState ? 0 : 1,
+						}}
 					>
-						{canCreateFile ? (
-							<>
+						{showRemoteEmptyState || showRemoteNotConnectedState ? null : (
+							<View
+								className="flex-row items-center justify-between gap-3 px-4
+									py-3"
+							>
+								<Text
+									className="min-w-0 flex-1 text-[15px] font-semibold
+										text-foreground"
+									numberOfLines={1}
+								>
+									{workspacePath}
+								</Text>
+								{showWorkspaceActions && workspaceSource.kind !== 'remote' ? (
+									<FileToolbarIconButton
+										icon={FolderOpen}
+										label={t('fileTree.actions.openFolder')}
+										onPress={onOpenFolder}
+										palette={palette}
+									/>
+								) : null}
+							</View>
+						)}
+						{showWorkspaceActions ? (
+							<View
+								className="flex-row flex-wrap items-center gap-1 px-2 py-1.5"
+								style={{ borderTopColor: palette.border, borderTopWidth: 1 }}
+							>
+								{canCreateFile ? (
+									<>
+										<FileToolbarIconButton
+											icon={FilePlus2}
+											label={t('fileTree.actions.newFile')}
+											onPress={onCreateFile}
+											palette={palette}
+										/>
+										<FileToolbarIconButton
+											icon={FolderCog}
+											label={t('fileTree.actions.newFolder')}
+											onPress={onCreateFolder}
+											palette={palette}
+										/>
+										<FileToolbarIconButton
+											icon={ClipboardPaste}
+											label={t('markdownEditor.toolbar.pasteFile')}
+											onPress={onPasteFile}
+											palette={palette}
+											disabled={!hasCopiedFile}
+											active={hasCopiedFile}
+										/>
+									</>
+								) : null}
 								<FileToolbarIconButton
-									icon={FilePlus2}
-									label={t('fileTree.actions.newFile')}
-									onPress={onCreateFile}
+									icon={RefreshCw}
+									label={t('fileTree.actions.refresh')}
+									onPress={onRefreshFileTree}
 									palette={palette}
+									disabled={refreshing}
+									loading={refreshing}
 								/>
 								<FileToolbarIconButton
-									icon={FolderCog}
-									label={t('fileTree.actions.newFolder')}
-									onPress={onCreateFolder}
+									icon={LocateFixed}
+									label={t('fileTree.actions.locateCurrent')}
+									onPress={onLocateCurrent}
 									palette={palette}
+									disabled={!canLocateCurrent}
 								/>
+								<FileToolbarIconButton
+									icon={Edit3}
+									label={t('markdownEditor.toolbar.renameFile')}
+									onPress={onRenameFile}
+									palette={palette}
+									disabled={!focusedTreeNode || focusedTreeNode.kind !== 'file'}
+								/>
+								<FileToolbarIconButton
+									icon={Copy}
+									label={t('markdownEditor.toolbar.copyFile')}
+									onPress={onCopyFile}
+									palette={palette}
+									disabled={!canCopyFile}
+									active={Boolean(
+										copyState &&
+										(focusedTreeNode?.path === copyState.documentId ||
+											selectedDocumentId === copyState.documentId)
+									)}
+								/>
+								<FileToolbarIconButton
+									icon={isFocusedTreeNodeBookmarked ? BookmarkCheck : Bookmark}
+									label={
+										isFocusedTreeNodeBookmarked
+											? t('fileTree.actions.removeBookmark')
+											: t('fileTree.actions.bookmark')
+									}
+									onPress={onToggleBookmark}
+									palette={palette}
+									disabled={!focusedTreeNode || focusedTreeNode.kind !== 'file'}
+								/>
+								<FileToolbarIconButton
+									icon={Trash2}
+									label={t('fileTree.actions.delete')}
+									onPress={onDeleteEntry}
+									palette={palette}
+									disabled={
+										!focusedTreeNode ||
+										focusedTreeNode.path === workspaceSource.uri
+									}
+								/>
+							</View>
+						) : null}
+						{copyState ? (
+							<View
+								className="flex-row items-center gap-2 px-3 py-2"
+								style={{
+									backgroundColor: palette.surfaceMuted,
+									borderTopColor: palette.border,
+									borderTopWidth: 1,
+								}}
+							>
+								<Copy color={palette.icon} size={15} strokeWidth={2.2} />
+								<Text
+									className="min-w-0 flex-1 text-[12px] font-medium
+										text-foreground"
+									numberOfLines={1}
+								>
+									{t('fileTree.copyBanner.title', { name: copyState.title })}
+								</Text>
 								<FileToolbarIconButton
 									icon={ClipboardPaste}
 									label={t('markdownEditor.toolbar.pasteFile')}
 									onPress={onPasteFile}
 									palette={palette}
-									disabled={!hasCopiedFile}
-									active={hasCopiedFile}
+									active
 								/>
-							</>
+								<FileToolbarIconButton
+									icon={X}
+									label={t('fileTree.actions.cancelCopy')}
+									onPress={onCancelCopy}
+									palette={palette}
+								/>
+							</View>
 						) : null}
-						<FileToolbarIconButton
-							icon={RefreshCw}
-							label={t('fileTree.actions.refresh')}
-							onPress={onRefreshFileTree}
-							palette={palette}
-							disabled={refreshing}
-							loading={refreshing}
-						/>
-						<FileToolbarIconButton
-							icon={LocateFixed}
-							label={t('fileTree.actions.locateCurrent')}
-							onPress={onLocateCurrent}
-							palette={palette}
-							disabled={!canLocateCurrent}
-						/>
-						<FileToolbarIconButton
-							icon={Edit3}
-							label={t('markdownEditor.toolbar.renameFile')}
-							onPress={onRenameFile}
-							palette={palette}
-							disabled={!focusedTreeNode || focusedTreeNode.kind !== 'file'}
-						/>
-						<FileToolbarIconButton
-							icon={Copy}
-							label={t('markdownEditor.toolbar.copyFile')}
-							onPress={onCopyFile}
-							palette={palette}
-							disabled={!canCopyFile}
-							active={Boolean(
-								copyState &&
-								(focusedTreeNode?.path === copyState.documentId ||
-									selectedDocumentId === copyState.documentId)
-							)}
-						/>
-						<FileToolbarIconButton
-							icon={isFocusedTreeNodeBookmarked ? BookmarkCheck : Bookmark}
-							label={
-								isFocusedTreeNodeBookmarked
-									? t('fileTree.actions.removeBookmark')
-									: t('fileTree.actions.bookmark')
-							}
-							onPress={onToggleBookmark}
-							palette={palette}
-							disabled={!focusedTreeNode || focusedTreeNode.kind !== 'file'}
-						/>
-						<FileToolbarIconButton
-							icon={Trash2}
-							label={t('fileTree.actions.delete')}
-							onPress={onDeleteEntry}
-							palette={palette}
-							disabled={
-								!focusedTreeNode || focusedTreeNode.path === workspaceSource.uri
-							}
-						/>
 					</View>
-				) : null}
-				{copyState ? (
-					<View
-						className="flex-row items-center gap-2 px-3 py-2"
-						style={{
-							backgroundColor: palette.surfaceMuted,
-							borderTopColor: palette.border,
-							borderTopWidth: 1,
-						}}
-					>
-						<Copy color={palette.icon} size={15} strokeWidth={2.2} />
-						<Text
-							className="min-w-0 flex-1 text-[12px] font-medium text-foreground"
-							numberOfLines={1}
-						>
-							{t('fileTree.copyBanner.title', { name: copyState.title })}
-						</Text>
-						<FileToolbarIconButton
-							icon={ClipboardPaste}
-							label={t('markdownEditor.toolbar.pasteFile')}
-							onPress={onPasteFile}
-							palette={palette}
-							active
-						/>
-						<FileToolbarIconButton
-							icon={X}
-							label={t('fileTree.actions.cancelCopy')}
-							onPress={onCancelCopy}
-							palette={palette}
-						/>
-					</View>
-				) : null}
-			</View>
-			{bookmarkedNodes.length > 0 && !showRemoteDisconnectedState ? (
-				<View className="px-2 pt-2">
-					<BookmarksSection
-						nodes={bookmarkedNodes}
-						onOpenDocument={onOpenDocument}
-						onSelectTreeNode={onSelectTreeNode}
-						selectedTreeNodePath={selectedTreeNodePath}
-					/>
-				</View>
-			) : null}
-			{showRemoteDisconnectedState ? (
-				<RemoteDisconnectedState onOpenSyncSettings={onOpenSyncSettings} />
-			) : (
-				<ScrollView
-					ref={scrollViewRef}
-					keyboardShouldPersistTaps="handled"
-					showsVerticalScrollIndicator={false}
-					className="flex-1 px-2 py-2"
-					contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
-				>
-					<View className="gap-1">
-						{fileTree.length > 0
-							? fileTree.map((node) => (
-									<FileTreeNodeRow
-										key={node.id}
-										node={node}
-										expandedDirectoryPaths={expandedDirectoryPaths}
-										onOpenDocument={onOpenDocument}
-										onSelectTreeNode={onSelectTreeNode}
-										onToggleDirectoryExpanded={onToggleDirectoryExpanded}
-										selectedTreeNodePath={selectedTreeNodePath}
-									/>
-								))
-							: documents.map((document) => (
-									<DocumentRow
-										key={document.id}
-										document={document}
-										onOpenDocument={onOpenDocument}
-										onSelectTreeNode={onSelectTreeNode}
-										selected={document.id === selectedTreeNodePath}
-									/>
-								))}
-
-						{fileTree.length === 0 && documents.length === 0 ? (
-							<EmptyWorkspace
-								canCreateFile={canCreateFile}
-								connectionState={connectionState}
-								onCreateFile={onCreateFile}
-								onOpenFolder={onOpenFolder}
-								onOpenRemote={onOpenRemote}
-								palette={palette}
-								workspaceSource={workspaceSource}
+					{bookmarkedNodes.length > 0 && !showRemoteNotConnectedState ? (
+						<View className="px-2 pt-2">
+							<BookmarksSection
+								nodes={bookmarkedNodes}
+								onOpenDocument={onOpenDocument}
+								onSelectTreeNode={onSelectTreeNode}
+								selectedTreeNodePath={selectedTreeNodePath}
 							/>
-						) : null}
-					</View>
-				</ScrollView>
+						</View>
+					) : null}
+					{showRemoteNotConnectedState ? (
+						<RemoteNotConnectedState onOpenSyncSettings={onOpenSyncSettings} />
+					) : (
+						<ScrollView
+							ref={scrollViewRef}
+							keyboardShouldPersistTaps="handled"
+							showsVerticalScrollIndicator={false}
+							className="flex-1 px-2 py-2"
+							contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
+						>
+							<View className="gap-1">
+								{fileTree.length > 0
+									? fileTree.map((node) => (
+											<FileTreeNodeRow
+												key={node.id}
+												node={node}
+												expandedDirectoryPaths={expandedDirectoryPaths}
+												onOpenDocument={onOpenDocument}
+												onSelectTreeNode={onSelectTreeNode}
+												onToggleDirectoryExpanded={onToggleDirectoryExpanded}
+												selectedTreeNodePath={selectedTreeNodePath}
+											/>
+										))
+									: documents.map((document) => (
+											<DocumentRow
+												key={document.id}
+												document={document}
+												onOpenDocument={onOpenDocument}
+												onSelectTreeNode={onSelectTreeNode}
+												selected={document.id === selectedTreeNodePath}
+											/>
+										))}
+
+								{fileTree.length === 0 && documents.length === 0 ? (
+									<EmptyWorkspace
+										canCreateFile={canCreateFile}
+										connectionState={connectionState}
+										onCreateFile={onCreateFile}
+										onOpenFolder={onOpenFolder}
+										onOpenRemote={onOpenRemote}
+										palette={palette}
+										workspaceSource={workspaceSource}
+									/>
+								) : null}
+							</View>
+						</ScrollView>
+					)}
+				</>
 			)}
 		</View>
 	);
@@ -1670,11 +1701,13 @@ function FileToolbarIconButton({
 }
 
 function FileActionButton({
+	fullWidth = false,
 	icon: Icon,
 	label,
 	onPress,
 	palette,
 }: {
+	fullWidth?: boolean;
 	icon: typeof FilePlus2;
 	label: string;
 	onPress: () => void;
@@ -1684,12 +1717,13 @@ function FileActionButton({
 		<Pressable
 			accessibilityLabel={label}
 			onPress={onPress}
-			className="min-h-9 flex-1 flex-row items-center justify-center gap-2
-				rounded-md px-3"
+			className={`min-h-9 flex-row items-center justify-center gap-2 rounded-md
+				px-3 ${fullWidth ? 'w-full' : 'flex-1'}`}
 			style={{
 				backgroundColor: palette.surfaceMuted,
 				borderColor: palette.border,
 				borderWidth: 1,
+				...(fullWidth ? { width: '100%' } : { flex: 1, minWidth: 0 }),
 			}}
 		>
 			<Icon color={palette.icon} size={16} strokeWidth={2.2} />
@@ -1700,6 +1734,24 @@ function FileActionButton({
 				{label}
 			</Text>
 		</Pressable>
+	);
+}
+
+function FileActionRow({ children }: { children: ReactNode }) {
+	return <View className="w-full flex-row gap-2">{children}</View>;
+}
+
+function FileActionStack({ children }: { children: ReactNode }) {
+	return <View className="w-full gap-2">{children}</View>;
+}
+
+function FileTreeModeLoadingState() {
+	const palette = useAppThemePalette();
+
+	return (
+		<View className="flex-1 items-center justify-center">
+			<Spinner color={palette.iconMuted} size="large" />
+		</View>
 	);
 }
 
@@ -1754,15 +1806,64 @@ function EmptyWorkspace({
 						{t('fileTree.empty.detail')}
 					</Text>
 				</View>
-				<View className="flex-row gap-2">
+				<FileActionStack>
 					{canShowCreateAction ? (
 						<FileActionButton
+							fullWidth
 							icon={FilePlus2}
 							label={t('fileTree.actions.newFile')}
 							onPress={onCreateFile}
 							palette={palette}
 						/>
 					) : null}
+					<FileActionButton
+						fullWidth
+						icon={FolderPlus}
+						label={t('fileTree.actions.openFolder')}
+						onPress={onOpenFolder}
+						palette={palette}
+					/>
+					<FileActionButton
+						fullWidth
+						icon={MonitorSmartphone}
+						label={
+							connectionState === 'connected'
+								? t('workspace.actions.openRemote')
+								: t('workspace.actions.connectDesktop')
+						}
+						onPress={onOpenRemote}
+						palette={palette}
+					/>
+				</FileActionStack>
+			</View>
+		</View>
+	);
+}
+
+function EmptyFolderSelectionState({
+	connectionState,
+	onOpenFolder,
+	onOpenRemote,
+}: {
+	connectionState: SyncConnectionState;
+	onOpenFolder: () => void;
+	onOpenRemote: () => void;
+}) {
+	const { t } = useTranslation();
+	const palette = useAppThemePalette();
+
+	return (
+		<View className="flex-1 bg-background px-5 pt-8">
+			<View className="gap-4">
+				<View className="gap-2">
+					<Text className="text-[22px] font-semibold text-foreground">
+						{t('fileTree.empty.title')}
+					</Text>
+					<Text className="text-[14px] leading-5 text-muted-foreground">
+						{t('fileTree.empty.detail')}
+					</Text>
+				</View>
+				<FileActionRow>
 					<FileActionButton
 						icon={FolderPlus}
 						label={t('fileTree.actions.openFolder')}
@@ -1779,92 +1880,7 @@ function EmptyWorkspace({
 						onPress={onOpenRemote}
 						palette={palette}
 					/>
-				</View>
-			</View>
-		</View>
-	);
-}
-
-function EmptyFolderSelectionState({
-	connectionState,
-	onOpenFolder,
-	onOpenRemote,
-	topPadding,
-}: {
-	connectionState: SyncConnectionState;
-	onOpenFolder: () => void;
-	onOpenRemote: () => void;
-	topPadding: number;
-}) {
-	const { t } = useTranslation();
-	const palette = useAppThemePalette();
-
-	return (
-		<View
-			className="flex-1 bg-background px-5"
-			style={{ paddingTop: topPadding + 56 }}
-		>
-			<View className="gap-4">
-				<View className="gap-2">
-					<Text className="text-[22px] font-semibold text-foreground">
-						{t('fileTree.empty.title')}
-					</Text>
-					<Text className="text-[14px] leading-5 text-muted-foreground">
-						{t('fileTree.empty.detail')}
-					</Text>
-				</View>
-				<View className="gap-2">
-					<View className="flex-row gap-2">
-						<FileActionButton
-							icon={FolderPlus}
-							label={t('fileTree.actions.openFolder')}
-							onPress={onOpenFolder}
-							palette={palette}
-						/>
-						<FileActionButton
-							icon={MonitorSmartphone}
-							label={
-								connectionState === 'connected'
-									? t('workspace.actions.openRemote')
-									: t('workspace.actions.connectDesktop')
-							}
-							onPress={onOpenRemote}
-							palette={palette}
-						/>
-					</View>
-				</View>
-			</View>
-		</View>
-	);
-}
-
-function RemoteDisconnectedState({
-	onOpenSyncSettings,
-}: {
-	onOpenSyncSettings: () => void;
-}) {
-	const { t } = useTranslation();
-	const palette = useAppThemePalette();
-
-	return (
-		<View className="flex-1 bg-background px-5 pt-8">
-			<View className="gap-4">
-				<View className="gap-2">
-					<Text className="text-[22px] font-semibold text-foreground">
-						{t('fileTree.remoteDisconnected.title')}
-					</Text>
-					<Text className="text-[14px] leading-5 text-muted-foreground">
-						{t('fileTree.remoteDisconnected.detail')}
-					</Text>
-				</View>
-				<View className="flex-row gap-2">
-					<FileActionButton
-						icon={Settings}
-						label={t('fileTree.remoteDisconnected.action')}
-						onPress={onOpenSyncSettings}
-						palette={palette}
-					/>
-				</View>
+				</FileActionRow>
 			</View>
 		</View>
 	);
@@ -1897,14 +1913,14 @@ function EmptyEditorState({
 	const title = isRemoteWorkspace
 		? connectionState === 'connected'
 			? t('workspace.remoteNoSelection.title')
-			: t('fileTree.remoteDisconnected.title')
+			: t('fileTree.remoteNotConnected.title')
 		: hasOpenFolder
 			? t('workspace.noSelection.title')
 			: t('workspace.empty.title');
 	const detail = isRemoteWorkspace
 		? connectionState === 'connected'
 			? t('workspace.remoteNoSelection.detail')
-			: t('fileTree.remoteDisconnected.detail')
+			: t('fileTree.remoteNotConnected.detail')
 		: hasOpenFolder
 			? t('workspace.noSelection.detail')
 			: t('workspace.empty.detail');
@@ -1923,55 +1939,53 @@ function EmptyEditorState({
 						{detail}
 					</Text>
 				</View>
-				<View className="gap-2">
-					<View className="flex-row gap-2">
-						{isRemoteWorkspace ? (
-							connectionState === 'connected' ? (
-								<FileActionButton
-									icon={MonitorSmartphone}
-									label={t('fileTree.tabs.remote')}
-									onPress={onOpenRemote}
-									palette={palette}
-								/>
-							) : (
-								<FileActionButton
-									icon={Settings}
-									label={t('fileTree.remoteDisconnected.action')}
-									onPress={onOpenSyncSettings}
-									palette={palette}
-								/>
-							)
-						) : hasOpenFolder ? (
-							canShowCreateAction ? (
-								<FileActionButton
-									icon={FilePlus2}
-									label={t('fileTree.actions.newFile')}
-									onPress={onCreateFile}
-									palette={palette}
-								/>
-							) : null
+				<FileActionRow>
+					{isRemoteWorkspace ? (
+						connectionState === 'connected' ? (
+							<FileActionButton
+								icon={MonitorSmartphone}
+								label={t('fileTree.tabs.remote')}
+								onPress={onOpenRemote}
+								palette={palette}
+							/>
 						) : (
-							<>
-								<FileActionButton
-									icon={FolderPlus}
-									label={t('fileTree.actions.openFolder')}
-									onPress={onOpenFolder}
-									palette={palette}
-								/>
-								<FileActionButton
-									icon={MonitorSmartphone}
-									label={
-										connectionState === 'connected'
-											? t('workspace.actions.openRemote')
-											: t('workspace.actions.connectDesktop')
-									}
-									onPress={onOpenRemote}
-									palette={palette}
-								/>
-							</>
-						)}
-					</View>
-				</View>
+							<FileActionButton
+								icon={Settings}
+								label={t('fileTree.remoteNotConnected.action')}
+								onPress={onOpenSyncSettings}
+								palette={palette}
+							/>
+						)
+					) : hasOpenFolder ? (
+						canShowCreateAction ? (
+							<FileActionButton
+								icon={FilePlus2}
+								label={t('fileTree.actions.newFile')}
+								onPress={onCreateFile}
+								palette={palette}
+							/>
+						) : null
+					) : (
+						<>
+							<FileActionButton
+								icon={FolderPlus}
+								label={t('fileTree.actions.openFolder')}
+								onPress={onOpenFolder}
+								palette={palette}
+							/>
+							<FileActionButton
+								icon={MonitorSmartphone}
+								label={
+									connectionState === 'connected'
+										? t('workspace.actions.openRemote')
+										: t('workspace.actions.connectDesktop')
+								}
+								onPress={onOpenRemote}
+								palette={palette}
+							/>
+						</>
+					)}
+				</FileActionRow>
 			</View>
 		</View>
 	);

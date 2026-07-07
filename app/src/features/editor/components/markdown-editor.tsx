@@ -659,7 +659,11 @@ export function MarkdownEditor({
 								{editorLoadError ? (
 									<Text style={styles.blockingText}>{editorLoadError}</Text>
 								) : (
-									<Spinner color="#2563eb" size="small" />
+									<Spinner
+										color="#2563eb"
+										size="large"
+										style={styles.editorBlockingSpinner}
+									/>
 								)}
 							</View>
 						)}
@@ -1485,6 +1489,9 @@ const styles = StyleSheet.create({
 		lineHeight: 18,
 		maxWidth: 300,
 		textAlign: 'center',
+	},
+	editorBlockingSpinner: {
+		transform: [{ scale: 1.25 }],
 	},
 	container: {
 		flex: 1,
