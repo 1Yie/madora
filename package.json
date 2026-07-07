@@ -5,7 +5,8 @@
 	"private": true,
 	"scripts": {
 		"build": "tsc && vite build",
-		"bump": "node ./scripts/bump-version.js",
+		"bump:app": "node ./scripts/bump-app-version.js",
+		"bump:pc": "node ./scripts/bump-version.js",
 		"changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
 		"dev": "vite",
 		"format": "prettier . --write",

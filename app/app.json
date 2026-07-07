@@ -11,11 +11,17 @@
 				"android.permission.RECORD_AUDIO"
 			],
 			"predictiveBackGestureEnabled": false,
-			"versionCode": 3
+			"versionCode": 4
 		},
 		"experiments": {
 			"reactCompiler": true,
 			"typedRoutes": true
+		},
+		"extra": {
+			"eas": {
+				"projectId": "949b6cc8-a954-4dcd-a5c9-6d0d8ea52122"
+			},
+			"router": {}
 		},
 		"icon": "./assets/images/icon.png",
 		"ios": {
@@ -26,6 +32,7 @@
 		},
 		"name": "Madora",
 		"orientation": "portrait",
+		"owner": "ichiyo",
 		"plugins": [
 			"expo-router",
 			[
@@ -49,7 +56,7 @@
 		"scheme": "madora",
 		"slug": "madora",
 		"userInterfaceStyle": "automatic",
-		"version": "0.0.1",
+		"version": "0.0.2",
 		"web": {
 			"favicon": "./assets/images/favicon.png",
 			"output": "static"
