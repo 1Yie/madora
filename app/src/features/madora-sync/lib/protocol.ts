@@ -18,6 +18,8 @@
 export interface PairingPayload {
 	host: string;
 	port: number;
+	protocol?: SyncTransportProtocol;
+	path?: string;
 	pairingId: string;
 	pairingToken: string;
 	code: string;
@@ -25,7 +27,111 @@ export interface PairingPayload {
 	expiresAt: string;
 }
 
+export type SyncTransportProtocol = 'ws' | 'wss';
+
+export interface PairingEndpoint {
+	host: string;
+	port: number;
+	protocol: SyncTransportProtocol;
+	path: string;
+}
+
 const PAIRING_SCHEME = 'madora-sync://pair?';
+const SUPPORTED_ENDPOINT_PROTOCOLS = new Set(['http:', 'https:']);
+
+function protocolFromUrlProtocol(
+	protocol: string
+): SyncTransportProtocol | null {
+	switch (protocol) {
+		case 'http:':
+			return 'ws';
+		case 'https:':
+			return 'wss';
+		default:
+			return null;
+	}
+}
+
+function defaultPortForProtocol(protocol: SyncTransportProtocol): number {
+	return protocol === 'wss' ? 443 : 80;
+}
+
+export function parsePairingEndpoint(
+	rawAddress: string,
+	fallbackPort?: number | null
+): PairingEndpoint | null {
+	const address = rawAddress.trim();
+	if (!address) return null;
+
+	const hasProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(address);
+	const candidate = hasProtocol ? address : `http://${address}`;
+
+	let url: URL;
+	try {
+		url = new URL(candidate);
+	} catch {
+		return null;
+	}
+
+	if (!SUPPORTED_ENDPOINT_PROTOCOLS.has(url.protocol)) {
+		return null;
+	}
+
+	const protocol = protocolFromUrlProtocol(url.protocol);
+	const host = url.hostname;
+	if (!protocol || !host) return null;
+	if (url.pathname !== '/' || url.search || url.hash) return null;
+
+	const explicitPort = url.port ? Number(url.port) : null;
+	const port = explicitPort ?? fallbackPort ?? null;
+	const resolvedPort = port ?? defaultPortForProtocol(protocol);
+	if (
+		!Number.isInteger(resolvedPort) ||
+		resolvedPort <= 0 ||
+		resolvedPort > 65535
+	) {
+		return null;
+	}
+
+	return {
+		host,
+		path: '',
+		port: resolvedPort,
+		protocol,
+	};
+}
+
+export function formatPairingEndpoint(endpoint: {
+	host: string;
+	path?: string | null;
+	port: number;
+	protocol?: SyncTransportProtocol | null;
+}): string {
+	const protocol = endpoint.protocol ?? 'ws';
+	const displayProtocol = protocol === 'wss' ? 'https' : 'http';
+	const host =
+		endpoint.host.includes(':') && !endpoint.host.startsWith('[')
+			? `[${endpoint.host}]`
+			: endpoint.host;
+	return `${displayProtocol}://${host}:${endpoint.port}`;
+}
+
+export function formatSyncDisplayAddress(address: string): string {
+	return address
+		.trim()
+		.replace(/^wss:\/\//i, 'https://')
+		.replace(/^ws:\/\//i, 'http://');
+}
+
+export function buildWebSocketUrl(payload: PairingPayload): string {
+	const protocol = payload.protocol ?? 'ws';
+	const host =
+		payload.host.includes(':') && !payload.host.startsWith('[')
+			? `[${payload.host}]`
+			: payload.host;
+	const path = payload.path ?? '';
+	return `${protocol}://${host}:${payload.port}${path}`;
+}
 
 /** Parse a scanned QR string into a {@link PairingPayload}, or null if invalid. */
 export function parsePairingPayload(raw: string): PairingPayload | null {
@@ -44,6 +150,10 @@ export function parsePairingPayload(raw: string): PairingPayload | null {
 	const code = params.get('code');
 	const deviceName = params.get('deviceName');
 	const expiresAt = params.get('expiresAt');
+	const rawProtocol = params.get('protocol');
+	const protocol =
+		rawProtocol === 'ws' || rawProtocol === 'wss' ? rawProtocol : undefined;
+	const path = params.get('path') ?? undefined;
 
 	if (
 		!host ||
@@ -57,7 +167,17 @@ export function parsePairingPayload(raw: string): PairingPayload | null {
 		return null;
 	}
 
-	return { host, port, pairingId, pairingToken, code, deviceName, expiresAt };
+	return {
+		code,
+		deviceName,
+		expiresAt,
+		host,
+		pairingId,
+		pairingToken,
+		path,
+		port,
+		protocol,
+	};
 }
 
 // ─── File tree (mirrors Rust ExplorerNode) ───────────────────────────────
@@ -141,6 +261,9 @@ export type ClientMessage =
 export interface AuthOkMessage {
 	type: 'auth_ok';
 	deviceName: string;
+	shareAiCompletions?: boolean;
+	hostDeviceName?: string | null;
+	pairingToken?: string | null;
 }
 
 export interface AuthErrorMessage {

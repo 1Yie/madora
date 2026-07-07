@@ -2,8 +2,9 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::models::madora_sync::{
-    MadoraSyncConfig, MadoraSyncPairDeviceInput, MadoraSyncPairDeviceResult, MadoraSyncPairingCode,
-    MadoraSyncPairingQr, MadoraSyncSettingsInput,
+    MadoraSyncAiCompletionConfig, MadoraSyncConfig, MadoraSyncPairDeviceInput,
+    MadoraSyncPairDeviceResult, MadoraSyncPairingCode, MadoraSyncPairingQr,
+    MadoraSyncSettingsInput,
 };
 use crate::models::sync_server::EditorStateInput;
 use crate::services::madora_sync::MadoraSyncStore;
@@ -22,6 +23,14 @@ pub async fn madora_sync_save_settings(
     settings: MadoraSyncSettingsInput,
 ) -> Result<MadoraSyncConfig, String> {
     store.save_settings(settings)
+}
+
+#[tauri::command]
+pub async fn madora_sync_save_ai_completion_config(
+    store: State<'_, MadoraSyncStore>,
+    config: MadoraSyncAiCompletionConfig,
+) -> Result<MadoraSyncConfig, String> {
+    store.save_ai_completion_config(config)
 }
 
 #[tauri::command]

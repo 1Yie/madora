@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { AiProvider, CustomProviderProtocol } from '@/invoke/ai';
 
 export type MadoraSyncRole = 'host' | 'client';
 
@@ -34,6 +35,7 @@ export interface MadoraSyncConfig {
 	activePairingCode: string | null;
 	pairingCodeExpiresAt: string | null;
 	pairedDevices: MadoraSyncPairedDevice[];
+	aiCompletionConfig: MadoraSyncAiCompletionConfig | null;
 }
 
 export interface MadoraSyncSettingsInput {
@@ -43,6 +45,15 @@ export interface MadoraSyncSettingsInput {
 	autoStartServer: boolean;
 	allowLanDiscovery: boolean;
 	shareAiCompletions: boolean;
+}
+
+export interface MadoraSyncAiCompletionConfig {
+	enabled: boolean;
+	apiUrl: string | null;
+	customProtocol: CustomProviderProtocol | null;
+	model: string | null;
+	provider: AiProvider;
+	useSsl: boolean;
 }
 
 export interface MadoraSyncPairingCode {
@@ -109,6 +120,14 @@ export async function madoraSyncSaveSettings(
 	settings: MadoraSyncSettingsInput
 ): Promise<MadoraSyncConfig> {
 	return invoke<MadoraSyncConfig>('madora_sync_save_settings', { settings });
+}
+
+export async function madoraSyncSaveAiCompletionConfig(
+	config: MadoraSyncAiCompletionConfig
+): Promise<MadoraSyncConfig> {
+	return invoke<MadoraSyncConfig>('madora_sync_save_ai_completion_config', {
+		config,
+	});
 }
 
 export async function madoraSyncIssuePairingCode(): Promise<MadoraSyncPairingCode> {

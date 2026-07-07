@@ -1,10 +1,15 @@
-import { Linking, Pressable, Text, View } from 'react-native';
+import {
+	ActivityIndicator,
+	Linking,
+	Pressable,
+	Text,
+	View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import type { ComponentType, ReactNode } from 'react';
+import { useState, type ComponentType, type ReactNode } from 'react';
 import {
 	Check,
 	ChevronRight,
@@ -20,6 +25,7 @@ import {
 } from 'lucide-react-native';
 
 import licenses from '@/assets/licenses.json';
+import { useNativeToast } from '@/components/ui/native-toast';
 import {
 	Slider,
 	SliderFilledTrack,
@@ -42,6 +48,9 @@ import {
 	type LocalePreference,
 	type ThemePreference,
 } from '../providers/app-settings-provider';
+import appConfig from '../../../../app.json';
+import packageJson from '../../../../package.json';
+import { checkLatestRelease } from '../lib/update-check';
 
 type SettingsSection = 'editor' | 'appearance' | 'about';
 type SettingsHomeSection = SettingsSection | 'ai' | 'sync';
@@ -282,7 +291,39 @@ function EditorSettingsScreen() {
 
 function AboutSettingsScreen() {
 	const { t } = useTranslation();
-	const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+	const { showToast } = useNativeToast();
+	const palette = useAppThemePalette();
+	const [checkingForUpdate, setCheckingForUpdate] = useState(false);
+	const appVersion = appConfig.expo.version ?? packageJson.version;
+
+	const handleCheckForUpdate = async () => {
+		if (checkingForUpdate) {
+			return;
+		}
+
+		setCheckingForUpdate(true);
+		try {
+			const releaseInfo = await checkLatestRelease();
+			showToast({
+				description: t('settings.about.toasts.latestReleaseDescription'),
+				durationMs: 2400,
+				title: t('settings.about.toasts.latestReleaseTitle'),
+				tone: 'success',
+			});
+			await Linking.openURL(releaseInfo.releaseUrl);
+		} catch (error) {
+			showToast({
+				description: getUpdateErrorMessage(
+					error,
+					t('settings.about.toasts.checkFailedDescription')
+				),
+				title: t('settings.about.toasts.checkFailed'),
+				tone: 'error',
+			});
+		} finally {
+			setCheckingForUpdate(false);
+		}
+	};
 
 	return (
 		<SettingsShell header={<BackButton />}>
@@ -293,16 +334,21 @@ function AboutSettingsScreen() {
 					version: appVersion,
 				})}
 				title="Madora"
-			>
-				<View className="gap-1">
-					<Text className="text-[15px] font-semibold text-foreground">
-						{t('settings.about.cards.update.title')}
-					</Text>
-					<Text className="text-[13px] leading-5 text-muted-foreground">
-						{t('settings.about.cards.update.description')}
-					</Text>
-				</View>
-			</SettingsCard>
+			/>
+			<SettingsLinkCard
+				accessibilityLabel={t('settings.about.actions.check')}
+				detail={t('settings.about.cards.update.description')}
+				disabled={checkingForUpdate}
+				onPress={() => {
+					void handleCheckForUpdate();
+				}}
+				title={t('settings.about.cards.update.title')}
+				trailing={
+					checkingForUpdate ? (
+						<ActivityIndicator color={palette.iconMuted} size="small" />
+					) : undefined
+				}
+			/>
 			<SettingsLinkCard
 				detail={t('settings.about.cards.licenses.description')}
 				onPress={() => router.push('/settings/licenses')}
@@ -435,24 +481,35 @@ function SettingsRow({
 }
 
 function SettingsLinkCard({
+	accessibilityLabel,
 	detail,
+	disabled,
 	onPress,
 	title,
+	trailing,
 }: {
+	accessibilityLabel?: string;
 	detail: string;
+	disabled?: boolean;
 	onPress: () => void;
 	title: string;
+	trailing?: ReactNode;
 }) {
 	const palette = useAppThemePalette();
 
 	return (
 		<Pressable
+			accessibilityLabel={accessibilityLabel}
+			accessibilityRole="button"
+			accessibilityState={disabled ? { disabled: true } : undefined}
+			disabled={disabled}
 			onPress={onPress}
 			className="min-h-[84px] flex-row items-center rounded-lg p-4"
 			style={{
 				backgroundColor: palette.surface,
 				borderColor: palette.border,
 				borderWidth: 1,
+				opacity: disabled ? 0.72 : 1,
 			}}
 		>
 			<View className="flex-1 gap-1 pr-3">
@@ -463,7 +520,9 @@ function SettingsLinkCard({
 					{detail}
 				</Text>
 			</View>
-			<ChevronRight color={palette.iconMuted} size={18} strokeWidth={2.2} />
+			{trailing ?? (
+				<ChevronRight color={palette.iconMuted} size={18} strokeWidth={2.2} />
+			)}
 		</Pressable>
 	);
 }
@@ -609,4 +668,16 @@ function getLocaleLabel(
 ) {
 	if (locale === 'zh-CN') return t('language.options.zhCN');
 	return t(`language.options.${locale}`);
+}
+
+function getUpdateErrorMessage(error: unknown, fallback: string): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+
+	if (typeof error === 'string') {
+		return error;
+	}
+
+	return fallback;
 }

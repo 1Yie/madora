@@ -74,7 +74,7 @@ type EditorContextValue = {
 		fullText: string,
 		cursorPos: number
 	) => Promise<string>;
-	locateSelectedDocumentInTree: () => boolean;
+	locateSelectedDocumentInTree: () => Promise<boolean>;
 	renameSelectedFile: (nextName: string) => Promise<boolean>;
 	refreshFileTree: () => Promise<boolean>;
 	saveActiveDocument: () => Promise<boolean>;
@@ -101,6 +101,8 @@ const BOOKMARKS_KEY = 'madora-mobile.editor.bookmarks';
 const LAST_WORKSPACE_KEY = 'madora-mobile.editor.last-workspace';
 const EXPANDED_DIRECTORIES_KEY = 'madora-mobile.editor.expanded-directories';
 
+type BookmarkScope = 'local' | 'remote';
+
 type PersistedWorkspace =
 	| {
 			kind: 'file';
@@ -118,9 +120,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	const {
 		refreshRemoteFileTree,
 		readRemoteFile,
+		requestRemoteCompletion,
 		writeRemoteFile,
 		pairedHost,
 		connectionState,
+		desktopAiCompletionAvailable,
+		useDesktopAiCompletion,
 	} = useMadoraSync();
 	const aiSettings = useAiSettings();
 	const showErrorToast = useErrorToast();
@@ -130,9 +135,9 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		documentId: string;
 		title: string;
 	} | null>(null);
-	const [bookmarkedDocumentIds, setBookmarkedDocumentIds] = useState<string[]>(
-		[]
-	);
+	const [bookmarkedDocumentKeys, setBookmarkedDocumentKeys] = useState<
+		string[]
+	>([]);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [expandedDirectoryPaths, setExpandedDirectoryPaths] = useState<
 		Set<string>
@@ -176,6 +181,12 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		() =>
 			documents.find((document) => document.id === selectedDocumentId) ?? null,
 		[documents, selectedDocumentId]
+	);
+
+	const activeBookmarkScope = getBookmarkScope(workspaceMode);
+	const bookmarkedDocumentIds = useMemo(
+		() => getBookmarkPathsForScope(bookmarkedDocumentKeys, activeBookmarkScope),
+		[activeBookmarkScope, bookmarkedDocumentKeys]
 	);
 
 	const focusedTreeNode = useMemo(
@@ -341,6 +352,78 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			);
 		},
 		[refreshRemoteFileTree, workspaceSource]
+	);
+
+	const loadAncestorDirectoriesForTarget = useCallback(
+		async (targetPath: string) => {
+			if (
+				workspaceSource.kind !== 'directory' &&
+				workspaceSource.kind !== 'remote'
+			) {
+				return null;
+			}
+
+			let nextTree = fileTree;
+			let currentDirectory = findRootDirectoryForTarget(nextTree, targetPath);
+			if (!currentDirectory) return null;
+
+			const ancestorDirectoryPaths: string[] = [];
+
+			for (let depth = 0; depth < 100; depth += 1) {
+				ancestorDirectoryPaths.push(currentDirectory.path);
+
+				if (!currentDirectory.loaded) {
+					let children: EditorNode[];
+					if (workspaceSource.kind === 'remote') {
+						const remoteNodes = await refreshRemoteFileTree(
+							currentDirectory.path
+						);
+						children = mapRemoteExplorerNodes(remoteNodes);
+					} else {
+						const localResult = await readLocalDirectoryChildren(
+							currentDirectory.path,
+							workspaceSource.uri
+						);
+						children = localResult.children;
+					}
+
+					currentDirectory = {
+						...currentDirectory,
+						children,
+						hasChildren: children.length > 0,
+						loaded: true,
+					};
+					nextTree = updateNodeInTree(
+						nextTree,
+						currentDirectory.path,
+						() => currentDirectory
+					);
+				}
+
+				if (
+					currentDirectory.children.some((child) => child.path === targetPath)
+				) {
+					setFileTree(nextTree);
+					return ancestorDirectoryPaths;
+				}
+
+				const nextDirectory = currentDirectory.children.find(
+					(child): child is EditorNode =>
+						child.kind === 'directory' &&
+						isPathInsideDirectory(targetPath, child.path)
+				);
+				if (!nextDirectory) {
+					setFileTree(nextTree);
+					return null;
+				}
+
+				currentDirectory = nextDirectory;
+			}
+
+			setFileTree(nextTree);
+			return null;
+		},
+		[fileTree, refreshRemoteFileTree, workspaceSource]
 	);
 
 	const persistDirectoryWorkspace = useCallback(
@@ -1046,11 +1129,17 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 					});
 				}
 
-				if (bookmarkedDocumentIds.includes(activeFileTarget.documentId)) {
-					const nextBookmarks = bookmarkedDocumentIds.map((item) =>
-						item === activeFileTarget.documentId ? renamedDocument.id : item
+				const currentBookmarkKey = makeBookmarkKey(
+					activeBookmarkScope,
+					activeFileTarget.documentId
+				);
+				if (bookmarkedDocumentKeys.includes(currentBookmarkKey)) {
+					const nextBookmarks = bookmarkedDocumentKeys.map((item) =>
+						item === currentBookmarkKey
+							? makeBookmarkKey(activeBookmarkScope, renamedDocument.id)
+							: item
 					);
-					setBookmarkedDocumentIds(nextBookmarks);
+					setBookmarkedDocumentKeys(nextBookmarks);
 					await persistBookmarks(nextBookmarks);
 				}
 
@@ -1063,7 +1152,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		},
 		[
 			activeFileTarget,
-			bookmarkedDocumentIds,
+			activeBookmarkScope,
+			bookmarkedDocumentKeys,
 			copyState,
 			fileTree,
 			persistBookmarks,
@@ -1248,18 +1338,16 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		workspaceSource,
 	]);
 
-	const locateSelectedDocumentInTree = useCallback(() => {
+	const locateSelectedDocumentInTree = useCallback(async () => {
 		if (!selectedDocumentId) return false;
 
-		setSelectedTreeNodePath(selectedDocumentId);
-
 		if (workspaceSource.kind === 'directory') {
-			const ancestorDirectoryPaths = findAncestorDirectoryPaths(
-				fileTree,
-				selectedDocumentId
-			);
+			const ancestorDirectoryPaths =
+				findAncestorDirectoryPaths(fileTree, selectedDocumentId) ??
+				(await loadAncestorDirectoriesForTarget(selectedDocumentId));
 			if (!ancestorDirectoryPaths) return false;
 
+			setSelectedTreeNodePath(selectedDocumentId);
 			setExpandedDirectoryPaths((current) => {
 				const next = new Set(current);
 				for (const path of ancestorDirectoryPaths) {
@@ -1274,7 +1362,25 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			return true;
 		}
 
+		if (workspaceSource.kind === 'remote') {
+			const ancestorDirectoryPaths =
+				findAncestorDirectoryPaths(fileTree, selectedDocumentId) ??
+				(await loadAncestorDirectoriesForTarget(selectedDocumentId));
+			if (!ancestorDirectoryPaths) return false;
+
+			setSelectedTreeNodePath(selectedDocumentId);
+			setExpandedDirectoryPaths((current) => {
+				const next = new Set(current);
+				for (const path of ancestorDirectoryPaths) {
+					next.add(path);
+				}
+				return next;
+			});
+			return true;
+		}
+
 		if (workspaceSource.kind === 'file') {
+			setSelectedTreeNodePath(selectedDocumentId);
 			void persistWorkspace({
 				kind: 'file',
 				uri: workspaceSource.uri,
@@ -1286,6 +1392,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 		return fileTree.length === 0;
 	}, [
 		fileTree,
+		loadAncestorDirectoriesForTarget,
 		persistDirectoryWorkspace,
 		persistWorkspace,
 		selectedDocumentId,
@@ -1324,11 +1431,15 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				if (copyState?.documentId === focusedTreeNode.path) {
 					setCopyState(null);
 				}
-				if (bookmarkedDocumentIds.includes(focusedTreeNode.path)) {
-					const nextBookmarks = bookmarkedDocumentIds.filter(
-						(item) => item !== focusedTreeNode.path
+				const currentBookmarkKey = makeBookmarkKey(
+					activeBookmarkScope,
+					focusedTreeNode.path
+				);
+				if (bookmarkedDocumentKeys.includes(currentBookmarkKey)) {
+					const nextBookmarks = bookmarkedDocumentKeys.filter(
+						(item) => item !== currentBookmarkKey
 					);
-					setBookmarkedDocumentIds(nextBookmarks);
+					setBookmarkedDocumentKeys(nextBookmarks);
 					await persistBookmarks(nextBookmarks);
 				}
 			}
@@ -1353,7 +1464,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 			return false;
 		}
 	}, [
-		bookmarkedDocumentIds,
+		activeBookmarkScope,
+		bookmarkedDocumentKeys,
 		copyState,
 		fileTree,
 		focusedTreeNode,
@@ -1367,12 +1479,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 	const toggleBookmark = useCallback(async () => {
 		if (focusedTreeNode?.kind !== 'file') return;
 
-		const nextBookmarks = bookmarkedDocumentIds.includes(focusedTreeNode.path)
-			? bookmarkedDocumentIds.filter((item) => item !== focusedTreeNode.path)
-			: [...bookmarkedDocumentIds, focusedTreeNode.path];
-		setBookmarkedDocumentIds(nextBookmarks);
+		const bookmarkKey = makeBookmarkKey(
+			activeBookmarkScope,
+			focusedTreeNode.path
+		);
+		const nextBookmarks = bookmarkedDocumentKeys.includes(bookmarkKey)
+			? bookmarkedDocumentKeys.filter((item) => item !== bookmarkKey)
+			: [...bookmarkedDocumentKeys, bookmarkKey];
+		setBookmarkedDocumentKeys(nextBookmarks);
 		await persistBookmarks(nextBookmarks);
-	}, [bookmarkedDocumentIds, focusedTreeNode, persistBookmarks]);
+	}, [
+		activeBookmarkScope,
+		bookmarkedDocumentKeys,
+		focusedTreeNode,
+		persistBookmarks,
+	]);
 
 	const requestInlineCompletion = useCallback(
 		async (fullText: string, cursorPos: number): Promise<string> => {
@@ -1380,6 +1501,24 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
 			const prefix = fullText.slice(Math.max(0, cursorPos - 12000), cursorPos);
 			const suffix = fullText.slice(cursorPos, cursorPos + 4000);
+			const request = {
+				prefix,
+				suffix: suffix.length > 0 ? suffix : null,
+				title: selectedDocument.title,
+			};
+
+			try {
+				if (
+					pairedHost &&
+					connectionState === 'connected' &&
+					desktopAiCompletionAvailable &&
+					useDesktopAiCompletion
+				) {
+					return await requestRemoteCompletion(request);
+				}
+			} catch {
+				// Fall back to this device's local provider below.
+			}
 
 			try {
 				const localConfig = await aiSettings.getCompletionConfig();
@@ -1387,17 +1526,21 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 
 				return await generateCompletion({
 					config: localConfig,
-					request: {
-						prefix,
-						suffix: suffix.length > 0 ? suffix : null,
-						title: selectedDocument.title,
-					},
+					request,
 				});
 			} catch {
 				return '';
 			}
 		},
-		[aiSettings, selectedDocument]
+		[
+			aiSettings,
+			connectionState,
+			desktopAiCompletionAvailable,
+			pairedHost,
+			requestRemoteCompletion,
+			selectedDocument,
+			useDesktopAiCompletion,
+		]
 	);
 
 	useEffect(() => {
@@ -1414,10 +1557,10 @@ export function EditorProvider({ children }: { children: ReactNode }) {
 				if (!cancelled && storedBookmarks) {
 					const parsedBookmarks = JSON.parse(storedBookmarks);
 					if (Array.isArray(parsedBookmarks)) {
-						setBookmarkedDocumentIds(
-							parsedBookmarks.filter(
-								(item): item is string => typeof item === 'string'
-							)
+						setBookmarkedDocumentKeys(
+							parsedBookmarks
+								.map(normalizeStoredBookmarkKey)
+								.filter((item): item is string => item !== null)
 						);
 					}
 				}
@@ -1704,6 +1847,40 @@ function isRemoteConnectionUnavailableMessage(message: string) {
 	);
 }
 
+function getBookmarkScope(workspaceMode: 'local' | 'remote'): BookmarkScope {
+	return workspaceMode === 'remote' ? 'remote' : 'local';
+}
+
+function makeBookmarkKey(scope: BookmarkScope, path: string): string {
+	return `${scope}:${path}`;
+}
+
+function getBookmarkKeyScope(key: string): BookmarkScope {
+	if (key.startsWith('remote:')) return 'remote';
+	return 'local';
+}
+
+function getBookmarkKeyPath(key: string): string {
+	if (key.startsWith('local:')) return key.slice('local:'.length);
+	if (key.startsWith('remote:')) return key.slice('remote:'.length);
+	return key;
+}
+
+function normalizeStoredBookmarkKey(item: unknown): string | null {
+	if (typeof item !== 'string' || item.length === 0) return null;
+	if (item.startsWith('local:') || item.startsWith('remote:')) return item;
+	return makeBookmarkKey('local', item);
+}
+
+function getBookmarkPathsForScope(
+	keys: string[],
+	scope: BookmarkScope
+): string[] {
+	return keys
+		.filter((key) => getBookmarkKeyScope(key) === scope)
+		.map(getBookmarkKeyPath);
+}
+
 function mapRemoteExplorerNodes(nodes: ExplorerNode[]): EditorNode[] {
 	return nodes.map((node) => ({
 		...node,
@@ -1730,6 +1907,52 @@ function findNodeByPath(
 	}
 
 	return null;
+}
+
+function findRootDirectoryForTarget(
+	nodes: EditorNode[],
+	targetPath: string
+): EditorNode | null {
+	return (
+		nodes.find(
+			(node) =>
+				node.kind === 'directory' &&
+				(node.path === targetPath ||
+					isPathInsideDirectory(targetPath, node.path))
+		) ?? null
+	);
+}
+
+function isPathInsideDirectory(targetPath: string, directoryPath: string) {
+	if (targetPath === directoryPath) return false;
+
+	const normalizedDirectory = directoryPath.replace(/\/+$/, '');
+	if (
+		targetPath.startsWith(`${normalizedDirectory}/`) ||
+		targetPath.startsWith(`${normalizedDirectory}%2F`)
+	) {
+		return true;
+	}
+
+	const decodedTarget = decodePathRepeatedly(targetPath);
+	const decodedDirectory = decodePathRepeatedly(normalizedDirectory);
+	return decodedTarget.startsWith(`${decodedDirectory}/`);
+}
+
+function decodePathRepeatedly(path: string) {
+	let current = path;
+
+	for (let index = 0; index < 3; index += 1) {
+		try {
+			const next = decodeURIComponent(current);
+			if (next === current) break;
+			current = next;
+		} catch {
+			break;
+		}
+	}
+
+	return current;
 }
 
 function findAncestorDirectoryPaths(

@@ -1,4 +1,5 @@
 export { QrScanner } from './components/qr-scanner';
+export { formatPairingEndpoint, parsePairingEndpoint } from './lib/protocol';
 export {
 	ActionButton,
 	ConnectionTimeline,

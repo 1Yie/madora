@@ -237,6 +237,11 @@ const ja = {
 			modelPlaceholder: 'モデルを選択...',
 			providerHint:
 				'各 Provider の Key とモデルは個別に保存され、切り替えても他の設定は上書きされません。',
+			remoteCompletionNotice: {
+				description:
+					'同期設定でデスクトップの AI 補完を使用中です。エディターはデスクトップ共有エンドポイントを優先し、このローカル設定はフォールバックとして使われます。',
+				title: 'デスクトップの AI 補完を使用中',
+			},
 			rows: {
 				autoSave: {
 					description: 'エディターの変更を自動的にディスクに書き込みます。',
@@ -272,8 +277,7 @@ const ja = {
 					title: 'オープンソースライセンス',
 				},
 				update: {
-					description:
-						'新しいビルドをダウンロードする前に最新のリリースを確認します。',
+					description: '最新のリリースを確認します。',
 					title: 'ソフトウェアアップデート',
 				},
 			},
@@ -283,6 +287,12 @@ const ja = {
 				sourceCode: 'ソースコード',
 				version: 'バージョン',
 				website: 'ウェブサイト',
+			},
+			toasts: {
+				checkFailed: '更新の確認に失敗しました',
+				checkFailedDescription: '現在 GitHub Releases に接続できません。',
+				latestReleaseDescription: '最新リリースページを開いています。',
+				latestReleaseTitle: '最新リリースが見つかりました',
 			},
 		},
 	},
@@ -551,7 +561,7 @@ const ja = {
 			'ローカルネットワーク経由で Madora デスクトップとペアリングし、ローカルの同期記録を管理します。',
 		eyebrow: '同期',
 		connection: {
-			detail: 'デスクトップ同期サーバーへの WebSocket リンクです。',
+			detail: 'デスクトップ同期サーバーのアドレスです。',
 			lastSync: '前回の同期',
 			neverSynced: 'まだ同期されていません',
 			refreshFiles: 'ファイルを更新',
@@ -559,17 +569,37 @@ const ja = {
 			state: '状態',
 			title: '接続',
 		},
+		aiCompletion: {
+			connectFirst:
+				'先にデスクトップへ接続してください。この項目はデスクトップ側の共有がオンのときだけ有効です。',
+			disabledOnDesktop: 'デスクトップ側で共有 AI 補完が有効になっていません。',
+			title: 'AI 補完',
+			useDesktopDetail:
+				'オンにすると、モバイルエディタはデスクトップが共有する AI 補完を優先します。',
+			useDesktopTitle: 'デスクトップの AI 補完を使用',
+		},
+		enable: {
+			cardTitle: '同期',
+			detail:
+				'オフにすると、ファイルツリーにリモートフォルダーの入口を表示しません。',
+			title: '同期を有効化',
+		},
 		emptyTrusted: 'まだペアリング済みのデバイスはありません。',
 		errors: {
 			authError:
 				'デスクトップの認証に失敗しました。QR から再ペアリングしてください。',
 			connectionClosed: 'デスクトップとの接続が閉じられました。',
 			connectionReset: 'デスクトップとの接続がリセットされました。',
+			invalidManualPairing:
+				'有効なデスクトップアドレス、ポート、コードを入力してください。',
 			invalidQr: '無効なペアリング QR コードです。',
+			manualPairingFailed:
+				'手動ペアリングに失敗しました。デスクトップのアドレス、ポート、コードを確認してください。',
 			notConnected: 'デスクトップに接続されていません。',
 			openDatabaseFailed: '同期データベースを開けませんでした。',
 			refreshFilesFailed: 'リモートファイルの更新に失敗しました。',
 			removeTrustedFailed: '信頼済みデバイスの削除に失敗しました。',
+			saveSettingsFailed: '同期設定の保存に失敗しました。',
 			serverError: 'デスクトップ同期サービスからエラーが返されました。',
 			unexpectedResponse: 'デスクトップから予期しない応答が返されました。',
 			writeFailed: 'リモートファイルの書き込みに失敗しました。',
@@ -589,6 +619,13 @@ const ja = {
 			eyebrow: 'デバイス',
 			instructions:
 				'Madora デスクトップを開き、設定 → 同期 から表示される QR コードをスキャンしてください。',
+			manual: '手動で入力',
+			manualCode: 'ペアリングコード',
+			manualConnect: '接続',
+			manualConnecting: '接続中',
+			manualHost: 'IP、ドメイン、または http(s) アドレス',
+			manualPort: 'ポート',
+			manualTitle: '手動ペアリング',
 			pair: 'QR からペアリング',
 			ready: 'ペアリング可能',
 			repair: 'QR で再ペアリング',

@@ -200,6 +200,7 @@ pub fn run() {
             webdav::webdav_get_status,
             madora_sync::madora_sync_get_config,
             madora_sync::madora_sync_save_settings,
+            madora_sync::madora_sync_save_ai_completion_config,
             madora_sync::madora_sync_issue_pairing_code,
             madora_sync::madora_sync_get_pairing_qr,
             madora_sync::madora_sync_clear_pairing_code,

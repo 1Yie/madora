@@ -9,6 +9,7 @@
 import { Platform } from 'react-native';
 
 import {
+	buildWebSocketUrl,
 	parseServerMessage,
 	type ClientMessage,
 	type PairingPayload,
@@ -69,6 +70,11 @@ export class SyncClient {
 		this.backoffIndex = 0;
 		this.cleanupSocket();
 		this.openSocket();
+	}
+
+	/** Replace credentials used by future automatic reconnects. */
+	updatePayload(payload: PairingPayload): void {
+		this.payload = payload;
 	}
 
 	/** Disconnect and do not reconnect. */
@@ -161,7 +167,7 @@ export class SyncClient {
 			return;
 		}
 
-		const url = `ws://${payload.host}:${payload.port}`;
+		const url = buildWebSocketUrl(payload);
 		this.setState('connecting');
 
 		let ws: WebSocket;

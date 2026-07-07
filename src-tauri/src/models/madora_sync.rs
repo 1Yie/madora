@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::ai::{AiProvider, CustomProviderProtocol};
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum MadoraSyncRole {
@@ -32,6 +34,17 @@ pub struct MadoraSyncPairedDevice {
     pub auth_token: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MadoraSyncAiCompletionConfig {
+    pub enabled: bool,
+    pub api_url: Option<String>,
+    pub custom_protocol: Option<CustomProviderProtocol>,
+    pub model: Option<String>,
+    pub provider: AiProvider,
+    pub use_ssl: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct MadoraSyncConfig {
@@ -50,6 +63,7 @@ pub struct MadoraSyncConfig {
     pub active_pairing_code: Option<String>,
     pub pairing_code_expires_at: Option<String>,
     pub paired_devices: Vec<MadoraSyncPairedDevice>,
+    pub ai_completion_config: Option<MadoraSyncAiCompletionConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -119,6 +133,20 @@ impl Default for MadoraSyncConfig {
             active_pairing_code: None,
             pairing_code_expires_at: None,
             paired_devices: Vec::new(),
+            ai_completion_config: None,
+        }
+    }
+}
+
+impl Default for MadoraSyncAiCompletionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            api_url: None,
+            custom_protocol: None,
+            model: None,
+            provider: AiProvider::default(),
+            use_ssl: true,
         }
     }
 }

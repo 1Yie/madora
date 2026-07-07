@@ -32,18 +32,19 @@ const FILE_TREE_MODE_TABS: {
 export function FileTreeModeTabs({
 	disabled = false,
 	pendingValue = null,
+	showRemote = true,
 	value,
 	onValueChange,
 }: {
 	disabled?: boolean;
 	pendingValue?: WorkspaceMode | null;
+	showRemote?: boolean;
 	value: WorkspaceMode;
 	onValueChange: (mode: WorkspaceMode) => void;
 }) {
 	const { t } = useTranslation();
 	const palette = useAppThemePalette();
 	const displayValue = pendingValue ?? value;
-
 	const [containerWidth, setContainerWidth] = useState(0);
 
 	const activeIndex = FILE_TREE_MODE_TABS.findIndex(
@@ -75,6 +76,10 @@ export function FileTreeModeTabs({
 			opacity: 1,
 		};
 	});
+
+	if (!showRemote) {
+		return null;
+	}
 
 	return (
 		<View className="px-4 pt-3 pb-1">

@@ -1,6 +1,7 @@
 import create from 'zustand';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
+import { madoraSyncSaveAiCompletionConfig } from '@/invoke/madora-sync';
 
 import { showErrorToast } from '@/components/ui/toast';
 import i18n from '@/i18n';
@@ -296,6 +297,19 @@ function readInitialProvider(): AiProvider {
 	return isProvider(storedValue) ? storedValue : DEFAULT_PROVIDER;
 }
 
+function syncAiCompletionConfigToHost(state: AiSettingsState) {
+	const config = state.providerConfigs[state.provider];
+
+	void madoraSyncSaveAiCompletionConfig({
+		apiUrl: config.apiUrl.trim().length > 0 ? config.apiUrl : null,
+		customProtocol: state.provider === 'custom' ? config.customProtocol : null,
+		enabled: state.enabled,
+		model: config.model.trim().length > 0 ? config.model : null,
+		provider: state.provider,
+		useSsl: config.useSsl,
+	}).catch(() => undefined);
+}
+
 type AiSettingsState = {
 	enabled: boolean;
 	provider: AiProvider;
@@ -522,6 +536,11 @@ export function AiSettingsProvider({ children }: { children: ReactNode }) {
 	// Run API key migration once on mount
 	useEffect(() => {
 		void useAiSettingsStore.getState().initApiKeys();
+	}, []);
+
+	useEffect(() => {
+		syncAiCompletionConfigToHost(useAiSettingsStore.getState());
+		return useAiSettingsStore.subscribe(syncAiCompletionConfigToHost);
 	}, []);
 
 	return <>{children}</>;

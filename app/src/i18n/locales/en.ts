@@ -243,6 +243,11 @@ const en = {
 			modelPlaceholder: 'Select a model...',
 			providerHint:
 				'Each provider keeps its own API key and model settings. Switching providers does not overwrite the others.',
+			remoteCompletionNotice: {
+				description:
+					'Sync settings are using desktop AI completion, so the editor prefers the desktop shared endpoint. This local configuration remains the fallback.',
+				title: 'Using desktop AI completion',
+			},
 			rows: {
 				autoSave: {
 					description: 'Write editor changes back to disk automatically.',
@@ -278,8 +283,7 @@ const en = {
 					title: 'Open Source Licenses',
 				},
 				update: {
-					description:
-						'Checks the latest release before you download a new build.',
+					description: 'Checks the latest release.',
 					title: 'Software Update',
 				},
 			},
@@ -289,6 +293,12 @@ const en = {
 				sourceCode: 'Source Code',
 				version: 'Version',
 				website: 'Website',
+			},
+			toasts: {
+				checkFailed: 'Failed to check for updates',
+				checkFailedDescription: 'Unable to reach GitHub Releases right now.',
+				latestReleaseDescription: 'Opening the latest release page.',
+				latestReleaseTitle: 'Latest release found',
 			},
 		},
 	},
@@ -555,7 +565,7 @@ const en = {
 			'Pair with Madora desktop over the local network and manage local sync records.',
 		eyebrow: 'Sync',
 		connection: {
-			detail: 'WebSocket link to the desktop sync server.',
+			detail: 'Address for the desktop sync server.',
 			lastSync: 'Last sync',
 			neverSynced: 'Not synced yet',
 			refreshFiles: 'Refresh files',
@@ -563,16 +573,35 @@ const en = {
 			state: 'State',
 			title: 'Connection',
 		},
+		aiCompletion: {
+			connectFirst:
+				'Connect to the desktop first. This option is enabled only when desktop sharing is on.',
+			disabledOnDesktop: 'Shared AI completion is not enabled on the desktop.',
+			title: 'AI completion',
+			useDesktopDetail:
+				'When enabled, the phone editor prefers AI completions shared by the desktop.',
+			useDesktopTitle: 'Use desktop AI completion',
+		},
+		enable: {
+			cardTitle: 'Sync',
+			detail:
+				'When disabled, the file tree does not show the remote folder entry.',
+			title: 'Enable sync',
+		},
 		emptyTrusted: 'No paired devices yet.',
 		errors: {
 			authError: 'Desktop authentication failed. Pair again from QR.',
 			connectionClosed: 'Desktop connection closed.',
 			connectionReset: 'Desktop connection reset.',
+			invalidManualPairing: 'Enter a valid desktop address, port, and code.',
 			invalidQr: 'Invalid pairing QR code.',
+			manualPairingFailed:
+				'Manual pairing failed. Check the desktop address, port, and code.',
 			notConnected: 'Not connected to the desktop.',
 			openDatabaseFailed: 'Failed to open the sync database.',
 			refreshFilesFailed: 'Failed to refresh remote files.',
 			removeTrustedFailed: 'Failed to remove trusted device.',
+			saveSettingsFailed: 'Failed to save sync settings.',
 			serverError: 'The desktop sync service returned an error.',
 			unexpectedResponse: 'The desktop returned an unexpected response.',
 			writeFailed: 'Failed to write remote file.',
@@ -591,6 +620,13 @@ const en = {
 			eyebrow: 'Devices',
 			instructions:
 				'Open Madora desktop → Settings → Sync, then scan the QR code shown there.',
+			manual: 'Enter manually',
+			manualCode: 'Pairing code',
+			manualConnect: 'Connect',
+			manualConnecting: 'Connecting',
+			manualHost: 'IP, domain, or http(s) address',
+			manualPort: 'Port',
+			manualTitle: 'Manual pairing',
 			pair: 'Pair from QR',
 			ready: 'Ready to pair',
 			repair: 'Re-pair via QR',

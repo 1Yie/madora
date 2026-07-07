@@ -1,3 +1,5 @@
+import type { SyncTransportProtocol } from '../lib/protocol';
+
 export type SyncConnectionState =
 	| 'disconnected'
 	| 'discovering'
@@ -12,6 +14,8 @@ export interface PairedHost {
 	name: string;
 	host: string;
 	port: number;
+	protocol?: SyncTransportProtocol;
+	path?: string;
 	/** Raw pairing token retained for reconnection. */
 	pairingToken: string;
 	pairingId: string;
@@ -27,4 +31,10 @@ export interface TrustedDevice {
 	trusted: boolean;
 	token: string;
 	address: string;
+}
+
+export interface ManualPairingInput {
+	address: string;
+	port?: number | null;
+	code: string;
 }

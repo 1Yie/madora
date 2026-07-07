@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { formatSyncDisplayAddress } from '../lib/protocol';
 import type { TrustedDevice } from '../types';
 import deleteTrustedDeviceSql from './sql/delete-trusted-device.sql';
 import enableWalSql from './sql/enable-wal.sql';
@@ -22,6 +23,8 @@ function getInitialSettings(defaultLocalDeviceName: string) {
 		offline_mode: '0',
 		paired_host_id: '',
 		paired_host_json: '',
+		sync_enabled: '1',
+		use_desktop_ai_completion: '0',
 	} satisfies Record<string, string>;
 }
 
@@ -98,7 +101,7 @@ export async function upsertTrustedDevice(
 		device.lastSeen,
 		device.trusted ? 1 : 0,
 		device.token,
-		device.address
+		formatSyncDisplayAddress(device.address)
 	);
 }
 
@@ -118,7 +121,7 @@ type TrustedDeviceRow = {
 
 function deviceRowToTrustedDevice(device: TrustedDeviceRow): TrustedDevice {
 	return {
-		address: device.address,
+		address: formatSyncDisplayAddress(device.address),
 		id: device.id,
 		kind: device.kind,
 		lastSeen: device.lastSeen,

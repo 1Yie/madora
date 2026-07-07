@@ -108,6 +108,13 @@ const LOCAL_EDIT_PROTECTION_MS = 1_200;
 const REMOTE_APPLY_LOADING_MS = 420;
 
 type UnsavedDialogIntent = UnsavedPromptIntent;
+type BookmarkedFileEntry = {
+	fileKind: EditorDocument['fileKind'];
+	id: string;
+	name: string;
+	path: string;
+	relativePath: string;
+};
 
 export function WorkspaceScreen() {
 	const insets = useSafeAreaInsets();
@@ -153,8 +160,12 @@ export function WorkspaceScreen() {
 		updateSelectedDocumentContent,
 		workspaceSource,
 	} = useEditorWorkspace();
-	const { connectionState, publishEditorState, remoteEditorState } =
-		useMadoraSync();
+	const {
+		connectionState,
+		publishEditorState,
+		remoteEditorState,
+		syncEnabled,
+	} = useMadoraSync();
 	const { showToast } = useNativeToast();
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [createValue, setCreateValue] = useState('');
@@ -668,6 +679,7 @@ export function WorkspaceScreen() {
 	};
 
 	const handleOpenRemoteWorkspace = () => {
+		if (!syncEnabled) return;
 		checkUnsavedBeforeNavigate(() => {
 			void openRemoteWorkspace().then((opened) => {
 				if (opened) setActiveTab('fileTree');
@@ -686,6 +698,7 @@ export function WorkspaceScreen() {
 
 	const handleSwitchWorkspaceMode = (mode: WorkspaceMode) => {
 		if (mode === workspaceMode || switchingWorkspaceMode) return;
+		if (mode === 'remote' && !syncEnabled) return;
 
 		checkUnsavedBeforeNavigate(() => {
 			setSwitchingWorkspaceMode(mode);
@@ -694,6 +707,19 @@ export function WorkspaceScreen() {
 			});
 		});
 	};
+
+	useEffect(() => {
+		if (syncEnabled || workspaceMode !== 'remote' || switchingWorkspaceMode) {
+			return;
+		}
+
+		queueMicrotask(() => {
+			setSwitchingWorkspaceMode('local');
+			void switchWorkspaceMode('local').finally(() => {
+				setSwitchingWorkspaceMode(null);
+			});
+		});
+	}, [syncEnabled, switchWorkspaceMode, switchingWorkspaceMode, workspaceMode]);
 
 	const handleOpenRename = () => {
 		if (!focusedTreeNode) return;
@@ -781,23 +807,24 @@ export function WorkspaceScreen() {
 
 	const handleLocateSelectedDocument = () => {
 		checkUnsavedBeforeSwitch(() => {
-			const located = locateSelectedDocumentInTree();
-			if (located) {
-				setActiveTab('fileTree');
-				setLocateRequestId((current) => current + 1);
+			void locateSelectedDocumentInTree().then((located) => {
+				if (located) {
+					setActiveTab('fileTree');
+					setLocateRequestId((current) => current + 1);
+					showWorkspaceToast(
+						showToast,
+						t('fileTree.feedback.locatedTitle'),
+						t('fileTree.feedback.locatedDetail')
+					);
+					return;
+				}
+
 				showWorkspaceToast(
 					showToast,
-					t('fileTree.feedback.locatedTitle'),
-					t('fileTree.feedback.locatedDetail')
+					t('fileTree.feedback.locateUnavailableTitle'),
+					t('fileTree.feedback.locateUnavailableDetail')
 				);
-				return;
-			}
-
-			showWorkspaceToast(
-				showToast,
-				t('fileTree.feedback.locateUnavailableTitle'),
-				t('fileTree.feedback.locateUnavailableDetail')
-			);
+			});
 		});
 	};
 
@@ -863,6 +890,7 @@ export function WorkspaceScreen() {
 						onToggleBookmark={handleToggleBookmark}
 						onToggleDirectoryExpanded={toggleDirectoryExpanded}
 						refreshing={refreshingFileTree}
+						syncEnabled={syncEnabled}
 						switchingWorkspaceMode={switchingWorkspaceMode}
 						selectedDocumentId={selectedDocument?.id ?? null}
 						selectedDocumentRelativePath={
@@ -917,6 +945,7 @@ export function WorkspaceScreen() {
 							onOpenFolder={handleOpenFolder}
 							onOpenRemote={handleOpenRemoteWorkspace}
 							onOpenSyncSettings={handleOpenSyncSettings}
+							syncEnabled={syncEnabled}
 							topPadding={editorTopPadding}
 							workspaceSource={workspaceSource}
 						/>
@@ -1001,6 +1030,7 @@ function FileTreeView({
 	onToggleBookmark,
 	onToggleDirectoryExpanded,
 	refreshing,
+	syncEnabled,
 	switchingWorkspaceMode,
 	selectedDocumentId,
 	selectedDocumentRelativePath,
@@ -1038,6 +1068,7 @@ function FileTreeView({
 	onToggleBookmark: () => void;
 	onToggleDirectoryExpanded: (directoryPath: string) => void;
 	refreshing: boolean;
+	syncEnabled: boolean;
 	switchingWorkspaceMode: WorkspaceMode | null;
 	selectedDocumentId: string | null;
 	selectedDocumentRelativePath: string | null;
@@ -1055,7 +1086,7 @@ function FileTreeView({
 		fileTree.length === 0 &&
 		documents.length === 0;
 	const showUnselectedRemoteState =
-		showUnselectedFolderState && workspaceMode === 'remote';
+		syncEnabled && showUnselectedFolderState && workspaceMode === 'remote';
 	const workspacePath =
 		workspaceSource.kind === 'empty'
 			? t('fileTree.title')
@@ -1064,12 +1095,14 @@ function FileTreeView({
 					focusedTreeNode?.relativePath || selectedDocumentRelativePath
 				);
 	const showRemoteNotConnectedState =
+		syncEnabled &&
 		workspaceSource.kind === 'remote' &&
 		workspaceMode === 'remote' &&
 		connectionState !== 'connected' &&
 		fileTree.length === 0 &&
 		documents.length === 0;
 	const showRemoteEmptyState =
+		syncEnabled &&
 		workspaceSource.kind === 'remote' &&
 		workspaceMode === 'remote' &&
 		connectionState === 'connected' &&
@@ -1081,11 +1114,9 @@ function FileTreeView({
 		!showRemoteEmptyState;
 	const bookmarkedNodes = useMemo(
 		() =>
-			bookmarkedDocumentIds
-				.map((path) => findTreeNode(fileTree, path))
-				.filter((node): node is EditorNode =>
-					Boolean(node && node.kind === 'file')
-				),
+			bookmarkedDocumentIds.map((path) =>
+				createBookmarkedFileEntry(path, findTreeNode(fileTree, path))
+			),
 		[bookmarkedDocumentIds, fileTree]
 	);
 	const visiblePaths = useMemo(
@@ -1114,6 +1145,7 @@ function FileTreeView({
 		<View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
 			<FileTreeModeTabs
 				pendingValue={switchingWorkspaceMode}
+				showRemote={syncEnabled}
 				value={workspaceMode}
 				onValueChange={switchWorkspaceMode}
 			/>
@@ -1128,6 +1160,7 @@ function FileTreeView({
 						connectionState={connectionState}
 						onOpenFolder={onOpenFolder}
 						onOpenRemote={onOpenRemote}
+						syncEnabled={syncEnabled}
 					/>
 				)
 			) : (
@@ -1331,6 +1364,7 @@ function FileTreeView({
 										onOpenFolder={onOpenFolder}
 										onOpenRemote={onOpenRemote}
 										palette={palette}
+										syncEnabled={syncEnabled}
 										workspaceSource={workspaceSource}
 									/>
 								) : null}
@@ -1589,7 +1623,7 @@ function BookmarksSection({
 	onSelectTreeNode,
 	selectedTreeNodePath,
 }: {
-	nodes: EditorNode[];
+	nodes: BookmarkedFileEntry[];
 	onOpenDocument: (documentId: string) => void;
 	onSelectTreeNode: (documentId: string) => void;
 	selectedTreeNodePath: string | null;
@@ -1620,7 +1654,7 @@ function BookmarksSection({
 							key={`bookmark-${node.path}`}
 							document={{
 								content: '',
-								fileKind: node.fileKind ?? 'markdown',
+								fileKind: node.fileKind,
 								id: node.path,
 								path: node.path,
 								readOnly: false,
@@ -1762,6 +1796,7 @@ function EmptyWorkspace({
 	onOpenFolder,
 	onOpenRemote,
 	palette,
+	syncEnabled,
 	workspaceSource,
 }: {
 	canCreateFile: boolean;
@@ -1770,6 +1805,7 @@ function EmptyWorkspace({
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
 	palette: ReturnType<typeof useAppThemePalette>;
+	syncEnabled: boolean;
 	workspaceSource: EditorWorkspaceSource;
 }) {
 	const { t } = useTranslation();
@@ -1823,17 +1859,19 @@ function EmptyWorkspace({
 						onPress={onOpenFolder}
 						palette={palette}
 					/>
-					<FileActionButton
-						fullWidth
-						icon={MonitorSmartphone}
-						label={
-							connectionState === 'connected'
-								? t('workspace.actions.openRemote')
-								: t('workspace.actions.connectDesktop')
-						}
-						onPress={onOpenRemote}
-						palette={palette}
-					/>
+					{syncEnabled ? (
+						<FileActionButton
+							fullWidth
+							icon={MonitorSmartphone}
+							label={
+								connectionState === 'connected'
+									? t('workspace.actions.openRemote')
+									: t('workspace.actions.connectDesktop')
+							}
+							onPress={onOpenRemote}
+							palette={palette}
+						/>
+					) : null}
 				</FileActionStack>
 			</View>
 		</View>
@@ -1844,10 +1882,12 @@ function EmptyFolderSelectionState({
 	connectionState,
 	onOpenFolder,
 	onOpenRemote,
+	syncEnabled,
 }: {
 	connectionState: SyncConnectionState;
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
+	syncEnabled: boolean;
 }) {
 	const { t } = useTranslation();
 	const palette = useAppThemePalette();
@@ -1870,16 +1910,18 @@ function EmptyFolderSelectionState({
 						onPress={onOpenFolder}
 						palette={palette}
 					/>
-					<FileActionButton
-						icon={MonitorSmartphone}
-						label={
-							connectionState === 'connected'
-								? t('workspace.actions.openRemote')
-								: t('workspace.actions.connectDesktop')
-						}
-						onPress={onOpenRemote}
-						palette={palette}
-					/>
+					{syncEnabled ? (
+						<FileActionButton
+							icon={MonitorSmartphone}
+							label={
+								connectionState === 'connected'
+									? t('workspace.actions.openRemote')
+									: t('workspace.actions.connectDesktop')
+							}
+							onPress={onOpenRemote}
+							palette={palette}
+						/>
+					) : null}
 				</FileActionRow>
 			</View>
 		</View>
@@ -1893,6 +1935,7 @@ function EmptyEditorState({
 	onOpenFolder,
 	onOpenRemote,
 	onOpenSyncSettings,
+	syncEnabled,
 	topPadding,
 	workspaceSource,
 }: {
@@ -1902,6 +1945,7 @@ function EmptyEditorState({
 	onOpenFolder: () => void;
 	onOpenRemote: () => void;
 	onOpenSyncSettings: () => void;
+	syncEnabled: boolean;
 	topPadding: number;
 	workspaceSource: EditorWorkspaceSource;
 }) {
@@ -1973,16 +2017,18 @@ function EmptyEditorState({
 								onPress={onOpenFolder}
 								palette={palette}
 							/>
-							<FileActionButton
-								icon={MonitorSmartphone}
-								label={
-									connectionState === 'connected'
-										? t('workspace.actions.openRemote')
-										: t('workspace.actions.connectDesktop')
-								}
-								onPress={onOpenRemote}
-								palette={palette}
-							/>
+							{syncEnabled ? (
+								<FileActionButton
+									icon={MonitorSmartphone}
+									label={
+										connectionState === 'connected'
+											? t('workspace.actions.openRemote')
+											: t('workspace.actions.connectDesktop')
+									}
+									onPress={onOpenRemote}
+									palette={palette}
+								/>
+							) : null}
 						</>
 					)}
 				</FileActionRow>
@@ -2392,6 +2438,52 @@ function findTreeNode(nodes: EditorNode[], path: string): EditorNode | null {
 	}
 
 	return null;
+}
+
+function createBookmarkedFileEntry(
+	path: string,
+	node: EditorNode | null
+): BookmarkedFileEntry {
+	if (node?.kind === 'file') {
+		return {
+			fileKind: node.fileKind ?? 'markdown',
+			id: node.path,
+			name: node.name,
+			path: node.path,
+			relativePath: node.relativePath,
+		};
+	}
+
+	const name = getPathBasename(path);
+
+	return {
+		fileKind: inferFileKindFromPath(path),
+		id: path,
+		name,
+		path,
+		relativePath: name,
+	};
+}
+
+function inferFileKindFromPath(path: string): EditorDocument['fileKind'] {
+	const extension = getPathBasename(path).split('.').pop()?.toLowerCase();
+	if (extension === 'md' || extension === 'markdown') return 'markdown';
+	if (extension === 'txt') return 'text';
+	if (
+		extension === 'png' ||
+		extension === 'jpg' ||
+		extension === 'jpeg' ||
+		extension === 'gif' ||
+		extension === 'webp'
+	) {
+		return 'image';
+	}
+	return 'other';
+}
+
+function getPathBasename(path: string): string {
+	const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '');
+	return normalized.split('/').pop() || path;
 }
 
 function flattenVisibleTreePaths(

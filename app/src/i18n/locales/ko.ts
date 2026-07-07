@@ -238,6 +238,11 @@ const ko = {
 			modelPlaceholder: '모델 선택...',
 			providerHint:
 				'각 Provider의 Key와 모델은 개별적으로 저장되며, 전환해도 다른 설정을 덮어쓰지 않습니다.',
+			remoteCompletionNotice: {
+				description:
+					'동기화 설정에서 데스크톱 AI 완성을 사용 중입니다. 편집기는 데스크톱 공유 엔드포인트를 우선 사용하며, 이 로컬 설정은 대체 경로로 사용됩니다.',
+				title: '데스크톱 AI 완성 사용 중',
+			},
 			rows: {
 				autoSave: {
 					description: '편집기 변경 사항을 자동으로 디스크에 기록합니다.',
@@ -273,7 +278,7 @@ const ko = {
 					title: '오픈소스 라이선스',
 				},
 				update: {
-					description: '새 빌드를 다운로드하기 전에 최신 릴리스를 확인합니다.',
+					description: '최신 릴리스를 확인합니다.',
 					title: '소프트웨어 업데이트',
 				},
 			},
@@ -283,6 +288,12 @@ const ko = {
 				sourceCode: '소스 코드',
 				version: '버전',
 				website: '웹사이트',
+			},
+			toasts: {
+				checkFailed: '업데이트 확인에 실패했습니다',
+				checkFailedDescription: '지금은 GitHub Releases 에 연결할 수 없습니다.',
+				latestReleaseDescription: '최신 릴리스 페이지를 여는 중입니다.',
+				latestReleaseTitle: '최신 릴리스를 찾았습니다',
 			},
 		},
 	},
@@ -545,7 +556,7 @@ const ko = {
 			'로컬 네트워크를 통해 Madora 데스크톱과 페어링하고 로컬 동기화 기록을 관리합니다.',
 		eyebrow: '동기화',
 		connection: {
-			detail: '데스크톱 동기화 서버에 대한 WebSocket 링크입니다.',
+			detail: '데스크톱 동기화 서버 주소입니다.',
 			lastSync: '마지막 동기화',
 			neverSynced: '아직 동기화되지 않음',
 			refreshFiles: '파일 새로고침',
@@ -553,16 +564,35 @@ const ko = {
 			state: '상태',
 			title: '연결',
 		},
+		aiCompletion: {
+			connectFirst:
+				'먼저 데스크톱에 연결하세요. 이 옵션은 데스크톱 공유가 켜져 있을 때만 활성화됩니다.',
+			disabledOnDesktop:
+				'데스크톱에서 공유 AI 완성이 활성화되어 있지 않습니다.',
+			title: 'AI 완성',
+			useDesktopDetail:
+				'켜면 모바일 편집기가 데스크톱에서 공유하는 AI 완성을 우선 사용합니다.',
+			useDesktopTitle: '데스크톱 AI 완성 사용',
+		},
+		enable: {
+			cardTitle: '동기화',
+			detail: '끄면 파일 트리에 원격 폴더 항목을 표시하지 않습니다.',
+			title: '동기화 활성화',
+		},
 		emptyTrusted: '아직 페어링된 기기가 없습니다.',
 		errors: {
 			authError: '데스크톱 인증에 실패했습니다. QR로 다시 페어링하세요.',
 			connectionClosed: '데스크톱 연결이 닫혔습니다.',
 			connectionReset: '데스크톱 연결이 재설정되었습니다.',
+			invalidManualPairing: '올바른 데스크톱 주소, 포트, 코드를 입력하세요.',
 			invalidQr: '잘못된 페어링 QR 코드입니다.',
+			manualPairingFailed:
+				'수동 페어링에 실패했습니다. 데스크톱 주소, 포트, 코드를 확인하세요.',
 			notConnected: '데스크톱에 연결되어 있지 않습니다.',
 			openDatabaseFailed: '동기화 데이터베이스를 열지 못했습니다.',
 			refreshFilesFailed: '원격 파일을 새로고침하지 못했습니다.',
 			removeTrustedFailed: '신뢰할 수 있는 기기를 제거하지 못했습니다.',
+			saveSettingsFailed: '동기화 설정을 저장하지 못했습니다.',
 			serverError: '데스크톱 동기화 서비스에서 오류를 반환했습니다.',
 			unexpectedResponse: '데스크톱에서 예상하지 못한 응답을 반환했습니다.',
 			writeFailed: '원격 파일을 쓰지 못했습니다.',
@@ -580,6 +610,13 @@ const ko = {
 			eyebrow: '기기',
 			instructions:
 				'Madora 데스크톱을 열고 설정 → 동기화에서 표시되는 QR 코드를 스캔하세요.',
+			manual: '직접 입력',
+			manualCode: '페어링 코드',
+			manualConnect: '연결',
+			manualConnecting: '연결 중',
+			manualHost: 'IP, 도메인 또는 http(s) 주소',
+			manualPort: '포트',
+			manualTitle: '수동 페어링',
 			pair: 'QR에서 페어링',
 			ready: '페어링 준비됨',
 			repair: 'QR로 다시 페어링',

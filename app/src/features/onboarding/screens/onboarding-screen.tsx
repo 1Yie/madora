@@ -34,7 +34,12 @@ import {
 } from '@/features/ai';
 import { ProviderGlyph } from '@/features/ai/components/provider-glyph';
 import { getProviderDefinitions } from '@/features/ai/lib/provider-definitions';
-import { QrScanner, useMadoraSync } from '@/features/madora-sync';
+import {
+	QrScanner,
+	formatPairingEndpoint,
+	parsePairingEndpoint,
+	useMadoraSync,
+} from '@/features/madora-sync';
 import {
 	DEFAULT_EDITOR_FONT_SIZE,
 	MAX_EDITOR_FONT_SIZE,
@@ -331,11 +336,13 @@ function WorkspaceStep() {
 
 function SyncStep() {
 	const { t } = useTranslation();
+	const palette = useAppThemePalette();
 	const {
 		connectionState,
 		disconnect,
 		errorMessage,
 		localDeviceName,
+		pairManually,
 		pairFromQrPayload,
 		pairedHost,
 		ready,
@@ -343,14 +350,31 @@ function SyncStep() {
 	} = useMadoraSync();
 	const [scannerVisible, setScannerVisible] = useState(false);
 	const [deviceNameDraft, setDeviceNameDraft] = useState<string | null>(null);
+	const [manualHost, setManualHost] = useState('');
+	const [manualPort, setManualPort] = useState('3210');
+	const [manualCode, setManualCode] = useState('');
+	const [pairingManually, setPairingManually] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const visibleDeviceName = deviceNameDraft ?? localDeviceName;
 	const trimmedDeviceName = visibleDeviceName.trim();
+	const trimmedManualHost = manualHost.trim();
+	const trimmedManualCode = manualCode.trim();
+	const manualPortText = manualPort.trim();
+	const manualPortNumber = manualPortText ? Number(manualPortText) : null;
+	const manualEndpoint = parsePairingEndpoint(
+		trimmedManualHost,
+		manualPortNumber
+	);
 	const canSaveDeviceName =
 		ready &&
 		!saving &&
 		trimmedDeviceName.length > 0 &&
 		trimmedDeviceName !== localDeviceName;
+	const canManualPair =
+		ready &&
+		!pairingManually &&
+		Boolean(manualEndpoint) &&
+		trimmedManualCode.length > 0;
 
 	const handleSaveDeviceName = async () => {
 		if (!canSaveDeviceName) return;
@@ -366,6 +390,20 @@ function SyncStep() {
 	const handleScanned = async (raw: string) => {
 		setScannerVisible(false);
 		await pairFromQrPayload(raw);
+	};
+
+	const handleManualPair = async () => {
+		if (!canManualPair) return;
+		setPairingManually(true);
+		try {
+			await pairManually({
+				address: trimmedManualHost,
+				code: trimmedManualCode,
+				port: manualPortNumber,
+			});
+		} finally {
+			setPairingManually(false);
+		}
 	};
 
 	return (
@@ -408,7 +446,7 @@ function SyncStep() {
 						</Text>
 						<Text className="text-[12px] leading-5 text-muted-foreground">
 							{pairedHost
-								? `${pairedHost.host}:${pairedHost.port}`
+								? formatPairingEndpoint(pairedHost)
 								: t('syncSettings.pairing.instructions')}
 						</Text>
 					</View>
@@ -428,6 +466,61 @@ function SyncStep() {
 								secondary
 							/>
 						) : null}
+					</View>
+					<View
+						className="gap-3 rounded-md border p-3"
+						style={{
+							backgroundColor: palette.surfaceMuted,
+							borderColor: palette.border,
+						}}
+					>
+						<View className="gap-1">
+							<Text className="text-[13px] font-semibold text-foreground">
+								{t('syncSettings.pairing.manualTitle')}
+							</Text>
+						</View>
+						<Input>
+							<InputField
+								autoCapitalize="none"
+								autoCorrect={false}
+								keyboardType="numbers-and-punctuation"
+								onChangeText={setManualHost}
+								placeholder={t('syncSettings.pairing.manualHost')}
+								value={manualHost}
+							/>
+						</Input>
+						<View className="flex-row gap-2">
+							<Input className="flex-1">
+								<InputField
+									autoCapitalize="none"
+									autoCorrect={false}
+									keyboardType="number-pad"
+									onChangeText={setManualPort}
+									placeholder={t('syncSettings.pairing.manualPort')}
+									value={manualPort}
+								/>
+							</Input>
+							<Input className="flex-1">
+								<InputField
+									autoCapitalize="none"
+									autoCorrect={false}
+									keyboardType="number-pad"
+									onChangeText={setManualCode}
+									onSubmitEditing={() => void handleManualPair()}
+									placeholder={t('syncSettings.pairing.manualCode')}
+									value={manualCode}
+								/>
+							</Input>
+						</View>
+						<ActionButton
+							disabled={!canManualPair}
+							label={
+								pairingManually
+									? t('syncSettings.pairing.manualConnecting')
+									: t('syncSettings.pairing.manualConnect')
+							}
+							onPress={() => void handleManualPair()}
+						/>
 					</View>
 					{errorMessage ? (
 						<Text className="text-[12px] leading-5 text-destructive">

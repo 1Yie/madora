@@ -4,9 +4,9 @@ use std::sync::Mutex;
 use chrono::{Duration, Utc};
 
 use crate::models::madora_sync::{
-    MadoraSyncConfig, MadoraSyncConnectionState, MadoraSyncPairDeviceInput,
-    MadoraSyncPairDeviceResult, MadoraSyncPairedDevice, MadoraSyncPairingCode, MadoraSyncPairingQr,
-    MadoraSyncSettingsInput,
+    MadoraSyncAiCompletionConfig, MadoraSyncConfig, MadoraSyncConnectionState,
+    MadoraSyncPairDeviceInput, MadoraSyncPairDeviceResult, MadoraSyncPairedDevice,
+    MadoraSyncPairingCode, MadoraSyncPairingQr, MadoraSyncSettingsInput,
 };
 
 const CONFIG_FILE_NAME: &str = "madora_sync_state.json";
@@ -100,6 +100,17 @@ impl MadoraSyncStore {
         guard.auto_start_server = settings.auto_start_server;
         guard.allow_lan_discovery = settings.allow_lan_discovery;
         guard.share_ai_completions = settings.share_ai_completions;
+        let snapshot = guard.clone();
+        Self::save_config_inner(&self.app_data_dir, &snapshot);
+        Ok(snapshot)
+    }
+
+    pub fn save_ai_completion_config(
+        &self,
+        config: MadoraSyncAiCompletionConfig,
+    ) -> Result<MadoraSyncConfig, String> {
+        let mut guard = self.config.lock().map_err(|e| e.to_string())?;
+        guard.ai_completion_config = Some(config);
         let snapshot = guard.clone();
         Self::save_config_inner(&self.app_data_dir, &snapshot);
         Ok(snapshot)
@@ -203,27 +214,33 @@ impl MadoraSyncStore {
             .ok_or_else(|| "No active pairing token".to_string())?;
         let expected_pairing_code = guard.active_pairing_code.as_deref();
 
-        let pairing_id = request
-            .pairing_id
-            .as_deref()
-            .map(str::trim)
-            .ok_or_else(|| "pairingId is required".to_string())?;
-        if pairing_id != expected_pairing_id {
-            return Err("Pairing ticket is invalid".to_string());
-        }
-
         let token_matches = request
             .pairing_token
             .as_deref()
             .map(str::trim)
             .is_some_and(|token| token == expected_pairing_token);
-        let fallback_code_matches = match (
-            request.pairing_code.as_deref().map(str::trim),
-            expected_pairing_code,
-        ) {
+        let provided_pairing_code = request.pairing_code.as_deref().map(str::trim);
+        let pairing_code_present = provided_pairing_code.is_some_and(|code| !code.is_empty());
+        let fallback_code_matches = match (provided_pairing_code, expected_pairing_code) {
             (Some(code), Some(expected)) => code == expected,
             _ => false,
         };
+
+        let pairing_id = request
+            .pairing_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|pairing_id| !pairing_id.is_empty());
+        match pairing_id {
+            Some(pairing_id) if pairing_id != expected_pairing_id => {
+                return Err("Pairing ticket is invalid".to_string());
+            }
+            Some(_) => {}
+            None if !pairing_code_present => {
+                return Err("pairingId is required".to_string());
+            }
+            None => {}
+        }
 
         if !token_matches && !fallback_code_matches {
             return Err("Pairing credentials are invalid".to_string());
@@ -530,6 +547,41 @@ mod tests {
                 .expect("config after auth")
                 .connection_state,
             MadoraSyncConnectionState::Connected
+        );
+    }
+
+    #[test]
+    fn pairs_device_with_manual_code_without_pairing_ticket() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let store = MadoraSyncStore::new(temp_dir.path().to_path_buf());
+        let issued = store.issue_pairing_code().expect("pairing code");
+        let config = store.get_config().expect("config");
+        let pairing_token = config
+            .active_pairing_token
+            .clone()
+            .expect("active pairing token");
+
+        let paired = store
+            .pair_device(MadoraSyncPairDeviceInput {
+                device_id: "phone-1".to_string(),
+                device_name: "Phone".to_string(),
+                platform: Some("ios".to_string()),
+                pairing_id: None,
+                pairing_token: None,
+                pairing_code: Some(issued.code),
+            })
+            .expect("manual pairing");
+
+        assert_eq!(
+            paired.device.auth_token.as_deref(),
+            Some(pairing_token.as_str())
+        );
+        assert_eq!(
+            store
+                .get_config()
+                .expect("config after manual pairing")
+                .active_pairing_id,
+            None
         );
     }
 }

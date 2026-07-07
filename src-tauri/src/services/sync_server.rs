@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tokio::sync::mpsc;
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::models::ai::{AiCompletionConfig, AiProvider, CompletionRequest};
@@ -155,7 +155,7 @@ async fn handle_connection<R: Runtime>(
     };
 
     // Validate against the desktop's pairing ticket.
-    let device_name_result = {
+    let auth_result = {
         let store = handle.state::<MadoraSyncStore>();
         let request = MadoraSyncPairDeviceInput {
             device_id: auth.device_id.clone(),
@@ -165,14 +165,26 @@ async fn handle_connection<R: Runtime>(
             pairing_token: auth.pairing_token.clone(),
             pairing_code: auth.code.clone(),
         };
-        store.authenticate_device(request).map(|device| device.name)
+        store.authenticate_device(request).and_then(|device| {
+            let sync_config = store.get_config()?;
+            Ok((
+                device,
+                sync_config.device_name,
+                sync_config.share_ai_completions,
+            ))
+        })
     };
 
-    match device_name_result {
-        Ok(name) => {
+    match auth_result {
+        Ok((device, host_device_name, share_ai_completions)) => {
             send(
                 &mut ws_sender,
-                ServerMessage::AuthOk(AuthOkMessage { device_name: name }),
+                ServerMessage::AuthOk(AuthOkMessage {
+                    device_name: device.name,
+                    share_ai_completions,
+                    host_device_name: Some(host_device_name),
+                    pairing_token: device.auth_token,
+                }),
             )
             .await?;
         }
@@ -451,14 +463,18 @@ async fn handle_ai_complete<R: Runtime>(
     handle: &AppHandle<R>,
     msg: AiCompleteMessage,
 ) -> ServerMessage {
-    // Check the share_ai_completions gate.
-    let share = handle
-        .state::<MadoraSyncStore>()
-        .get_config()
-        .map(|c| c.share_ai_completions)
-        .unwrap_or(false);
+    let sync_config = match handle.state::<MadoraSyncStore>().get_config() {
+        Ok(config) => config,
+        Err(error) => {
+            return ServerMessage::AiResult(AiResultMessage {
+                doc_id: msg.doc_id,
+                completion: String::new(),
+                error: Some(error),
+            });
+        }
+    };
 
-    if !share {
+    if !sync_config.share_ai_completions {
         return ServerMessage::AiResult(AiResultMessage {
             doc_id: msg.doc_id,
             completion: String::new(),
@@ -466,7 +482,16 @@ async fn handle_ai_complete<R: Runtime>(
         });
     }
 
-    let provider = AiProvider::default();
+    let shared_ai_config = sync_config.ai_completion_config.unwrap_or_default();
+    if !shared_ai_config.enabled {
+        return ServerMessage::AiResult(AiResultMessage {
+            doc_id: msg.doc_id,
+            completion: String::new(),
+            error: Some("AI completion is disabled on the desktop".to_string()),
+        });
+    }
+
+    let provider = shared_ai_config.provider;
     let api_key = match load_api_key(provider) {
         Ok(key) => key,
         Err(error) => {
@@ -480,7 +505,11 @@ async fn handle_ai_complete<R: Runtime>(
 
     let config = AiCompletionConfig {
         api_key,
-        ..Default::default()
+        api_url: shared_ai_config.api_url,
+        custom_protocol: shared_ai_config.custom_protocol,
+        model: shared_ai_config.model,
+        provider: Some(provider),
+        use_ssl: shared_ai_config.use_ssl,
     };
     let request = CompletionRequest {
         title: msg.title.clone(),

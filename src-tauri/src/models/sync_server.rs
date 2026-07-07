@@ -104,8 +104,14 @@ pub enum ClientMessage {
 // ─── Host → Client messages ─────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthOkMessage {
     pub device_name: String,
+    pub share_ai_completions: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_device_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pairing_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

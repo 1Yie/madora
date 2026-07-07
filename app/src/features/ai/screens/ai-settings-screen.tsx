@@ -6,6 +6,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import {
 	Check,
 	ChevronDown,
+	Info,
 	KeyRound,
 	Lock,
 	Server,
@@ -34,6 +35,7 @@ import {
 	useAppThemePalette,
 	useResolvedThemePreference,
 } from '@/features/settings';
+import { useMadoraSync } from '@/features/madora-sync';
 import { BackButton } from '@/shared/components';
 import { ProviderGlyph } from '../components/provider-glyph';
 import { getProviderDefinitions } from '../lib/provider-definitions';
@@ -57,6 +59,11 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 	const resolvedTheme = useResolvedThemePreference();
 	const palette = useAppThemePalette();
 	const settings = useAiSettings();
+	const {
+		connectionState,
+		desktopAiCompletionAvailable,
+		useDesktopAiCompletion,
+	} = useMadoraSync();
 	const providers = useMemo(() => getProviderDefinitions(), []);
 	const selectedProvider = providers.find(
 		(provider) => provider.key === settings.provider
@@ -71,6 +78,10 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 		settings.model;
 	const [apiKeyDraft, setApiKeyDraft] = useState('');
 	const { showToast } = useNativeToast();
+	const remoteCompletionActive =
+		connectionState === 'connected' &&
+		desktopAiCompletionAvailable &&
+		useDesktopAiCompletion;
 
 	const saveApiKey = async () => {
 		try {
@@ -140,6 +151,8 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 				<Text className="text-[24px] font-semibold text-foreground">
 					{t('settings.editor.cards.ai.title')}
 				</Text>
+
+				{remoteCompletionActive ? <RemoteCompletionNotice /> : null}
 
 				<SettingsCard>
 					<View className="flex-row items-center justify-between gap-4">
@@ -335,6 +348,36 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 					</View>
 				</SettingsCard>
 			</KeyboardAwareScrollView>
+		</View>
+	);
+}
+
+function RemoteCompletionNotice() {
+	const { t } = useTranslation();
+	const palette = useAppThemePalette();
+
+	return (
+		<View
+			className="flex-row gap-3 rounded-md border px-3 py-3"
+			style={{
+				backgroundColor: palette.surfaceMuted,
+				borderColor: palette.border,
+			}}
+		>
+			<View
+				className="mt-0.5 h-8 w-8 items-center justify-center rounded-full"
+				style={{ backgroundColor: palette.accentSurface }}
+			>
+				<Info color={palette.accentForeground} size={16} strokeWidth={2.2} />
+			</View>
+			<View className="flex-1 gap-1">
+				<Text className="text-[14px] font-semibold text-foreground">
+					{t('settings.editor.remoteCompletionNotice.title')}
+				</Text>
+				<Text className="text-[12px] leading-5 text-muted-foreground">
+					{t('settings.editor.remoteCompletionNotice.description')}
+				</Text>
+			</View>
 		</View>
 	);
 }
