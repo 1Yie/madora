@@ -21,12 +21,47 @@ on:
           - preview
           - preview-device
           - production
+      android_abi:
+        description: Android ABI for APK builds
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - universal
+          - arm64-v8a
+          - armeabi-v7a
+          - x86_64
 
 jobs:
+  prepare:
+    name: Prepare build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      release_name: ${{ steps.plan.outputs.release_name }}
+      release_tag: ${{ steps.plan.outputs.release_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create EAS build matrix
+        id: plan
+        env:
+          ANDROID_ABI: ${{ inputs.android_abi }}
+          PLATFORM: ${{ inputs.platform }}
+          PROFILE: ${{ inputs.profile }}
+        run: node scripts/create-eas-build-matrix.js
+
   eas-build:
-    name: EAS build
+    name: ${{ matrix.name }}
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     defaults:
       run:
@@ -54,4 +89,45 @@ jobs:
         run: bun run test
 
       - name: Build app
-        run: eas build --platform "${{ inputs.platform }}" --profile "${{ inputs.profile }}" --non-interactive
+        env:
+          EAS_BUILD_OUTPUT: ${{ runner.temp }}/eas-build-${{ matrix.artifact_slug }}.json
+        run: eas build --platform "${{ matrix.platform }}" --profile "${{ matrix.profile }}" --non-interactive --json > "$EAS_BUILD_OUTPUT"
+
+      - name: Download EAS artifact
+        env:
+          ARTIFACT_NAME: ${{ matrix.artifact_name }}
+          ARTIFACT_URL_JSON: ${{ runner.temp }}/eas-build-${{ matrix.artifact_slug }}.json
+          OUTPUT_DIR: ${{ runner.temp }}/madora-app-artifacts
+        run: node ../scripts/download-eas-artifact.js "$ARTIFACT_URL_JSON" "$OUTPUT_DIR" "$ARTIFACT_NAME"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_slug }}
+          path: ${{ runner.temp }}/madora-app-artifacts/${{ matrix.artifact_name }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Upload app builds to release
+    needs:
+      - prepare
+      - eas-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download workflow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Upload app artifacts to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          name: ${{ needs.prepare.outputs.release_name }}
+          files: release-assets/*
+          draft: true
+          prerelease: false

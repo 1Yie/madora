@@ -50,6 +50,7 @@
 					"cameraPermission": "Madora uses the camera to scan the pairing QR code shown by the desktop app."
 				}
 			],
+			"./plugins/with-android-abi-filters",
 			"@actualwave/react-native-codeditor",
 			"expo-secure-store"
 		],

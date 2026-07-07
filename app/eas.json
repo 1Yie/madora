@@ -13,11 +13,47 @@
 				"simulator": true
 			}
 		},
+		"preview-arm64-v8a": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "arm64-v8a"
+			},
+			"extends": "preview"
+		},
+		"preview-armeabi-v7a": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "armeabi-v7a"
+			},
+			"extends": "preview"
+		},
 		"preview-device": {
 			"android": {
 				"buildType": "apk"
 			},
 			"distribution": "internal"
+		},
+		"preview-device-arm64-v8a": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "arm64-v8a"
+			},
+			"extends": "preview-device"
+		},
+		"preview-device-armeabi-v7a": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "armeabi-v7a"
+			},
+			"extends": "preview-device"
+		},
+		"preview-device-x86_64": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "x86_64"
+			},
+			"extends": "preview-device"
+		},
+		"preview-x86_64": {
+			"env": {
+				"MADORA_APP_ANDROID_ABIS": "x86_64"
+			},
+			"extends": "preview"
 		},
 		"production": {
 			"android": {

@@ -1,3 +1,41 @@
+## [Desktop 0.3.13](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.13)（2026-07-07） | Mobile 0.0.2（2026-07-07）
+
+### Bug Fixes
+
+- **app/layout:** replace global with globalThis to fix TS compilation error ([15fd3a7](https://github.com/1Yie/madora/commit/15fd3a78cd75fcdd0c82a054aa13bf4e7a3fe156))
+- **app/modal:** resolve background gap and keyboard blocking in native modal ([541ce1a](https://github.com/1Yie/madora/commit/541ce1a133ed6b740ab5f71380df965ba5e147e0))
+- **app:** stabilize sync sqlite and editor selection ([3014dda](https://github.com/1Yie/madora/commit/3014dda4649ae6e3381bbc843d27e1d1c16ba604))
+- **cli:** rebuild cross-platform install and packaging ([b7b7850](https://github.com/1Yie/madora/commit/b7b7850431f1675318f9f85572ea9d76f20746f8))
+- correct setup, theme, and workspace state ([a2fff58](https://github.com/1Yie/madora/commit/a2fff581a4d97305ad9c974200f0bba4a14476b8))
+- **theme:** restrict KDE color scheme detection to [General] section ([989b9cc](https://github.com/1Yie/madora/commit/989b9cc4cf71ff2fdec3fdfcfcca101d2a01e95c))
+- **tray:** align Tauri 2.11 generics and Windows cfg warnings ([dda416f](https://github.com/1Yie/madora/commit/dda416f8e6d21cc3fa64c965c07c7739f616e4c1))
+- **workspace:** normalize markdown draft keys on Windows ([7121acd](https://github.com/1Yie/madora/commit/7121acdaf69d785385ba929a3bdf4782bac50dda))
+- **workspace:** sync deleted files and ime completions ([f5716d7](https://github.com/1Yie/madora/commit/f5716d79d6678bb0dbf689cb2e89de283b662dc5))
+
+### Features
+
+- **ai:** expand provider support and remove CLI flow ([dcaf137](https://github.com/1Yie/madora/commit/dcaf137dd060d5b3fad9b4cbdc2bd27abd1b3057))
+- **app/editor:** implement workspace editor features, keyboard-dismiss, and native toasts ([c056e57](https://github.com/1Yie/madora/commit/c056e574106cd5a5c48d520f272bbeffe80a7eb4))
+- **app/tabbar:** add sliding active indicator and swipe-to-switch gestures ([f720b0b](https://github.com/1Yie/madora/commit/f720b0b233850c766edd89d4f7b9e32fbd1bc3f8))
+- **app:** add local editor workspace ([a789428](https://github.com/1Yie/madora/commit/a789428b5e830f9a83908b7d7476fb146824f30b))
+- **app:** add manual save workflow ([fb28031](https://github.com/1Yie/madora/commit/fb280317dd0f3d83b6a2e7553a3279731b85eea8))
+- **app:** add mobile onboarding and localized sync flows ([1e3b22b](https://github.com/1Yie/madora/commit/1e3b22b619c481f5f90cf94693c0becbfa83a8c7))
+- **app:** enhance mobile editor workspace ([bed230d](https://github.com/1Yie/madora/commit/bed230de12787c8abf33dfe94325230351575f33))
+- **app:** improve mobile settings and workspace states ([d34267b](https://github.com/1Yie/madora/commit/d34267b07307e526aee72b6e590e42f2b3bd037e))
+- **app:** refine mobile workspace and settings ([eddf18b](https://github.com/1Yie/madora/commit/eddf18b09ce6a4bba9a44daf9d653894ac52da42))
+- **i18n:** add tray and close-behavior UI strings ([bd6c05f](https://github.com/1Yie/madora/commit/bd6c05f9e8c5eee1fccb548e2ddc429e1e8e985b))
+- **i18n:** localize system settings and app chrome ([55dfd1a](https://github.com/1Yie/madora/commit/55dfd1a5d421fa023ca7f16b70ab4741a34e4f97))
+- **settings:** add close behavior option (minimize to tray vs quit) ([04cfd1f](https://github.com/1Yie/madora/commit/04cfd1f32c54e3b9f794a039d4611dc72f641c71))
+- **sync:** add manual pairing and desktop completions ([5392c85](https://github.com/1Yie/madora/commit/5392c85d637c7ba41e63e6057713a478852f276c))
+- **sync:** add mobile workspace and pairing flow ([825d99c](https://github.com/1Yie/madora/commit/825d99cda6d67932a0d030b6cfa8a15a01e012cd))
+- **sync:** implement bidirectional editor state and cursor synchronization ([d10c932](https://github.com/1Yie/madora/commit/d10c9329435a26a6603f9cbd71b429e9c8cdada2))
+- **sync:** support server restart and improve authentication ([ca22246](https://github.com/1Yie/madora/commit/ca222466a21a06ca9c9d0c9780cc628073aaa95d))
+- **tray:** add system tray icon with window management ([4b4daa8](https://github.com/1Yie/madora/commit/4b4daa86adcf8fc55c7fb08364c3e319dce3fb0c))
+- **tray:** localize menu labels and add linux status icon ([44aed86](https://github.com/1Yie/madora/commit/44aed8635bac1b56164ab67cf78070bfe82ee16e))
+- **update:** check GitHub releases on startup and in settings ([7e74b1b](https://github.com/1Yie/madora/commit/7e74b1b72f38145c7ed4dcb674b2f6fde3e912f2))
+- **workspace:** add interface zoom controls ([145006d](https://github.com/1Yie/madora/commit/145006d37e9bb47f63cbec589a6b44ab767a9b52))
+- **workspace:** refresh explorer, git, and webdav flows ([a134a4f](https://github.com/1Yie/madora/commit/a134a4f4bd4343cf0dee2295ef7b8381d48b16ed))
+
 ## [0.3.12](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.12) (2026-06-24)
 
 ### Bug Fixes
