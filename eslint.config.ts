@@ -14,6 +14,7 @@ export default defineConfig([
 	{
 		ignores: [
 			'src-tauri/**',
+			'app/**',
 			'dist/**',
 			'build/**',
 			'node_modules/**',
@@ -38,7 +39,10 @@ export default defineConfig([
 		files: ['**/*.{ts,tsx,js,jsx}'],
 
 		languageOptions: {
-			globals: globals.browser,
+			globals: {
+				...globals.browser,
+				...globals.node,
+			},
 
 			parserOptions: {
 				ecmaFeatures: {
@@ -70,4 +74,11 @@ export default defineConfig([
 	},
 
 	prettier,
+
+	{
+		files: ['scripts/**/*.{js,mjs,ts}'],
+		languageOptions: {
+			globals: globals.node,
+		},
+	},
 ]);
