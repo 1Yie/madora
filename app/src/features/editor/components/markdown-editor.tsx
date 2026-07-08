@@ -65,10 +65,13 @@ export function MarkdownEditor({
 	mode,
 	onChange,
 	onEditorStateChange,
+	onNavigateFile,
 	onRequestCompletion,
 	onSave,
 	onToggleMode,
 	remoteEditorState,
+	resolveRemoteImage,
+	rootUri = null,
 	syncShowingLoader = false,
 	theme = 'light',
 	title,
@@ -88,6 +91,7 @@ export function MarkdownEditor({
 		line: number | null;
 		localEditedAt: number;
 	}) => void;
+	onNavigateFile?: (resolvedPath: string) => void;
 	onRequestCompletion?: (
 		fullText: string,
 		cursorPos: number
@@ -95,9 +99,10 @@ export function MarkdownEditor({
 	onSave?: () => void;
 	onToggleMode?: () => void;
 	remoteEditorState?: RemoteEditorState;
+	resolveRemoteImage?: (src: string) => Promise<string | null>;
+	rootUri?: string | null;
 	syncShowingLoader?: boolean;
 	theme?: ResolvedThemePreference;
-	rootPath?: string | null;
 	saveMode?: SaveMode;
 	saveStatus?: SaveStatus;
 	title?: string;
@@ -659,11 +664,7 @@ export function MarkdownEditor({
 								{editorLoadError ? (
 									<Text style={styles.blockingText}>{editorLoadError}</Text>
 								) : (
-									<Spinner
-										color="#2563eb"
-										size="large"
-										style={styles.editorBlockingSpinner}
-									/>
+									<Spinner color="#2563eb" size="small" />
 								)}
 							</View>
 						)}
@@ -691,6 +692,10 @@ export function MarkdownEditor({
 						content={previewContent}
 						contentBottomPadding={contentBottomPadding}
 						contentTopPadding={contentTopPadding}
+						filePath={filePath || null}
+						rootUri={rootUri}
+						onNavigateFile={onNavigateFile}
+						resolveRemoteImage={resolveRemoteImage}
 						theme={theme}
 					/>
 				</View>
@@ -1489,9 +1494,6 @@ const styles = StyleSheet.create({
 		lineHeight: 18,
 		maxWidth: 300,
 		textAlign: 'center',
-	},
-	editorBlockingSpinner: {
-		transform: [{ scale: 1.25 }],
 	},
 	container: {
 		flex: 1,

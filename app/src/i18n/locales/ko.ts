@@ -378,6 +378,7 @@ const ko = {
 			savedDetail: '파일이 디스크에 저장되었습니다.',
 			savedTitle: '저장됨',
 		},
+		imagePreviewUnavailable: '이미지를 미리 볼 수 없습니다',
 		noSelection: {
 			detail: '파일 탭에서 파일을 선택하거나 만드세요.',
 			title: '선택된 파일이 없습니다',

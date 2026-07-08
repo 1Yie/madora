@@ -347,6 +347,7 @@ const zhCN = {
 			savedDetail: '文件已保存到磁盘。',
 			savedTitle: '已保存',
 		},
+		imagePreviewUnavailable: '无法预览图片',
 		noSelection: {
 			detail: '请前往 文件树 选择或创建文件。',
 			title: '还未选择文件',

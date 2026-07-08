@@ -204,17 +204,19 @@ export async function readLocalFile(
 
 	if (Platform.OS === 'android' && isContentUri(fileUri)) {
 		const stat = await NativeFileSystem.stat(fileUri).catch(() => null);
-		const content = await NativeFileSystem.readFile(fileUri);
 		const title =
 			stat?.filename ||
 			getContentUriName(fileUri) ||
 			(typeof fileOrUri === 'string'
 				? Paths.basename(fileUri)
 				: fileOrUri.name || Paths.basename(fileUri));
+		const fileKind = getFileKind(title);
+		const content =
+			fileKind === 'image' ? '' : await NativeFileSystem.readFile(fileUri);
 
 		return {
 			content,
-			fileKind: getFileKind(title),
+			fileKind,
 			id: fileUri,
 			lastSavedContent: content,
 			path: fileUri,
@@ -226,12 +228,13 @@ export async function readLocalFile(
 	}
 
 	const file = typeof fileOrUri === 'string' ? new File(fileOrUri) : fileOrUri;
-	const content = await file.text();
 	const title = file.name || Paths.basename(file.uri);
+	const fileKind = getFileKind(title);
+	const content = fileKind === 'image' ? '' : await file.text();
 
 	return {
 		content,
-		fileKind: getFileKind(title),
+		fileKind,
 		id: file.uri,
 		lastSavedContent: content,
 		path: file.uri,
@@ -396,6 +399,296 @@ export async function deleteLocalEntry(
 	}
 
 	new File(entryUri).delete();
+}
+
+/**
+ * Resolve a markdown link/image reference to an absolute file URI.
+ *
+ * Supports:
+ * - Absolute paths (`/img/...`) → resolved against workspace root URI
+ * - Relative paths (`./img.png`, `../img.png`) → resolved against the
+ *   markdown file's parent directory
+ * - Android SAF content URIs and iOS `file://` URIs
+ *
+ * Returns `null` when the link is external (http/https/data) or cannot be
+ * resolved (missing root/file context).
+ */
+export function resolveFilePath(
+	link: string,
+	currentFileUri: string | null,
+	rootUri: string | null
+): string | null {
+	if (!link) return null;
+
+	const decoded = tryDecodeURI(link).trim();
+	if (!decoded || decoded.startsWith('#')) return null;
+
+	const localPath = stripLinkTarget(decoded);
+	if (!localPath) return null;
+
+	const normalizedProtocolPath = localPath.toLowerCase();
+
+	// External / protocol URLs are not local files
+	if (
+		normalizedProtocolPath.startsWith('http://') ||
+		normalizedProtocolPath.startsWith('https://') ||
+		normalizedProtocolPath.startsWith('data:') ||
+		normalizedProtocolPath.startsWith('asset://') ||
+		normalizedProtocolPath.startsWith('madora://') ||
+		normalizedProtocolPath.startsWith('file:')
+	) {
+		return null;
+	}
+
+	let resolved: string | null;
+
+	// Absolute path (`/foo/bar`) → resolve against workspace root
+	if (localPath.startsWith('/')) {
+		if (!rootUri) return null;
+		const relativeSrc = localPath.replace(/^\/+/, '');
+		resolved = appendRelativeSegments(rootUri, relativeSrc.split('/'));
+	} else {
+		// Relative path → resolve against the current file's directory
+		if (!currentFileUri) return null;
+		resolved = resolveRelativeToDirectory(currentFileUri, localPath, rootUri);
+	}
+
+	if (!resolved) return null;
+	if (rootUri && !isUriWithinRoot(resolved, rootUri)) return null;
+	return resolved;
+}
+
+/**
+ * Check whether a resolved file URI exists.
+ */
+export async function localFileExists(uri: string): Promise<boolean> {
+	try {
+		await NativeFileSystem.stat(uri);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Read a local image file and return it as a `data:` URI suitable for
+ * embedding in an `<img>` tag inside the WebView.
+ *
+ * Returns `null` if the file cannot be read or is empty.
+ */
+export async function readLocalFileAsDataUri(
+	uri: string
+): Promise<string | null> {
+	try {
+		const base64 = await NativeFileSystem.readFile(uri, 'base64');
+		if (!base64) return null;
+		const name = getBaseNameForUri(uri);
+		return `data:${getImageMimeType(name)};base64,${base64}`;
+	} catch {
+		return null;
+	}
+}
+
+function resolveRelativeToDirectory(
+	fileUri: string,
+	relativePath: string,
+	rootUri: string | null
+): string | null {
+	const segments = normalizeRelativeSegments(relativePath);
+	if (segments.length === 0) return fileUri;
+
+	if (isContentUri(fileUri)) {
+		return resolveScopedRelativePath(fileUri, segments, rootUri);
+	}
+
+	// iOS / plain file:// path — standard filesystem join
+	const fileDir = fileUri.replace(/\/+$/, '').split('/').slice(0, -1).join('/');
+	const joined = [...fileDir.split('/'), ...segments].join('/');
+	return normalisePosixPath(joined);
+}
+
+function resolveScopedRelativePath(
+	fileUri: string,
+	segments: string[],
+	rootUri: string | null
+): string | null {
+	const fileSegments = getContentUriSegments(fileUri);
+	if (fileSegments.length === 0) return null;
+
+	const parentSegments = fileSegments.slice(0, -1);
+
+	const resolvedSegments = applyRelativeSegments(parentSegments, segments);
+
+	// Build from root URI if available so we get a valid document URI
+	if (rootUri && isContentUri(rootUri)) {
+		const rootSegments = getContentUriSegments(rootUri);
+		if (rootSegments.length > 0) {
+			if (!hasSegmentPrefix(resolvedSegments, rootSegments)) return null;
+			const childSegments = resolvedSegments.slice(rootSegments.length);
+			const rootDocumentId = getContentUriDocumentId(rootUri);
+			if (!rootDocumentId) return null;
+
+			const childDocumentId =
+				childSegments.length > 0
+					? `${rootDocumentId}/${childSegments
+							.map(encodePathSegment)
+							.join('/')}`
+					: rootDocumentId;
+			return `${normalizeScopedUri(rootUri)}/document/${encodeURIComponent(
+				childDocumentId
+			)}`;
+		}
+	}
+
+	// Fallback: append resolved segments directly to the parent tree URI
+	return segments.reduce(
+		(currentUri, segment) => appendScopedPath(currentUri, segment),
+		buildTreeUriFromSegments(fileUri)
+	);
+}
+
+function buildTreeUriFromSegments(fileUri: string): string {
+	const decoded = decodeRepeatedly(fileUri);
+	const treeMatch = decoded.match(/^(.*?\/tree\/[^?#]+?)(?=\/document\/|$|\?)/);
+	const base = treeMatch?.[1] ?? fileUri.split('/document/')[0];
+	return normalizeScopedUri(base);
+}
+
+function appendRelativeSegments(
+	baseUri: string,
+	segments: string[]
+): string | null {
+	const normalized = segments
+		.map((segment) => segment.trim())
+		.filter((segment) => segment.length > 0 && segment !== '.')
+		.flatMap((segment) => segment.split('/'))
+		.filter((segment) => segment.length > 0 && segment !== '.');
+
+	if (normalized.length === 0) return baseUri;
+
+	if (isContentUri(baseUri)) {
+		const baseSegments = getContentUriSegments(baseUri);
+		const resolvedSegments = applyRelativeSegments(baseSegments, normalized);
+		if (!hasSegmentPrefix(resolvedSegments, baseSegments)) return null;
+		return resolvedSegments
+			.slice(baseSegments.length)
+			.reduce(
+				(currentUri, segment) => appendScopedPath(currentUri, segment),
+				normalizeScopedUri(baseUri)
+			);
+	}
+
+	const base = baseUri.replace(/\/+$/, '');
+	return normalisePosixPath([...base.split('/'), ...normalized].join('/'));
+}
+
+function hasSegmentPrefix(segments: string[], prefix: string[]) {
+	if (segments.length < prefix.length) return false;
+	return prefix.every((segment, index) => segments[index] === segment);
+}
+
+function isUriWithinRoot(uri: string, rootUri: string): boolean {
+	if (isContentUri(uri) || isContentUri(rootUri)) {
+		if (!isContentUri(uri) || !isContentUri(rootUri)) return false;
+		const uriSegments = getContentUriSegments(uri);
+		const rootSegments = getContentUriSegments(rootUri);
+		if (rootSegments.length === 0) return false;
+		if (uriSegments.length < rootSegments.length) return false;
+		return rootSegments.every(
+			(segment, index) => uriSegments[index] === segment
+		);
+	}
+
+	const normalizedUri = normalizeRootComparablePath(uri);
+	const normalizedRoot = normalizeRootComparablePath(rootUri);
+	if (normalizedUri === normalizedRoot) return true;
+	return normalizedUri.startsWith(`${normalizedRoot}/`);
+}
+
+function normalizeRootComparablePath(uri: string) {
+	const normalized = normalisePosixPath(uri.replace(/\\/g, '/'));
+	return normalized.replace(/\/+$/, '');
+}
+
+function applyRelativeSegments(baseSegments: string[], segments: string[]) {
+	const result = [...baseSegments];
+	for (const segment of segments) {
+		if (segment === '..') {
+			if (result.length > 0) result.pop();
+			continue;
+		}
+		if (segment === '.') continue;
+		result.push(segment);
+	}
+	return result;
+}
+
+function stripLinkTarget(link: string) {
+	const queryIndex = link.indexOf('?');
+	const hashIndex = link.indexOf('#');
+	const indexes = [queryIndex, hashIndex].filter((index) => index >= 0);
+	if (indexes.length === 0) return link;
+	return link.slice(0, Math.min(...indexes));
+}
+
+function normalizeRelativeSegments(relativePath: string): string[] {
+	return relativePath
+		.replace(/\\/g, '/')
+		.split('/')
+		.map((segment) => segment.trim())
+		.filter((segment) => segment.length > 0);
+}
+
+function normalisePosixPath(path: string): string {
+	const segments = path.split('/');
+	const result: string[] = [];
+	for (const segment of segments) {
+		if (segment === '' || segment === '.') continue;
+		if (segment === '..') {
+			if (result.length > 0) result.pop();
+			continue;
+		}
+		result.push(segment);
+	}
+	const prefix = path.startsWith('/') ? '/' : '';
+	const suffix = path.endsWith('/') && result.length > 0 ? '/' : '';
+	return prefix + result.join('/') + suffix;
+}
+
+function getBaseNameForUri(uri: string): string {
+	if (isContentUri(uri)) {
+		return getContentUriName(uri) ?? Paths.basename(uri) ?? '';
+	}
+	return Paths.basename(uri);
+}
+
+function getImageMimeType(name: string): string {
+	const extension = getLowerExtension(name);
+	switch (extension) {
+		case '.png':
+			return 'image/png';
+		case '.jpg':
+		case '.jpeg':
+			return 'image/jpeg';
+		case '.gif':
+			return 'image/gif';
+		case '.webp':
+			return 'image/webp';
+		case '.svg':
+			return 'image/svg+xml';
+		case '.bmp':
+			return 'image/bmp';
+		default:
+			return 'application/octet-stream';
+	}
+}
+
+function tryDecodeURI(value: string): string {
+	try {
+		return decodeURIComponent(value);
+	} catch {
+		return value;
+	}
 }
 
 function listExpoChildren(directory: Directory, rootUri: string): EditorNode[] {

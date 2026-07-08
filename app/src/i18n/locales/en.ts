@@ -383,6 +383,7 @@ const en = {
 			savedDetail: 'File saved to disk.',
 			savedTitle: 'Saved',
 		},
+		imagePreviewUnavailable: 'Image preview unavailable',
 		noSelection: {
 			detail: 'Go to the Files tab to pick or create a file.',
 			title: 'No file selected',

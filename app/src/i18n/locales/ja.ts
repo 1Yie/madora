@@ -381,6 +381,7 @@ const ja = {
 			savedDetail: 'ファイルをディスクに保存しました。',
 			savedTitle: '保存しました',
 		},
+		imagePreviewUnavailable: '画像をプレビューできません',
 		noSelection: {
 			detail: 'ファイルタブでファイルを選択または作成してください。',
 			title: 'ファイルが選択されていません',

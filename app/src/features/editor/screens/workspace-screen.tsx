@@ -10,6 +10,7 @@ import { router, useFocusEffect } from 'expo-router';
 import {
 	BackHandler,
 	DeviceEventEmitter,
+	Image,
 	Keyboard,
 	PressableProps,
 	Pressable,
@@ -47,6 +48,10 @@ import {
 import { MarkdownEditor } from '../components/markdown-editor';
 import { useEditorWorkspace } from '../providers/editor-provider';
 import { hashEditorContent } from '../lib/editor-content-hash';
+import {
+	readLocalFileAsDataUri,
+	resolveFilePath,
+} from '../services/local-file-system';
 import {
 	NativeModal,
 	NativeModalActions,
@@ -163,6 +168,7 @@ export function WorkspaceScreen() {
 	const {
 		connectionState,
 		publishEditorState,
+		readRemoteFile,
 		remoteEditorState,
 		syncEnabled,
 	} = useMadoraSync();
@@ -660,6 +666,40 @@ export function WorkspaceScreen() {
 		});
 	};
 
+	const handleNavigateFile = useCallback(
+		(resolvedPath: string) => {
+			handleOpenDocument(resolvedPath);
+		},
+		// handleOpenDocument depends on selectedDocument / activeTab but is
+		// recreated every render; depending on it would bust the memo. Read the
+		// latest values via refs instead is overkill here — the callback is only
+		// invoked on user taps, so stale closures are harmless.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[checkUnsavedBeforeSwitch, selectDocument, activeTab, selectedDocument?.id]
+	);
+
+	const resolveRemoteImage = useCallback(
+		async (src: string) => {
+			if (workspaceSource.kind !== 'remote' || !selectedDocument) {
+				return null;
+			}
+			try {
+				const resolved = resolveFilePath(
+					src,
+					selectedDocument.path,
+					workspaceSource.uri
+				);
+				if (!resolved) return null;
+				const result = await readRemoteFile(resolved);
+				if (result.imageDataUrl) return result.imageDataUrl;
+				return null;
+			} catch {
+				return null;
+			}
+		},
+		[readRemoteFile, selectedDocument, workspaceSource]
+	);
+
 	const handleOpenCreateFile = () => {
 		setCreateValue('');
 		setCreateModalOpen(true);
@@ -913,30 +953,51 @@ export function WorkspaceScreen() {
 					}}
 				>
 					{selectedDocument ? (
-						<>
-							<MarkdownEditor
-								contentBottomPadding={editorBottomPadding}
-								contentTopPadding={editorTopPadding}
-								filePath={selectedDocument.path}
-								fontSize={editorFontSize}
-								onSave={handleSaveActiveDocument}
-								theme={resolvedTheme}
-								title={selectedDocument.title}
-								value={selectedDocument.content}
-								onChange={updateSelectedDocumentContent}
-								onEditorStateChange={handleEditorStateChange}
-								onRequestCompletion={requestInlineCompletion}
-								remoteEditorState={visibleRemoteEditorState}
-								syncShowingLoader={editorSyncLoading}
+						selectedDocument.fileKind === 'image' ? (
+							<ImageDocumentPreview
+								document={selectedDocument}
+								readRemoteFile={readRemoteFile}
+								topPadding={editorTopPadding}
+								workspaceSource={workspaceSource}
 							/>
-							{saveMode === 'manual' && activeDocumentDirty ? (
-								<SaveCapsule
-									insetsTop={insets.top}
-									saving={isSavingActiveDocument}
-									onPress={handleSaveActiveDocument}
+						) : (
+							<>
+								<MarkdownEditor
+									contentBottomPadding={editorBottomPadding}
+									contentTopPadding={editorTopPadding}
+									filePath={selectedDocument.path}
+									fontSize={editorFontSize}
+									onNavigateFile={handleNavigateFile}
+									onSave={handleSaveActiveDocument}
+									resolveRemoteImage={
+										workspaceSource.kind === 'remote'
+											? resolveRemoteImage
+											: undefined
+									}
+									rootUri={
+										workspaceSource.kind === 'directory' ||
+										workspaceSource.kind === 'remote'
+											? workspaceSource.uri
+											: null
+									}
+									theme={resolvedTheme}
+									title={selectedDocument.title}
+									value={selectedDocument.content}
+									onChange={updateSelectedDocumentContent}
+									onEditorStateChange={handleEditorStateChange}
+									onRequestCompletion={requestInlineCompletion}
+									remoteEditorState={visibleRemoteEditorState}
+									syncShowingLoader={editorSyncLoading}
 								/>
-							) : null}
-						</>
+								{saveMode === 'manual' && activeDocumentDirty ? (
+									<SaveCapsule
+										insetsTop={insets.top}
+										saving={isSavingActiveDocument}
+										onPress={handleSaveActiveDocument}
+									/>
+								) : null}
+							</>
+						)
 					) : (
 						<EmptyEditorState
 							canCreateFile={workspaceSource.kind === 'directory'}
@@ -996,6 +1057,90 @@ export function WorkspaceScreen() {
 				onDiscard={handleUnsavedDiscardAndExit}
 				onSave={handleUnsavedSaveAndExit}
 			/>
+		</View>
+	);
+}
+
+function ImageDocumentPreview({
+	document,
+	readRemoteFile,
+	topPadding,
+	workspaceSource,
+}: {
+	document: EditorDocument;
+	readRemoteFile: (path: string) => Promise<{ imageDataUrl: string | null }>;
+	topPadding: number;
+	workspaceSource: EditorWorkspaceSource;
+}) {
+	const { t } = useTranslation();
+	const palette = useAppThemePalette();
+	const [imageUri, setImageUri] = useState<string | null>(null);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		let cancelled = false;
+		setLoading(true);
+		setImageUri(null);
+
+		async function loadImage() {
+			try {
+				const nextUri =
+					workspaceSource.kind === 'remote'
+						? (await readRemoteFile(document.path)).imageDataUrl
+						: await readLocalFileAsDataUri(document.path);
+
+				if (!cancelled) {
+					setImageUri(nextUri ?? null);
+				}
+			} catch {
+				if (!cancelled) {
+					setImageUri(null);
+				}
+			} finally {
+				if (!cancelled) {
+					setLoading(false);
+				}
+			}
+		}
+
+		void loadImage();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [document.path, readRemoteFile, workspaceSource.kind]);
+
+	return (
+		<View
+			className="flex-1 items-center justify-center px-4 pb-4"
+			style={{ backgroundColor: palette.background, paddingTop: topPadding }}
+		>
+			{loading ? (
+				<Spinner color={palette.iconMuted} size="small" />
+			) : imageUri ? (
+				<Image
+					accessibilityLabel={document.title}
+					resizeMode="contain"
+					source={{ uri: imageUri }}
+					style={{ height: '100%', width: '100%' }}
+				/>
+			) : (
+				<View className="items-center gap-1 px-6">
+					<Text
+						className="text-center text-[15px] font-semibold"
+						numberOfLines={2}
+						style={{ color: palette.foreground }}
+					>
+						{document.title}
+					</Text>
+					<Text
+						className="text-center text-[13px]"
+						style={{ color: palette.mutedForeground }}
+					>
+						{t('workspace.imagePreviewUnavailable')}
+					</Text>
+				</View>
+			)}
 		</View>
 	);
 }
@@ -1784,7 +1929,7 @@ function FileTreeModeLoadingState() {
 
 	return (
 		<View className="flex-1 items-center justify-center">
-			<Spinner color={palette.iconMuted} size="large" />
+			<Spinner color={palette.iconMuted} size="small" />
 		</View>
 	);
 }

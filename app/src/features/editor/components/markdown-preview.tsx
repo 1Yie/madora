@@ -1,15 +1,31 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import katex from 'katex';
 import { marked } from 'marked';
 import type { Tokens } from 'marked';
 import type { ResolvedThemePreference } from '@/features/settings';
+import {
+	localFileExists,
+	readLocalFileAsDataUri,
+	resolveFilePath,
+} from '../services/local-file-system';
 
 type MarkdownPreviewProps = {
 	content: string;
 	contentBottomPadding?: number;
 	contentTopPadding?: number;
+	/** Absolute URI of the markdown file being previewed. */
+	filePath?: string | null;
+	/** Workspace root URI (folder) for resolving absolute (`/foo`) links. */
+	rootUri?: string | null;
+	/** Called when the user taps a link that resolves to another local file. */
+	onNavigateFile?: (resolvedPath: string) => void;
+	/**
+	 * Optional resolver for remote (sync) images. Receives the raw markdown
+	 * src and returns a `data:` URI or absolute URL that the WebView can load.
+	 */
+	resolveRemoteImage?: (src: string) => Promise<string | null>;
 	theme?: ResolvedThemePreference;
 };
 
@@ -43,39 +59,126 @@ export function MarkdownPreview({
 	content,
 	contentBottomPadding = 0,
 	contentTopPadding = 0,
+	filePath = null,
+	rootUri = null,
+	onNavigateFile,
+	resolveRemoteImage,
 	theme = 'light',
 }: MarkdownPreviewProps) {
 	const backgroundColor = theme === 'dark' ? '#0a0a0a' : '#ffffff';
-	const html = useMemo(
-		() =>
-			buildPreviewHtml(
+	const [html, setHtml] = useState(() =>
+		buildPreviewHtml(
+			content,
+			Math.max(0, contentTopPadding),
+			Math.max(0, contentBottomPadding),
+			theme,
+			null
+		)
+	);
+
+	// Resolve local / remote images to data URIs, then rebuild the HTML so
+	// the WebView can render them directly (no post-render JS needed).
+	useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			const baseHtml = buildPreviewHtml(
 				content,
 				Math.max(0, contentTopPadding),
 				Math.max(0, contentBottomPadding),
-				theme
-			),
-		[content, contentBottomPadding, contentTopPadding, theme]
+				theme,
+				null
+			);
+			const sources = await resolveImageSources(
+				baseHtml,
+				filePath,
+				rootUri,
+				resolveRemoteImage
+			);
+			if (cancelled) return;
+
+			const next =
+				sources.size === 0
+					? baseHtml
+					: buildPreviewHtml(
+							content,
+							Math.max(0, contentTopPadding),
+							Math.max(0, contentBottomPadding),
+							theme,
+							sources
+						);
+			if (!cancelled) setHtml(next);
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		content,
+		contentBottomPadding,
+		contentTopPadding,
+		filePath,
+		resolveRemoteImage,
+		rootUri,
+		theme,
+	]);
+
+	const handleMessage = useCallback(
+		(event: WebViewMessageEvent) => {
+			let data: { type?: string; href?: string };
+			try {
+				data = JSON.parse(event.nativeEvent.data);
+			} catch {
+				return;
+			}
+			if (data.type !== 'navigate' || !data.href) return;
+
+			const resolved = resolveFilePath(data.href, filePath, rootUri);
+			if (!resolved) {
+				// Could not resolve as a local path — ignore silently.
+				return;
+			}
+			onNavigateFile?.(resolved);
+		},
+		[filePath, onNavigateFile, rootUri]
+	);
+
+	const handleNavigationRequest = useCallback(
+		(url: string) => {
+			if (url === 'about:blank') return true;
+			if (url.startsWith('http://') || url.startsWith('https://')) {
+				void Linking.openURL(url);
+				return false;
+			}
+
+			const href = getNavigationHrefFromUrl(url);
+			if (href) {
+				const resolved = resolveFilePath(href, filePath, rootUri);
+				if (resolved) {
+					onNavigateFile?.(resolved);
+				}
+				return false;
+			}
+
+			return false;
+		},
+		[filePath, onNavigateFile, rootUri]
 	);
 
 	return (
 		<View style={[styles.container, { backgroundColor }]}>
 			<WebView
-				javaScriptEnabled={false}
+				javaScriptEnabled
 				originWhitelist={['*']}
 				setSupportMultipleWindows={false}
 				source={{ html }}
 				style={[styles.webview, { backgroundColor }]}
-				onShouldStartLoadWithRequest={(request) => {
-					if (request.url === 'about:blank') return true;
-					if (
-						request.url.startsWith('http://') ||
-						request.url.startsWith('https://')
-					) {
-						void Linking.openURL(request.url);
-						return false;
-					}
-					return true;
-				}}
+				injectedJavaScript={LINK_INTERCEPTOR_SCRIPT}
+				injectedJavaScriptBeforeContentLoaded={LINK_INTERCEPTOR_SCRIPT}
+				onMessage={handleMessage}
+				onShouldStartLoadWithRequest={(request: { url: string }) =>
+					handleNavigationRequest(request.url)
+				}
 			/>
 		</View>
 	);
@@ -85,7 +188,8 @@ function buildPreviewHtml(
 	content: string,
 	contentTopPadding: number,
 	contentBottomPadding: number,
-	theme: ResolvedThemePreference
+	theme: ResolvedThemePreference,
+	imageSources: Map<string, string> | null
 ) {
 	const normalized = normalizeLeadingWhitespace(content);
 	const { markdown, mathTokens } = protectMath(normalized);
@@ -97,7 +201,10 @@ function buildPreviewHtml(
 		(html, item) => html.replaceAll(item.token, item.html),
 		parsed
 	);
-	const safeHtml = sanitizeHtml(withMath);
+	const resolved = imageSources
+		? replaceImageSrcs(withMath, imageSources)
+		: withMath;
+	const safeHtml = sanitizeHtml(resolved);
 
 	return `<!doctype html>
 <html>
@@ -108,6 +215,7 @@ function buildPreviewHtml(
   </head>
   <body>
     <main class="prose">${safeHtml}</main>
+    <script>${LINK_INTERCEPTOR_SCRIPT}</script>
   </body>
 </html>`;
 }
@@ -181,6 +289,18 @@ function createPreviewRenderer() {
 			: 'code-block';
 
 		return `<div class="code-frame">${languageLabel}<pre class="${preClass}"><code class="${languageClass.trim()}">${code}\n</code></pre></div>`;
+	};
+
+	// Give every <a> a data-href so the capture-phase click interceptor can
+	// read the original value even after the WebView resolves it against the
+	// about:blank origin.
+	renderer.link = ({ href, text, tokens }) => {
+		const rawHref = href || '';
+		const anchorHref = isLocalFileHref(rawHref)
+			? toNavigationUrl(rawHref)
+			: rawHref;
+		const textHtml = marked.Parser.parseInline(tokens);
+		return `<a href="${escapeHtml(anchorHref)}" data-href="${escapeHtml(rawHref)}">${textHtml || escapeHtml(text || '')}</a>`;
 	};
 
 	return renderer;
@@ -874,3 +994,130 @@ const styles = StyleSheet.create({
 		flex: 1,
 	},
 });
+
+// ─── Image source resolution & link interception ──────────────────────────
+
+const IMAGE_SRC_PATTERN = /<img\b[^>]*\bsrc=("([^"]*)"|'([^']*)')[^>]*>/gi;
+const NAVIGATION_URL_PREFIX = 'madora://navigate?href=';
+
+function isLocalFileHref(href: string) {
+	if (!href || href.startsWith('#') || href.startsWith('//')) return false;
+	return !/^[a-z][a-z\d+.-]*:/i.test(href);
+}
+
+function toNavigationUrl(href: string) {
+	return `${NAVIGATION_URL_PREFIX}${encodeURIComponent(href)}`;
+}
+
+function getNavigationHrefFromUrl(url: string) {
+	if (!url.startsWith('madora://navigate')) return null;
+
+	const queryIndex = url.indexOf('?');
+	if (queryIndex < 0) return null;
+
+	const query = url.slice(queryIndex + 1).split('#')[0];
+	for (const part of query.split('&')) {
+		const [key, value = ''] = part.split('=');
+		if (key !== 'href') continue;
+		try {
+			return decodeURIComponent(value.replace(/\+/g, '%20'));
+		} catch {
+			return value;
+		}
+	}
+
+	return null;
+}
+
+const LINK_INTERCEPTOR_SCRIPT = `
+(function() {
+  if (window.__madoraLinkInterceptorInstalled) return true;
+  window.__madoraLinkInterceptorInstalled = true;
+  document.addEventListener('click', function(event) {
+    var target = event.target;
+    while (target && target.tagName !== 'A') target = target.parentNode;
+    if (!target || !target.getAttribute) return;
+    // Prefer data-href (the original markdown href) over href, which may
+    // have been resolved to an absolute about:blank URL by the browser.
+    var href = target.getAttribute('data-href') || target.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    if (/^(https?:)?\/\//i.test(href)) return;
+    event.preventDefault();
+    window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'navigate', href: href }));
+  }, true);
+})();
+true;
+`;
+
+/**
+ * Parse the rendered HTML for every `<img>` and resolve each src:
+ * - Remote URLs (http/https/data/asset/madora) are kept as-is.
+ * - Relative / absolute local paths are resolved against the current
+ *   markdown file (relative) or workspace root (absolute), read as base64,
+ *   and stored as `data:` URIs so the WebView can render them.
+ *
+ * Returns a map of original src → resolved src.
+ */
+async function resolveImageSources(
+	html: string,
+	filePath: string | null,
+	rootUri: string | null,
+	resolveRemoteImage?: (src: string) => Promise<string | null>
+): Promise<Map<string, string>> {
+	const sources = extractImgSrcs(html);
+	if (sources.length === 0) return new Map();
+
+	const result = new Map<string, string>();
+	await Promise.all(
+		sources.map(async (src) => {
+			const isRemote =
+				src.startsWith('http://') ||
+				src.startsWith('https://') ||
+				src.startsWith('data:') ||
+				src.startsWith('asset://') ||
+				src.startsWith('madora://');
+
+			if (isRemote) return;
+
+			const resolvedUri = resolveFilePath(src, filePath, rootUri);
+			if (!resolvedUri) return;
+
+			const exists = await localFileExists(resolvedUri);
+			if (!exists) {
+				if (resolveRemoteImage) {
+					const remoteDataUri = await resolveRemoteImage(src);
+					if (remoteDataUri) result.set(src, remoteDataUri);
+				}
+				return;
+			}
+
+			const dataUri = await readLocalFileAsDataUri(resolvedUri);
+			if (dataUri) result.set(src, dataUri);
+		})
+	);
+	return result;
+}
+
+function extractImgSrcs(html: string): string[] {
+	const sources: string[] = [];
+	let match: RegExpExecArray | null;
+	IMAGE_SRC_PATTERN.lastIndex = 0;
+	while ((match = IMAGE_SRC_PATTERN.exec(html))) {
+		const src = match[2] ?? match[3];
+		if (src) sources.push(src);
+	}
+	return sources;
+}
+
+function replaceImageSrcs(html: string, resolved: Map<string, string>): string {
+	if (resolved.size === 0) return html;
+	return html.replace(
+		IMAGE_SRC_PATTERN,
+		(full, _quoted, doubleSrc, singleSrc) => {
+			const src = doubleSrc ?? singleSrc ?? '';
+			const replacement = resolved.get(src);
+			if (!replacement) return full;
+			return full.replace(src, replacement);
+		}
+	);
+}
