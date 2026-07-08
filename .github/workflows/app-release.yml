@@ -34,12 +34,19 @@ on:
           - armeabi-v7a
           - x86_64
 
+concurrency:
+  group: madora-release
+  cancel-in-progress: false
+
 jobs:
   prepare:
     name: Prepare build matrix
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      release_id: ${{ steps.release.outputs.id }}
       release_name: ${{ steps.plan.outputs.release_name }}
       release_tag: ${{ steps.plan.outputs.release_tag }}
 
@@ -54,6 +61,16 @@ jobs:
           PLATFORM: ${{ inputs.platform }}
           PROFILE: ${{ inputs.profile }}
         run: node scripts/create-eas-build-matrix.js
+
+      - name: Create GitHub release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BODY: ${{ format('See {0}/blob/main/CHANGELOG.md for the full changelog.', format('{0}/{1}', github.server_url, github.repository)) }}
+          RELEASE_NAME: ${{ steps.plan.outputs.release_name }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          TARGET_COMMITISH: ${{ github.sha }}
+        run: node scripts/ensure-github-release.js
 
   eas-build:
     name: ${{ matrix.name }}
@@ -118,6 +135,9 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Download workflow artifacts
         uses: actions/download-artifact@v4
         with:
@@ -125,10 +145,7 @@ jobs:
           merge-multiple: true
 
       - name: Upload app artifacts to GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.release_tag }}
-          name: ${{ needs.prepare.outputs.release_name }}
-          files: release-assets/*
-          draft: true
-          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+        run: node scripts/upload-github-release-assets.js release-assets/*
