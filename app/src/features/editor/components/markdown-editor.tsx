@@ -287,6 +287,10 @@ export function MarkdownEditor({
 
 					let completion = '';
 					try {
+						if (!onRequestCompletion) {
+							setCompletionStatus('idle');
+							return;
+						}
 						completion = await onRequestCompletion(nextValue, cursor.index);
 					} catch {
 						completion = '';

@@ -62,6 +62,7 @@ interface MadoraSyncContextValue {
 	readRemoteFile: (path: string) => Promise<{
 		content: string | null;
 		encoding: string | null;
+		imageDataUrl: string | null;
 		truncated: boolean;
 	}>;
 	requestRemoteCompletion: (request: {
@@ -667,6 +668,7 @@ export function MadoraSyncProvider({ children }: { children: ReactNode }) {
 			return {
 				content: response.content,
 				encoding: response.encoding,
+				imageDataUrl: response.imageDataUrl,
 				truncated: response.truncated,
 			};
 		},
