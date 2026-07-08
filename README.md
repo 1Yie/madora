@@ -72,7 +72,7 @@ bun run bump-version <new-version>
 
 ## Links
 
-- Website: https://madora.ichiyo.in
+- Website: https://madora.ingstar.im
 - Source: https://github.com/1Yie/madora
 
 ## License

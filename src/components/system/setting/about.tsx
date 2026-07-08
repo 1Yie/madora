@@ -21,13 +21,13 @@ import {
 import packageJson from '../../../../package.json';
 
 const FALLBACK_APP_INFO: AppInfo = {
-	identifier: 'in.ichiyo.madora',
+	identifier: 'im.ingstar.madora',
 	name: 'Madora',
 	tauriVersion: '-',
 	version: packageJson.version,
 };
 
-const WEBSITE_URL = 'https://madora.ichiyo.in';
+const WEBSITE_URL = 'https://madora.ingstar.im';
 const SOURCE_CODE_URL = 'https://github.com/1Yie/madora';
 
 async function readAppInfo(): Promise<AppInfo> {

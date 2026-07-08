@@ -25,7 +25,7 @@ import {
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import { cn } from '@/lib/utils';
 
-const PURCHASE_URL = 'https://madora.ichiyo.in/purchase';
+const PURCHASE_URL = 'https://madora.ingstar.im/purchase';
 type LicenseState = 'active' | 'expired' | 'trial' | 'revoked';
 
 interface StatusConfig {
@@ -198,7 +198,7 @@ export function LicenseSettings({
 									variant="link"
 									render={
 										<a
-											href="https://madora.ichiyo.in/lookup"
+											href="https://madora.ingstar.im/lookup"
 											target="_blank"
 											rel="noopener noreferrer"
 										>
