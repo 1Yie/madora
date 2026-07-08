@@ -1,3 +1,13 @@
+## [Desktop 0.3.14](https://github.com/1Yie/madora/compare/v0.3.13...v0.3.14)（2026-07-08） | Mobile 0.0.3（2026-07-08）
+
+### Bug Fixes
+
+- **app:** build real split apk artifacts ([6c5a839](https://github.com/1Yie/madora/commit/6c5a839e1a0d5ead49fa75b88731a9a7f3a2cccd))
+- **android:** allow cleartext ws:// to LAN sync server in release ([709c568](https://github.com/1Yie/madora/commit/709c56819e787b2f68aab0a55a974e4789d0c89a))
+- **android:** use correct signature for withDangerousMod and flat manifest keys ([706b877](https://github.com/1Yie/madora/commit/706b877935805f266b14e0b29d400fbb3b838405))
+- **editor:** secure markdown workspace links ([9d903a2](https://github.com/1Yie/madora/commit/9d903a2a4560ef2617b525ff559515a3bf9a71dd))
+- **editor:** guard optional completion callback ([7c43337](https://github.com/1Yie/madora/commit/7c43337abb4a7f3ede93cbc40d7aafec904b23d0))
+
 ## [Desktop 0.3.13](https://github.com/1Yie/madora/compare/v0.3.7...v0.3.13)（2026-07-07） | Mobile 0.0.2（2026-07-07）
 
 ### Bug Fixes
