@@ -11,7 +11,7 @@
 				"android.permission.RECORD_AUDIO"
 			],
 			"predictiveBackGestureEnabled": false,
-			"versionCode": 4
+			"versionCode": 5
 		},
 		"experiments": {
 			"reactCompiler": true,
@@ -58,7 +58,7 @@
 		"scheme": "madora",
 		"slug": "madora",
 		"userInterfaceStyle": "automatic",
-		"version": "0.0.2",
+		"version": "0.0.3",
 		"web": {
 			"favicon": "./assets/images/favicon.png",
 			"output": "static"
