@@ -38,7 +38,7 @@ const useMessageContext = () => {
 };
 
 const mergeRefs = <T,>(
-	...refs: Array<React.Ref<T> | null | undefined>
+	...refs: (React.Ref<T> | null | undefined)[]
 ): React.RefCallback<T> => {
 	return (node: T | null) => {
 		refs.forEach((ref) => {
@@ -64,53 +64,44 @@ export type MessageContentProps = {
 	className?: string;
 };
 
-export const Message = memo(
-	({ role, children, className, index, message }: MessageProps) => {
-		const isUserFirstMessage = index === 0;
+export const Message = memo(function Message({
+	role,
+	children,
+	className,
+	index,
+	message,
+}: MessageProps) {
+	const isUserFirstMessage = index === 0;
 
-		const {
-			style: animationStyle,
-			ref: animRef,
-			onLayout: animOnLayout,
-		} = useUserMessageAnimation({ disabled: !isUserFirstMessage });
+	const {
+		style: animationStyle,
+		ref: animRef,
+		onLayout: animOnLayout,
+	} = useUserMessageAnimation({ disabled: !isUserFirstMessage });
 
-		const { ref: blankRef, onLayout: blankOnLayout } = useBlankSize({
-			role: 'user',
-			disabled: !isUserFirstMessage,
-		});
+	const { ref: blankRef, onLayout: blankOnLayout } = useBlankSize({
+		role: 'user',
+		disabled: !isUserFirstMessage,
+	});
 
-		const combinedRef = useMemo(
-			() => mergeRefs(animRef, blankRef),
-			[animRef, blankRef]
-		);
+	const combinedRef = useMemo(
+		() => mergeRefs(animRef, blankRef),
+		[animRef, blankRef]
+	);
 
-		const contextValue = useMemo(() => ({ role, message }), [role, message]);
+	const contextValue = useMemo(() => ({ role, message }), [role, message]);
 
-		if (role === 'user') {
-			return (
-				<MessageContext.Provider value={contextValue}>
-					<Animated.View
-						ref={combinedRef}
-						onLayout={(event) => {
-							animOnLayout?.(event);
-							blankOnLayout?.(event);
-						}}
-						style={animationStyle as ViewStyle}
-						className={`group mt-4 flex w-full max-w-[95%] flex-col gap-2
-							${className || ''}`}
-					>
-						{children}
-					</Animated.View>
-				</MessageContext.Provider>
-			);
-		}
-
+	if (role === 'user') {
 		return (
 			<MessageContext.Provider value={contextValue}>
 				<Animated.View
-					ref={blankRef}
-					onLayout={blankOnLayout}
-					className={`group flex w-full max-w-[95%] flex-col gap-2
+					ref={combinedRef}
+					onLayout={(event) => {
+						animOnLayout?.(event);
+						blankOnLayout?.(event);
+					}}
+					style={animationStyle as ViewStyle}
+					className={`group mt-4 flex w-full max-w-[95%] flex-col gap-2
 						${className || ''}`}
 				>
 					{children}
@@ -118,28 +109,46 @@ export const Message = memo(
 			</MessageContext.Provider>
 		);
 	}
-);
 
-export const MessageContent = memo(
-	({ children, className }: MessageContentProps) => {
-		const { role } = useMessageContext();
-
-		const roleStyles =
-			role === 'user' ? 'self-end bg-muted max-w-[90%] px-4' : 'self-start ';
-
-		return (
-			<View
-				className={`flex w-fit min-w-0 flex-col justify-center gap-2
-					overflow-hidden text-base py-3 rounded-3xl ${roleStyles}
+	return (
+		<MessageContext.Provider value={contextValue}>
+			<Animated.View
+				ref={blankRef}
+				onLayout={blankOnLayout}
+				className={`group flex w-full max-w-[95%] flex-col gap-2
 					${className || ''}`}
 			>
 				{children}
-			</View>
-		);
-	}
-);
+			</Animated.View>
+		</MessageContext.Provider>
+	);
+});
 
-export const MessageResponse = memo(({ message }: { message: UIMessage }) => {
+export const MessageContent = memo(function MessageContent({
+	children,
+	className,
+}: MessageContentProps) {
+	const { role } = useMessageContext();
+
+	const roleStyles =
+		role === 'user' ? 'self-end bg-muted max-w-[90%] px-4' : 'self-start ';
+
+	return (
+		<View
+			className={`flex w-fit min-w-0 flex-col justify-center gap-2
+				overflow-hidden text-base py-3 rounded-3xl ${roleStyles}
+				${className || ''}`}
+		>
+			{children}
+		</View>
+	);
+});
+
+export const MessageResponse = memo(function MessageResponse({
+	message,
+}: {
+	message: UIMessage;
+}) {
 	const markdownRules = {
 		text: (node, children, parent) => {
 			return (
@@ -268,29 +277,30 @@ export type MessageToolbarProps = {
 	message?: UIMessage;
 };
 
-export const MessageToolbar = memo(
-	({ children, className }: MessageToolbarProps) => {
-		const { role, message } = useMessageContext();
+export const MessageToolbar = memo(function MessageToolbar({
+	children,
+	className,
+}: MessageToolbarProps) {
+	const { role, message } = useMessageContext();
 
-		const roleStyles = role === 'user' ? 'self-end' : 'self-start';
-		const hasText = message?.parts?.some(
-			(p) => p.type === 'text' && p.text?.length > 0
-		);
+	const roleStyles = role === 'user' ? 'self-end' : 'self-start';
+	const hasText = message?.parts?.some(
+		(p) => p.type === 'text' && p.text?.length > 0
+	);
 
-		if (!hasText) return null;
+	if (!hasText) return null;
 
-		if (role === 'user') return null;
+	if (role === 'user') return null;
 
-		return (
-			<View
-				className={`-mt-4 ml-2 flex-row items-center gap-3 ${roleStyles}
-					${className || ''}`}
-			>
-				{children}
-			</View>
-		);
-	}
-);
+	return (
+		<View
+			className={`-mt-4 ml-2 flex-row items-center gap-3 ${roleStyles}
+				${className || ''}`}
+		>
+			{children}
+		</View>
+	);
+});
 
 export const MessageAction = ({
 	onPress,

@@ -119,7 +119,7 @@ const MONTH_NAMES = [
 
 type SelectRootProps = React.ComponentProps<typeof View> & {
 	className?: string;
-	items?: Array<{ label: string; value: number }>;
+	items?: { label: string; value: number }[];
 	selectedValue?: number;
 	onValueChange?: (value: number) => void;
 };
@@ -393,6 +393,24 @@ const CalendarFooterRoot = React.forwardRef<
 });
 
 // Create Calendar using the factory
+CalendarRoot.displayName = 'CalendarRoot';
+CalendarHeaderRoot.displayName = 'CalendarHeaderRoot';
+CalendarHeaderPrevButtonRoot.displayName = 'CalendarHeaderPrevButtonRoot';
+CalendarHeaderNextButtonRoot.displayName = 'CalendarHeaderNextButtonRoot';
+CalendarHeaderTitleRoot.displayName = 'CalendarHeaderTitleRoot';
+CalendarHeaderMonthSelectRoot.displayName = 'CalendarHeaderMonthSelectRoot';
+CalendarHeaderYearSelectRoot.displayName = 'CalendarHeaderYearSelectRoot';
+CalendarWeekDaysHeaderRoot.displayName = 'CalendarWeekDaysHeaderRoot';
+CalendarWeekDayRoot.displayName = 'CalendarWeekDayRoot';
+CalendarBodyRoot.displayName = 'CalendarBodyRoot';
+CalendarGridRoot.displayName = 'CalendarGridRoot';
+CalendarWeekRoot.displayName = 'CalendarWeekRoot';
+CalendarDayRoot.displayName = 'CalendarDayRoot';
+CalendarDayTextRoot.displayName = 'CalendarDayTextRoot';
+CalendarDayIndicatorRoot.displayName = 'CalendarDayIndicatorRoot';
+CalendarWeekNumberRoot.displayName = 'CalendarWeekNumberRoot';
+CalendarFooterRoot.displayName = 'CalendarFooterRoot';
+
 const UICalendar = createCalendar({
 	Root: CalendarRoot,
 	Header: CalendarHeaderRoot,

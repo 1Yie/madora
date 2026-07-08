@@ -148,9 +148,12 @@ const TabsList = React.forwardRef<
 
 	const flatListRef = useRef<any>(null);
 
-	if (!context) return null;
-
-	const { orientation, setScrollOffset, selectedKey, listRef } = context;
+	const { orientation, setScrollOffset, selectedKey, listRef } = context ?? {
+		orientation: 'vertical' as const,
+		setScrollOffset: () => {},
+		selectedKey: undefined,
+		listRef: undefined,
+	};
 
 	// Shared value for indicator sync
 	const animatedScrollOffset = useSharedValue(0);
@@ -198,17 +201,14 @@ const TabsList = React.forwardRef<
 	/**
 	 * Native animated scroll handler (ONLY for iOS / Android)
 	 */
-	const nativeScrollHandler =
-		Platform.OS === 'web'
-			? undefined
-			: useAnimatedScrollHandler({
-					onScroll: (event) => {
-						'worklet';
-						const x = event.contentOffset.x;
-						animatedScrollOffset.value = x;
-						runOnJS(setScrollOffset)(x);
-					},
-				});
+	const nativeScrollHandler = useAnimatedScrollHandler({
+		onScroll: (event) => {
+			'worklet';
+			const x = event.contentOffset.x;
+			animatedScrollOffset.value = x;
+			runOnJS(setScrollOffset)(x);
+		},
+	});
 
 	/**
 	 * Web scroll handler (JS thread)
@@ -237,6 +237,8 @@ const TabsList = React.forwardRef<
 			),
 		};
 	}, [children]);
+
+	if (!context) return null;
 
 	if (orientation === 'horizontal') {
 		return (
