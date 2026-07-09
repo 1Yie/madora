@@ -1,3 +1,11 @@
+## [Desktop 0.3.15](https://github.com/1Yie/madora/compare/v0.3.14...v0.3.15)（2026-07-09） | Mobile 0.0.3（2026-07-09）
+
+### Bug Fixes
+
+- **release:** prevent duplicate changelog entries ([bdbb85f](https://github.com/1Yie/madora/commit/bdbb85fa8ab34b0a1e159a298407b379ce40824e))
+- **release:** merge desktop and mobile draft assets ([f515f6d](https://github.com/1Yie/madora/commit/f515f6d9412a09b49872a7700e794ed6546e8b41))
+- **license:** use new activation domain ([9d85f49](https://github.com/1Yie/madora/commit/9d85f49d6343aaf3a0419707c9cbc03a04a4e8c3))
+
 ## [Desktop 0.3.14](https://github.com/1Yie/madora/compare/v0.3.13...v0.3.14)（2026-07-08） | Mobile 0.0.3（2026-07-08）
 
 ### Bug Fixes
