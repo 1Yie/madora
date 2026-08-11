@@ -6,7 +6,6 @@ export type DialogSidebarItem = {
 	id: string;
 	icon: React.ComponentType<{ className?: string }>;
 	label: string;
-	description: string;
 };
 
 export type DialogSidebarProps = {
@@ -44,20 +43,14 @@ export function DialogSidebar({
 								type="button"
 								onClick={() => onSelect(item.id)}
 								className={cn(
-									`group relative flex items-center gap-2.5 overflow-hidden
-									rounded-lg px-3 py-2 text-left transition-colors duration-100`,
+									`group flex items-center gap-2.5 rounded-lg px-3 py-2
+									text-left transition-colors duration-100`,
 									isActive
 										? 'bg-primary/10 text-foreground'
 										: `text-muted-foreground hover:bg-accent
 											hover:text-foreground`
 								)}
 							>
-								{isActive && (
-									<span
-										className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary"
-									/>
-								)}
-
 								<Icon
 									className={cn(
 										'size-4 shrink-0',
@@ -71,12 +64,6 @@ export function DialogSidebar({
 									<span className="block text-sm font-medium">
 										{item.label}
 									</span>
-									{/* <span
-										className="mt-1 block text-xs leading-5
-											text-muted-foreground"
-									>
-										{item.description}
-									</span> */}
 								</span>
 							</button>
 						);

@@ -54,13 +54,14 @@ const ja = {
 	},
 	settings: {
 		openAria: '設定を開く',
+		dialogTitle: '設定',
 		sections: {
-			about: { description: '製品情報とリンク', label: '情報' },
-			appearance: { description: 'テーマとUI', label: '外観' },
+			about: { label: '情報' },
+			appearance: { label: '外観' },
 			cli: { description: 'コマンドラインツール', label: 'CLI' },
-			editor: { description: '入力と編集', label: 'エディタ' },
-			license: { description: '認証と管理', label: 'ライセンス' },
-			sync: { description: '同期と設定', label: '同期' },
+			editor: { label: 'エディタ' },
+			license: { label: 'ライセンス' },
+			sync: { label: '同期' },
 		},
 		appearance: {
 			cards: {

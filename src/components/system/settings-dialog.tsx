@@ -8,11 +8,8 @@ import { LicenseActivationDialog } from '@/components/system/license-activation-
 import { LicenseSettings } from '@/components/system/setting/license';
 import { SyncSettings } from '@/components/system/setting/sync';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
-import {
-	DialogSidebar,
-	type DialogSidebarItem,
-} from '@/components/ui/dialog-sidebar';
+import { DialogWorkbench } from '@/components/ui/dialog-workbench';
+import type { DialogSidebarItem } from '@/components/ui/dialog-sidebar';
 import {
 	getSettingsSections,
 	type SettingsSectionId,
@@ -60,66 +57,29 @@ export function SettingsDialog() {
 				variant="ghost"
 				onClick={() => setOpen(true)}
 			>
-				<Bolt size={14} />
+				<SlidersHorizontal size={14} />
 			</Button>
-			<Dialog open={open} onOpenChange={setOpen}>
-				<DialogPopup
-					showCloseButton={false}
-					className="max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]
-						overflow-hidden"
+			<DialogWorkbench
+				open={open}
+				onOpenChange={setOpen}
+				title={t('settings.dialogTitle')}
+				items={settingsSections as DialogSidebarItem[]}
+				activeId={activeSection}
+				onSelect={(id) => setActiveSection(id as SettingsSectionId)}
+			>
+				<div
+					ref={scrollRef}
+					key={activeSection}
+					className="overflow-auto size-full min-h-0 flex-1"
 				>
-					<div
-						className="flex h-[calc(100vh-5rem)] min-h-0 min-w-0 flex-col
-							overflow-hidden"
-					>
-						<DialogClose
-							className="absolute inset-e-3 top-3 z-10"
-							render={<Button size="icon" variant="ghost" />}
-						>
-							<XIcon />
-						</DialogClose>
-						<div
-							className="flex min-h-0 min-w-0 flex-1 overflow-hidden flex-row"
-						>
-							<DialogSidebar
-								items={settingsSections as DialogSidebarItem[]}
-								activeId={activeSection}
-								onSelect={(id) => setActiveSection(id as SettingsSectionId)}
-							/>
-							<section
-								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
-									bg-popover"
-							>
-								<div
-									ref={scrollRef}
-									key={activeSection}
-									className="overflow-auto size-full min-h-0 flex-1"
-								>
-									<div className="space-y-6 p-4 sm:p-6">
-										<div className="space-y-1">
-											<p
-												className="text-xs font-medium uppercase
-													tracking-[0.18em] text-muted-foreground"
-											>
-												{currentSection.label}
-											</p>
-											<h3 className="text-2xl font-semibold text-foreground">
-												{currentSection.description}
-											</h3>
-										</div>
-										<SettingsContent
-											section={currentSection.id}
-											onRequestLicenseActivation={() =>
-												setShowLicenseActivation(true)
-											}
-										/>
-									</div>
-								</div>
-							</section>
-						</div>
+					<div className="space-y-6 p-4 sm:p-6">
+						<SettingsContent
+							section={currentSection.id}
+							onRequestLicenseActivation={() => setShowLicenseActivation(true)}
+						/>
 					</div>
-				</DialogPopup>
-			</Dialog>
+				</div>
+			</DialogWorkbench>
 
 			{/* Mounted at the same level as the settings dialog, not nested inside it */}
 			<LicenseActivationDialog

@@ -54,13 +54,14 @@ const zhCN = {
 	},
 	settings: {
 		openAria: '打开设置',
+		dialogTitle: '设置',
 		sections: {
-			about: { description: '产品与链接', label: '关于' },
-			appearance: { description: '主题与界面', label: '外观' },
+			about: { label: '关于' },
+			appearance: { label: '外观' },
 			cli: { description: '命令行工具', label: 'CLI' },
-			editor: { description: '输入与编辑', label: '编辑器' },
-			license: { description: '激活与管理', label: '许可证' },
-			sync: { description: '同步与配置', label: '同步' },
+			editor: { label: '编辑器' },
+			license: { label: '许可证' },
+			sync: { label: '同步' },
 		},
 		appearance: {
 			cards: {

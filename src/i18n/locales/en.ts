@@ -55,16 +55,14 @@ const en = {
 	},
 	settings: {
 		openAria: 'Open settings',
+		dialogTitle: 'Settings',
 		sections: {
-			about: { description: 'Product and links', label: 'About' },
-			appearance: {
-				description: 'Theme and interface',
-				label: 'Appearance',
-			},
+			about: { label: 'About' },
+			appearance: { label: 'Appearance' },
 			cli: { description: 'Command line tools', label: 'CLI' },
-			editor: { description: 'Typing and editing', label: 'Editor' },
-			license: { description: 'Activation and management', label: 'License' },
-			sync: { description: 'Sync and configuration', label: 'Sync' },
+			editor: { label: 'Editor' },
+			license: { label: 'License' },
+			sync: { label: 'Sync' },
 		},
 		appearance: {
 			cards: {

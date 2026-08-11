@@ -36,6 +36,11 @@ export async function startResizeDragging(
 	return getCurrentWindow().startResizeDragging(direction);
 }
 
+/** Starts moving the whole window (like a native title-bar drag). */
+export async function startWindowDragging(): Promise<void> {
+	return getCurrentWindow().startDragging();
+}
+
 /** Listens for window close requests. Returns an unlisten function. */
 export async function onCloseRequested(
 	handler: CloseHandler

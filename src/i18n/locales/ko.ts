@@ -55,13 +55,14 @@ const ko = {
 	},
 	settings: {
 		openAria: '설정 열기',
+		dialogTitle: '설정',
 		sections: {
-			about: { description: '제품 정보와 링크', label: '정보' },
-			appearance: { description: '테마와 인터페이스', label: '모양' },
+			about: { label: '정보' },
+			appearance: { label: '모양' },
 			cli: { description: '명령줄 도구', label: 'CLI' },
-			editor: { description: '입력과 편집', label: '에디터' },
-			license: { description: '활성화와 관리', label: '라이선스' },
-			sync: { description: '동기화와 설정', label: '동기화' },
+			editor: { label: '에디터' },
+			license: { label: '라이선스' },
+			sync: { label: '동기화' },
 		},
 		appearance: {
 			cards: {
