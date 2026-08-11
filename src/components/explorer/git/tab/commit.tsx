@@ -1,5 +1,11 @@
-// import { AlertTriangle, Check, Minus, Plus, RefreshCw } from 'lucide-react';
-import { AlertTriangle, Check, Info, Minus, Plus } from 'lucide-react';
+// import { Warning as AlertTriangle, Check, Minus, Plus, ArrowsClockwise as RefreshCw } from '@phosphor-icons/react';
+import {
+	Warning as AlertTriangle,
+	Check,
+	Info,
+	Minus,
+	Plus,
+} from '@phosphor-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -191,10 +197,7 @@ export function GitTabCommit({
 											{conflictHintText}
 										</span>
 									</div>
-									<div
-										className="rounded-lg border border-red-500/20 divide-y
-											divide-border/40"
-									>
+									<div className="divide-y divide-border/40">
 										{conflictedFiles.map((file) => (
 											<ConflictFileRow
 												key={file.path}
@@ -230,10 +233,7 @@ export function GitTabCommit({
 											{t('git.stageAll')}
 										</Button>
 									</div>
-									<div
-										className="rounded-lg border border-border/60 divide-y
-											divide-border/40"
-									>
+									<div className="divide-y divide-border/40">
 										{unstagedFiles.map((file) => (
 											<FileRow
 												key={file.path}
@@ -272,10 +272,7 @@ export function GitTabCommit({
 											{t('git.unstageAll')}
 										</Button>
 									</div>
-									<div
-										className="rounded-lg border border-border/60 divide-y
-											divide-border/40"
-									>
+									<div className="divide-y divide-border/40">
 										{stagedFiles.map((file) => (
 											<FileRow
 												key={file.path}

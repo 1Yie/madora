@@ -3,10 +3,10 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
 import {
-	ChevronLeftIcon,
-	ChevronRightIcon,
-	MoreHorizontalIcon,
-} from 'lucide-react';
+	CaretLeft as ChevronLeftIcon,
+	CaretRight as ChevronRightIcon,
+	DotsThree as MoreHorizontalIcon,
+} from '@phosphor-icons/react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 import { type Button, buttonVariants } from '@/components/ui/button';

@@ -1,12 +1,11 @@
 import {
 	Cloud,
-	CloudOff,
+	CloudSlash as CloudOff,
 	Globe,
-	Loader2,
-	RefreshCw,
-	Settings2,
-	XIcon,
-} from 'lucide-react';
+	CircleNotch as Loader2,
+	ArrowsClockwise as RefreshCw,
+	GearSix as Settings2,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 import {
 	webdavDeleteConfig,
@@ -18,8 +17,7 @@ import {
 	type WebDavSyncResult,
 } from '@/invoke/webdav';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogClose, DialogPopup } from '@/components/ui/dialog';
-import { DialogSidebar } from '@/components/ui/dialog-sidebar';
+import { DialogWorkbench } from '@/components/ui/dialog-workbench';
 import {
 	Tooltip,
 	TooltipContent,
@@ -255,62 +253,38 @@ export function WebDavPanel({
 		<>
 			{statusBar}
 
-			<Dialog onOpenChange={setWorkbenchOpen} open={workbenchOpen}>
-				<DialogPopup
-					showCloseButton={false}
-					className="max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]
-						overflow-hidden"
-				>
-					<div
-						className="flex h-[calc(100vh-5rem)] min-h-0 min-w-0 flex-col
-							overflow-hidden"
-					>
-						<DialogClose
-							className="absolute inset-e-2 top-2 z-10"
-							render={<Button size="icon" variant="ghost" />}
-						>
-							<XIcon />
-						</DialogClose>
-						<div
-							className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
-						>
-							<DialogSidebar
-								items={workbenchSections}
-								activeId={activeTab}
-								onSelect={(id) => setActiveTab(id as WebDavWorkbenchTab)}
-							/>
-							<section
-								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
-									bg-popover"
-							>
-								{activeTab === 'connection' && (
-									<WebDavTabConnection
-										config={config}
-										password={password}
-										testing={testing}
-										saving={saving}
-										onConfigChange={setConfig}
-										onPasswordChange={setPassword}
-										onTestConnection={handleTestConnection}
-										onSaveConfig={handleSaveConfig}
-										onDeleteConfig={handleDeleteConfig}
-									/>
-								)}
-								{activeTab === 'sync' && (
-									<WebDavTabSync
-										config={config}
-										syncing={syncing}
-										canSync={canSync}
-										syncResult={syncResult}
-										onConfigChange={setConfig}
-										onSync={handleSync}
-									/>
-								)}
-							</section>
-						</div>
-					</div>
-				</DialogPopup>
-			</Dialog>
+			<DialogWorkbench
+				open={workbenchOpen}
+				onOpenChange={setWorkbenchOpen}
+				title="WebDAV"
+				items={workbenchSections}
+				activeId={activeTab}
+				onSelect={(id) => setActiveTab(id as WebDavWorkbenchTab)}
+			>
+				{activeTab === 'connection' && (
+					<WebDavTabConnection
+						config={config}
+						password={password}
+						testing={testing}
+						saving={saving}
+						onConfigChange={setConfig}
+						onPasswordChange={setPassword}
+						onTestConnection={handleTestConnection}
+						onSaveConfig={handleSaveConfig}
+						onDeleteConfig={handleDeleteConfig}
+					/>
+				)}
+				{activeTab === 'sync' && (
+					<WebDavTabSync
+						config={config}
+						syncing={syncing}
+						canSync={canSync}
+						syncResult={syncResult}
+						onConfigChange={setConfig}
+						onSync={handleSync}
+					/>
+				)}
+			</DialogWorkbench>
 		</>
 	);
 }

@@ -1,5 +1,10 @@
 import { streamCompletion } from '@/invoke/ai';
-import { ArrowLeft, ArrowRight, CheckIcon, Crown } from 'lucide-react';
+import {
+	ArrowLeft,
+	ArrowRight,
+	Check as CheckIcon,
+	Crown,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 

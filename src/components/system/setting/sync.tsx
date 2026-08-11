@@ -1,4 +1,4 @@
-import { Cloud, GitBranch } from 'lucide-react';
+import { Cloud, GitBranch } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MadoraSyncSettings } from '@/components/system/setting/madora-sync';
@@ -35,7 +35,7 @@ export function SyncSettings() {
 	return (
 		<div className="space-y-4">
 			<SettingsSectionCard title={t('settings.sync.cards.mode.title')}>
-				<div className="space-y-4">
+				<div className="divide-y divide-border">
 					<SettingRow
 						title={t('settings.sync.rows.enabled.title')}
 						description={t('settings.sync.rows.enabled.description')}
@@ -46,7 +46,7 @@ export function SyncSettings() {
 						/>
 					</SettingRow>
 					{syncEnabled && (
-						<div className="grid gap-2 sm:grid-cols-2">
+						<div className="grid gap-2 py-3 sm:grid-cols-2">
 							{syncModeOptions.map((option) => (
 								<Option
 									key={option.id}

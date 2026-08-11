@@ -1,4 +1,7 @@
-import { Loader2, ExternalLink } from 'lucide-react';
+import {
+	CircleNotch as Loader2,
+	ArrowSquareOut as ExternalLink,
+} from '@phosphor-icons/react';
 import { useCallback, useRef, useState } from 'react';
 import { useLicense } from '@/context/license-provider';
 import { Button } from '@/components/ui/button';

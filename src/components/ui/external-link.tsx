@@ -1,5 +1,5 @@
 import { openUrl } from '@/invoke/opener';
-import { ExternalLink } from 'lucide-react';
+import { ArrowSquareOut as ExternalLink } from '@phosphor-icons/react';
 import type React from 'react';
 import i18n from '@/i18n';
 

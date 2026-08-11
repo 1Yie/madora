@@ -1,4 +1,4 @@
-import { Bolt, XIcon } from 'lucide-react';
+import { SlidersHorizontal } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AboutSettings } from '@/components/system/setting/about';

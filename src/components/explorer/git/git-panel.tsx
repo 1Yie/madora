@@ -19,33 +19,31 @@ import {
 	gitUnstageFile,
 } from '@/invoke/git';
 import {
-	ArrowDownToLine,
-	ArrowUpFromLine,
+	ArrowFatLinesDown as ArrowDownToLine,
+	ArrowFatLineUp as ArrowUpFromLine,
 	Check,
 	GitBranch,
-	History,
-	KeyRound,
-	LoaderCircle,
+	ClockCounterClockwise as History,
+	Key as KeyRound,
+	CircleNotch as LoaderCircle,
 	Plus,
-	RefreshCw,
-	Settings2,
-	XIcon,
-	type LucideIcon,
-} from 'lucide-react';
+	ArrowsClockwise as RefreshCw,
+	GearSix as Settings2,
+	type Icon,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, Fragment, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,
-	DialogClose,
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogPopup,
 	DialogTitle,
 } from '@/components/ui/dialog';
+import { DialogWorkbench } from '@/components/ui/dialog-workbench';
 import { Input } from '@/components/ui/input';
-import { DialogSidebar } from '@/components/ui/dialog-sidebar';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import { useTranslation } from 'react-i18next';
@@ -91,7 +89,7 @@ const CREDENTIALS_DEBOUNCE_MS = 2000;
 type GitSummaryPart = {
 	key: string;
 	text: string;
-	icon?: LucideIcon;
+	icon?: Icon;
 };
 
 function getBranchLabel(
@@ -268,25 +266,21 @@ export function GitPanel({
 		{
 			id: 'commit' as GitWorkbenchTab,
 			label: t('git.tab.commit'),
-			description: t('git.tab.commitDesc'),
 			icon: Check,
 		},
 		{
 			id: 'history' as GitWorkbenchTab,
 			label: t('git.tab.history'),
-			description: t('git.tab.historyDesc'),
 			icon: History,
 		},
 		{
 			id: 'remote' as GitWorkbenchTab,
 			label: t('git.tab.remote'),
-			description: t('git.tab.remoteDesc'),
 			icon: Settings2,
 		},
 		{
 			id: 'ssh' as GitWorkbenchTab,
 			label: 'SSH',
-			description: t('git.tab.authDesc'),
 			icon: KeyRound,
 		},
 	];
@@ -1047,221 +1041,144 @@ export function GitPanel({
 				</div>
 			</div>
 
-			<Dialog onOpenChange={setWorkbenchOpen} open={workbenchOpen}>
-				<DialogPopup
-					showCloseButton={false}
-					className="max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]
-						overflow-hidden"
-				>
-					<div
-						className="flex h-[calc(100vh-5rem)] min-h-0 min-w-0 flex-col
-							overflow-hidden"
-					>
-						<DialogClose
-							className="absolute inset-e-2 top-2 z-10"
-							render={<Button size="icon" variant="ghost" />}
-						>
-							<XIcon />
-						</DialogClose>
+			<DialogWorkbench
+				open={workbenchOpen}
+				onOpenChange={setWorkbenchOpen}
+				title="Git"
+				items={workbenchSections}
+				activeId={activeTab}
+				onSelect={(id) => {
+					if (id === 'history') void loadGitLog();
+					setActiveTab(id as GitWorkbenchTab);
+				}}
+				footer={
+					<DialogFooter className="justify-between sm:justify-between">
 						<div
-							className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
+							className="flex min-w-0 flex-1 items-center gap-2 text-xs
+								leading-4 text-muted-foreground"
 						>
-							<DialogSidebar
-								items={workbenchSections}
-								activeId={activeTab}
-								onSelect={(id) => {
-									if (id === 'history') void loadGitLog();
-									setActiveTab(id as GitWorkbenchTab);
-								}}
-							/>
-							<section
-								className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden
-									bg-popover"
-							>
-								{activeTab === 'history' && (
-									<>
-										<div className="space-y-1 px-6 pt-4 sm:pt-6">
-											<p
-												className="text-xs font-medium uppercase
-													tracking-[0.18em] text-muted-foreground"
-											>
-												{t('git.tab.history')}
-											</p>
-											<h3 className="text-2xl font-semibold text-foreground">
-												{t('git.tab.historyDesc')}
-											</h3>
-										</div>
-										<GitTabHistory
-											actionBusy={actionBusy}
-											branchLabel={branchLabel}
-											gitLog={gitLog}
-											upstreamLabel={upstreamLabel}
-											onRevertRequest={(commitId, summary) =>
-												setPendingHistoryAction({
-													type: 'revert-commit',
-													commitId,
-													summary,
-												})
-											}
-											onUndoRequest={() =>
-												setPendingHistoryAction({ type: 'undo-last' })
-											}
-										/>
-									</>
-								)}
-								{activeTab === 'commit' && (
-									<>
-										<div className="space-y-1 px-6 pt-4 sm:pt-6">
-											<p
-												className="text-xs font-medium uppercase
-													tracking-[0.18em] text-muted-foreground"
-											>
-												{t('git.tab.commit')}
-											</p>
-											<h3 className="text-2xl font-semibold text-foreground">
-												{t('git.tab.commitDesc')}
-											</h3>
-										</div>
-										<GitTabCommit
-											actionBusy={actionBusy}
-											canOperate={canOperate}
-											commitMessage={commitMessage}
-											status={status}
-											onCommit={() => void commitStaged()}
-											onCommitAll={() => void commitAll()}
-											onCommitMessageChange={setCommitMessage}
-											onRefresh={() => void refreshStatus()}
-											onStageFile={(path) => void stageFile(path)}
-											onUnstageFile={(path) => void unstageFile(path)}
-										/>
-									</>
-								)}
-								{activeTab !== 'history' && activeTab !== 'commit' && (
-									<div className="overflow-auto size-full min-h-0 flex-1">
-										<div className="space-y-6 p-4 sm:p-6">
-											{activeTab === 'remote' && (
-												<div className="space-y-4">
-													<div className="space-y-1">
-														<p
-															className="text-xs font-medium uppercase
-																tracking-[0.18em] text-muted-foreground"
-														>
-															{t('git.tab.remote')}
-														</p>
-														<h3
-															className="text-2xl font-semibold text-foreground"
-														>
-															{t('git.tab.remoteDesc')}
-														</h3>
-													</div>
-													<GitTabRemote
-														key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
-														actionBusy={actionBusy}
-														canOperate={canOperate}
-														initialRemoteName={primaryRemote?.name ?? 'origin'}
-														initialRemoteUrl={primaryRemote?.url ?? ''}
-														onPull={() => void pull()}
-														onPush={() => void push()}
-														onSave={(name, url) => {
-															setRemoteName(name);
-															void saveRemote(name, url);
-														}}
-													/>
-												</div>
-											)}
-											{activeTab === 'ssh' && (
-												<div className="space-y-4">
-													<div className="space-y-1">
-														<p
-															className="text-xs font-medium uppercase
-																tracking-[0.18em] text-muted-foreground"
-														>
-															SSH
-														</p>
-														<h3
-															className="text-2xl font-semibold text-foreground"
-														>
-															{t('git.tab.authDesc')}
-														</h3>
-													</div>
-													<GitTabSsh
-														actionBusy={actionBusy}
-														authPassword={authPassword}
-														authUsername={authUsername}
-														sshPassphrase={sshPassphrase}
-														sshPrivateKeyPath={sshPrivateKeyPath}
-														sshUsername={sshUsername}
-														onAuthPasswordChange={setAuthPassword}
-														onAuthUsernameChange={setAuthUsername}
-														onPickKeyFile={() => void pickSshPrivateKeyFile()}
-														onSshPassphraseChange={setSshPassphrase}
-														onSshPrivateKeyPathChange={setSshPrivateKeyPath}
-														onSshUsernameChange={setSshUsername}
-													/>
-												</div>
-											)}
-										</div>
-									</div>
-								)}
-							</section>
-						</div>
-
-						<DialogFooter className="justify-between sm:justify-between">
+							{busy || actionBusy ? (
+								<LoaderCircle className="size-3.5 animate-spin" />
+							) : (
+								<GitBranch className="size-3.5" />
+							)}
 							<div
-								className="flex min-w-0 flex-1 items-center gap-2 text-xs
-									leading-4 text-muted-foreground"
+								className="flex min-w-0 flex-1 items-center gap-1.5
+									overflow-x-hidden"
 							>
-								{busy || actionBusy ? (
-									<LoaderCircle className="size-3.5 animate-spin" />
-								) : (
-									<GitBranch className="size-3.5" />
-								)}
-								<div
-									className="flex min-w-0 flex-1 items-center gap-1.5
-										overflow-x-hidden"
-								>
-									<span className="shrink truncate">{branchLabel}</span>
-									<span className="shrink-0 text-muted-foreground">·</span>
-									<GitSummaryIcons
-										className="min-w-0 flex-1 overflow-x-hidden"
-										status={status}
+								<span className="shrink truncate">{branchLabel}</span>
+								<span className="shrink-0 text-muted-foreground">·</span>
+								<GitSummaryIcons
+									className="min-w-0 flex-1 overflow-x-hidden"
+									status={status}
+								/>
+							</div>
+						</div>
+						<div
+							className="shrink-0 flex flex-col-reverse gap-2 sm:flex-row
+								sm:justify-end"
+						>
+							<Button
+								disabled={!canOperate}
+								onClick={() => void refreshStatus()}
+								variant="outline"
+							>
+								<RefreshCw />
+							</Button>
+							<Button
+								disabled={!canOperate}
+								loading={actionBusy}
+								onClick={() => void pull()}
+								variant="outline"
+							>
+								<ArrowDownToLine />
+								{t('git.pull')}
+							</Button>
+							<Button
+								disabled={!canOperate}
+								loading={actionBusy}
+								onClick={() => void push()}
+								variant="outline"
+							>
+								<ArrowUpFromLine />
+								{t('git.push')}
+							</Button>
+						</div>
+					</DialogFooter>
+				}
+			>
+				{activeTab === 'history' && (
+					<GitTabHistory
+						actionBusy={actionBusy}
+						branchLabel={branchLabel}
+						gitLog={gitLog}
+						upstreamLabel={upstreamLabel}
+						onRevertRequest={(commitId, summary) =>
+							setPendingHistoryAction({
+								type: 'revert-commit',
+								commitId,
+								summary,
+							})
+						}
+						onUndoRequest={() => setPendingHistoryAction({ type: 'undo-last' })}
+					/>
+				)}
+				{activeTab === 'commit' && (
+					<GitTabCommit
+						actionBusy={actionBusy}
+						canOperate={canOperate}
+						commitMessage={commitMessage}
+						status={status}
+						onCommit={() => void commitStaged()}
+						onCommitAll={() => void commitAll()}
+						onCommitMessageChange={setCommitMessage}
+						onRefresh={() => void refreshStatus()}
+						onStageFile={(path) => void stageFile(path)}
+						onUnstageFile={(path) => void unstageFile(path)}
+					/>
+				)}
+				{activeTab !== 'history' && activeTab !== 'commit' && (
+					<div className="overflow-auto size-full min-h-0 flex-1">
+						<div className="space-y-6 p-4 sm:p-6">
+							{activeTab === 'remote' && (
+								<div className="space-y-4">
+									<GitTabRemote
+										key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
+										actionBusy={actionBusy}
+										canOperate={canOperate}
+										initialRemoteName={primaryRemote?.name ?? 'origin'}
+										initialRemoteUrl={primaryRemote?.url ?? ''}
+										onPull={() => void pull()}
+										onPush={() => void push()}
+										onSave={(name, url) => {
+											setRemoteName(name);
+											void saveRemote(name, url);
+										}}
 									/>
 								</div>
-							</div>
-							<div
-								className="shrink-0 flex flex-col-reverse gap-2 sm:flex-row
-									sm:justify-end"
-							>
-								<Button
-									disabled={!canOperate}
-									onClick={() => void refreshStatus()}
-									variant="outline"
-								>
-									<RefreshCw />
-								</Button>
-								<Button
-									disabled={!canOperate}
-									loading={actionBusy}
-									onClick={() => void pull()}
-									variant="outline"
-								>
-									<ArrowDownToLine />
-									{t('git.pull')}
-								</Button>
-								<Button
-									disabled={!canOperate}
-									loading={actionBusy}
-									onClick={() => void push()}
-									variant="outline"
-								>
-									<ArrowUpFromLine />
-									{t('git.push')}
-								</Button>
-							</div>
-						</DialogFooter>
+							)}
+							{activeTab === 'ssh' && (
+								<div className="space-y-4">
+									<GitTabSsh
+										actionBusy={actionBusy}
+										authPassword={authPassword}
+										authUsername={authUsername}
+										sshPassphrase={sshPassphrase}
+										sshPrivateKeyPath={sshPrivateKeyPath}
+										sshUsername={sshUsername}
+										onAuthPasswordChange={setAuthPassword}
+										onAuthUsernameChange={setAuthUsername}
+										onPickKeyFile={() => void pickSshPrivateKeyFile()}
+										onSshPassphraseChange={setSshPassphrase}
+										onSshPrivateKeyPathChange={setSshPrivateKeyPath}
+										onSshUsernameChange={setSshUsername}
+									/>
+								</div>
+							)}
+						</div>
 					</div>
-				</DialogPopup>
-			</Dialog>
+				)}
+			</DialogWorkbench>
 
 			<Dialog
 				open={pendingHistoryAction !== null}

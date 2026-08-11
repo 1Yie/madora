@@ -1,26 +1,27 @@
 import {
-	ArrowUpDown,
+	ArrowsDownUp as ArrowUpDown,
 	Bookmark,
-	BookmarkX,
-	ChevronRight,
-	Clipboard,
-	CloudOff,
+	BookmarkSimple as BookmarkX,
+	CaretRight as ChevronRight,
+	ClipboardText as Clipboard,
+	CloudSlash as CloudOff,
 	Copy,
 	FileImage,
-	FilePenLine,
+	FileMd,
+	PencilLine as FilePenLine,
 	FileText,
-	FileUp,
+	FileArrowUp as FileUp,
 	FilePlus,
 	Folder,
 	FolderPlus,
 	FolderOpen,
-	ListCollapse,
-	LoaderCircle,
-	RotateCcw,
+	ListBullets as ListCollapse,
+	CircleNotch as LoaderCircle,
+	ArrowCounterClockwise as RotateCcw,
 	Scissors,
-	Trash2,
+	Trash as Trash2,
 	X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import {
 	type FormEvent,
 	type ReactNode,
@@ -1067,7 +1068,7 @@ const FileTreeNode = memo(function FileTreeNode({
 		return (
 			<div
 				className={cn(
-					'relative py-0.5',
+					'relative',
 					isCopied && 'border-l-2 border-primary/40',
 					isCut && 'border-l-2 border-destructive/40 opacity-50'
 				)}
@@ -1084,7 +1085,13 @@ const FileTreeNode = memo(function FileTreeNode({
 				<ContextMenuRoot onOpenChange={setContextMenuOpen}>
 					<ContextMenuTrigger>
 						<div
-							className="flex w-full items-center gap-1 relative z-10"
+							className={cn(
+								'flex w-full items-center gap-1 relative z-10 transition-colors',
+								isSelected
+									? 'bg-sidebar-accent/70 text-sidebar-accent-foreground'
+									: `hover:bg-sidebar-accent
+										hover:text-sidebar-accent-foreground`
+							)}
 							style={{ paddingLeft: `${depth * 14 + 8}px` }}
 						>
 							<button
@@ -1098,8 +1105,7 @@ const FileTreeNode = memo(function FileTreeNode({
 									`flex size-5 shrink-0 items-center justify-center rounded-sm
 									transition-colors`,
 									isSelected
-										? `text-sidebar-accent-foreground
-											hover:bg-sidebar-accent/80`
+										? 'text-sidebar-accent-foreground'
 										: `text-sidebar-foreground hover:bg-sidebar-accent
 											hover:text-sidebar-accent-foreground`
 								)}
@@ -1118,13 +1124,11 @@ const FileTreeNode = memo(function FileTreeNode({
 							<button
 								type="button"
 								className={cn(
-									`flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5
-									text-left text-sm transition-colors`,
+									`flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left
+									text-sm`,
 									isSelected
-										? `bg-sidebar-accent/70 text-sidebar-accent-foreground
-											ring-1 ring-inset ring-sidebar-border`
-										: `text-sidebar-foreground hover:bg-sidebar-accent
-											hover:text-sidebar-accent-foreground`
+										? 'text-sidebar-accent-foreground'
+										: 'text-sidebar-foreground'
 								)}
 								onClick={(e) => {
 									userToggledRef.current = true;
@@ -1148,7 +1152,7 @@ const FileTreeNode = memo(function FileTreeNode({
 								{gitState ? (
 									<span
 										className={cn(
-											`ml-auto shrink-0 font-mono text-[11px] font-semibold
+											`ml-auto mr-2 shrink-0 font-mono text-[11px] font-semibold
 												uppercase`,
 											getGitBadgeClassName(gitState)
 										)}
@@ -1172,12 +1176,17 @@ const FileTreeNode = memo(function FileTreeNode({
 		);
 	}
 
-	const Icon = node.fileKind === 'image' ? FileImage : FileText;
+	const Icon =
+		node.fileKind === 'image'
+			? FileImage
+			: node.fileKind === 'markdown'
+				? FileMd
+				: FileText;
 
 	return (
 		<div
 			className={cn(
-				'relative py-0.5',
+				'relative',
 				isCopied && 'border-l-2 border-primary/40',
 				isCut && 'border-l-2 border-destructive/40 opacity-50'
 			)}
@@ -1196,13 +1205,12 @@ const FileTreeNode = memo(function FileTreeNode({
 					<button
 						type="button"
 						className={cn(
-							`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left
-							text-sm transition-colors relative z-10`,
+							`flex w-full items-center gap-2 py-1.5 text-left text-sm
+							transition-colors relative z-10`,
 							isPrimarySelected
 								? 'bg-sidebar-primary text-sidebar-primary-foreground'
 								: isMultiSelected
-									? `bg-sidebar-accent/80 text-sidebar-accent-foreground ring-1
-										ring-inset ring-sidebar-border`
+									? 'bg-sidebar-accent/80 text-sidebar-accent-foreground'
 									: contextMenuOpen
 										? 'bg-sidebar-accent text-sidebar-accent-foreground'
 										: `text-sidebar-foreground hover:bg-sidebar-accent
@@ -1220,7 +1228,7 @@ const FileTreeNode = memo(function FileTreeNode({
 						{gitState ? (
 							<span
 								className={cn(
-									`ml-auto shrink-0 font-mono text-[11px] font-semibold
+									`ml-auto mr-2 shrink-0 font-mono text-[11px] font-semibold
 										uppercase`,
 									getGitBadgeClassName(gitState)
 								)}
@@ -2506,7 +2514,7 @@ export function FileExplorerSidebar() {
 					<ContextMenuTrigger className="min-h-0 flex flex-1">
 						<div
 							ref={viewportRef}
-							className={`overflow-auto size-full min-h-0 px-2 transition-colors
+							className={`overflow-auto size-full min-h-0 transition-colors
 								${isDragOver ? 'bg-sidebar-accent/40 ring-2 ring-primary/40 ring-inset' : ''}`}
 							data-os-scroll
 							data-native-dialog-scroll-lock

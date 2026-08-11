@@ -1,7 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 
-import { ArrowDownToLine, ArrowUpFromLine, Settings2 } from 'lucide-react';
+import {
+	ArrowFatLinesDown as ArrowDownToLine,
+	ArrowFatLineUp as ArrowUpFromLine,
+	GearSix as Settings2,
+} from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

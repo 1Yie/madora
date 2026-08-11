@@ -1,10 +1,10 @@
 'use client';
 
 import {
-	ChevronLeftIcon,
-	ChevronRightIcon,
-	ChevronsUpDownIcon,
-} from 'lucide-react';
+	CaretLeft as ChevronLeftIcon,
+	CaretRight as ChevronRightIcon,
+	CaretUpDown as ChevronsUpDownIcon,
+} from '@phosphor-icons/react';
 import type * as React from 'react';
 import { DayPicker } from 'react-day-picker';
 import { cn } from '@/lib/utils';

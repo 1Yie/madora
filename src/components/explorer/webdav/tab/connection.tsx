@@ -1,4 +1,9 @@
-import { Cloud, Loader2, Save, Trash2 } from 'lucide-react';
+import {
+	Cloud,
+	CircleNotch as Loader2,
+	FloppyDisk as Save,
+	Trash as Trash2,
+} from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,18 +41,6 @@ export function WebDavTabConnection({
 	return (
 		<div className="size-full min-h-0 flex-1 overflow-auto">
 			<div className="space-y-6 p-4 sm:p-6">
-				<div className="space-y-1">
-					<p
-						className="text-xs font-medium uppercase tracking-[0.18em]
-							text-muted-foreground"
-					>
-						{t('webdav.connection.sectionLabel')}
-					</p>
-					<h3 className="text-2xl font-semibold text-foreground">
-						{t('webdav.connection.sectionTitle')}
-					</h3>
-				</div>
-
 				<SettingsSectionCard title={t('webdav.connection.cardTitle')}>
 					<div className="space-y-3">
 						<FieldBlock label={t('webdav.connection.serverUrl')}>

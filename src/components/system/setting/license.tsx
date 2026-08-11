@@ -1,13 +1,13 @@
 import {
 	Crown,
-	ExternalLink,
-	KeyRound,
-	Loader2,
-	OctagonX,
-	ShieldAlert,
+	ArrowSquareOut as ExternalLink,
+	Key as KeyRound,
+	CircleNotch as Loader2,
+	Prohibit as OctagonX,
+	ShieldWarning as ShieldAlert,
 	ShieldCheck,
-	Zap,
-} from 'lucide-react';
+	Lightning as Zap,
+} from '@phosphor-icons/react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLicense } from '@/context/license-provider';
@@ -136,8 +136,8 @@ export function LicenseSettings({
 	return (
 		<div className="space-y-6">
 			<SettingsSectionCard title={t('settings.license.cards.details.title')}>
-				<div className="-mx-5 -mb-5 overflow-hidden">
-					<div className="flex items-start justify-between gap-3 px-5 pb-4">
+				<div>
+					<div className="flex items-start justify-between gap-3 pb-4">
 						<div className="flex items-start gap-1">
 							<div
 								className={cn(
@@ -182,7 +182,7 @@ export function LicenseSettings({
 					{isActive && maskedKey && (
 						<div
 							className="flex items-center justify-between border-t
-								border-border/60 bg-muted/30 px-5 py-2.5"
+								border-border/60 py-2.5"
 						>
 							<div className="flex items-center gap-2">
 								<KeyRound className="size-3 text-muted-foreground/60" />
@@ -225,7 +225,7 @@ export function LicenseSettings({
 					{isActive && !maskedKey && (
 						<div
 							className="flex items-center justify-between border-t
-								border-border/60 bg-muted/30 px-5 py-2.5"
+								border-border/60 py-2.5"
 						>
 							<p className="text-xs text-muted-foreground">
 								{t('settings.license.deviceHint')}
@@ -243,7 +243,7 @@ export function LicenseSettings({
 					{!isActive && licenseState !== 'revoked' && (
 						<div
 							className="flex items-center gap-1.5 border-t border-border/60
-								bg-muted/20 px-5 py-2.5"
+								py-2.5"
 						>
 							<p className="text-xs text-muted-foreground">
 								{t('settings.license.purchase')}{' '}

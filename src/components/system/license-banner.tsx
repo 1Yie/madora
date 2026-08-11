@@ -1,4 +1,8 @@
-import { Crown, OctagonX, ShieldAlert } from 'lucide-react';
+import {
+	Crown,
+	Prohibit as OctagonX,
+	ShieldWarning as ShieldAlert,
+} from '@phosphor-icons/react';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
@@ -44,7 +48,7 @@ function TrialBanner() {
 							className="flex size-16 items-center justify-center rounded-full
 								bg-destructive/10"
 						>
-							<OctagonX className="size-8 text-destructive" strokeWidth={1.5} />
+							<OctagonX className="size-8 text-destructive" weight="regular" />
 						</div>
 						{isLoading ? (
 							<div className="space-y-3">
@@ -114,7 +118,7 @@ function TrialBanner() {
 						>
 							<ShieldAlert
 								className="size-8 text-destructive"
-								strokeWidth={1.5}
+								weight="regular"
 							/>
 						</div>
 						{isLoading ? (

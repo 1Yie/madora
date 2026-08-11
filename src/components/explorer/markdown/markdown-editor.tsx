@@ -15,23 +15,23 @@ import {
 	MenuSeparator,
 } from '@/components/ui/context-menu';
 import {
-	Clipboard,
+	ClipboardText as Clipboard,
 	Scissors,
 	Copy,
 	Eye,
-	EyeOff,
-	Bold,
-	Italic,
-	Strikethrough,
-	Underline,
-	Link,
-	ImageIcon,
-	PenLine,
-	CircleCheck,
-	CircleX,
-	Save,
-	CloudUpload,
-} from 'lucide-react';
+	EyeSlash as EyeOff,
+	TextB as Bold,
+	TextItalic as Italic,
+	TextStrikethrough as Strikethrough,
+	TextUnderline as Underline,
+	LinkSimple as Link,
+	Image as ImageIcon,
+	PencilLine as PenLine,
+	CheckCircle as CircleCheck,
+	XCircle as CircleX,
+	FloppyDisk as Save,
+	CloudArrowUp as CloudUpload,
+} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';

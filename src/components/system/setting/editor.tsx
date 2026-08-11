@@ -1,14 +1,14 @@
 import {
-	Sparkles,
+	Sparkle as Sparkles,
 	Check,
-	Edit,
+	PencilSimple as Edit,
 	X,
-	KeyRound,
-	Bot,
+	Key as KeyRound,
+	Robot as Bot,
 	Globe,
-	Lock,
-	Server,
-} from 'lucide-react';
+	LockSimple as Lock,
+	HardDrives as Server,
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -212,7 +212,7 @@ export function EditorSettings() {
 	return (
 		<div className="space-y-4">
 			<SettingsSectionCard title={t('settings.editor.cards.input.title')}>
-				<div className="space-y-2">
+				<div className="divide-y divide-border">
 					<SettingRow
 						title={t('settings.editor.rows.autoSave.title')}
 						description={t('settings.editor.rows.autoSave.description')}
@@ -284,10 +284,7 @@ export function EditorSettings() {
 					</div>
 
 					{isCustom && (
-						<div
-							className="space-y-4 rounded-xl border border-border bg-muted/30
-								px-4 py-4"
-						>
+						<div className="space-y-4">
 							<p
 								className="text-xs font-medium uppercase tracking-wide
 									text-muted-foreground"

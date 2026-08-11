@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FolderKey } from 'lucide-react';
+import { FolderLock as FolderKey } from '@phosphor-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

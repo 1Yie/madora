@@ -1,5 +1,5 @@
 import type React from 'react';
-import { Cog } from 'lucide-react';
+import { Gear as Cog } from '@phosphor-icons/react';
 
 import Anthropic from '@lobehub/icons/es/Anthropic';
 import DeepSeek from '@lobehub/icons/es/DeepSeek';

@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { ArrowsClockwise as RefreshCw } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,18 +42,6 @@ export function WebDavTabSync({
 	return (
 		<div className="size-full min-h-0 flex-1 overflow-auto">
 			<div className="space-y-6 p-4 sm:p-6">
-				<div className="space-y-1">
-					<p
-						className="text-xs font-medium uppercase tracking-[0.18em]
-							text-muted-foreground"
-					>
-						{t('webdav.syncPanel.sectionLabel')}
-					</p>
-					<h3 className="text-2xl font-semibold text-foreground">
-						{t('webdav.syncPanel.sectionTitle')}
-					</h3>
-				</div>
-
 				<SettingsSectionCard title={t('webdav.syncPanel.optionsTitle')}>
 					<div className="space-y-3">
 						<FieldBlock
@@ -131,10 +119,7 @@ export function WebDavTabSync({
 						</Button>
 
 						{syncResult && (
-							<div
-								className="rounded-lg border border-border bg-background p-3
-									text-sm"
-							>
+							<div className="border-t border-border pt-3 text-sm">
 								<div className="font-medium text-foreground">
 									{t('webdav.syncPanel.resultsTitle')}
 								</div>

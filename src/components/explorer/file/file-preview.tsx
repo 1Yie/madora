@@ -1,4 +1,10 @@
-import { EyeOff, FileImage, FileX, FolderOpen, Info } from 'lucide-react';
+import {
+	EyeSlash as EyeOff,
+	FileImage,
+	FileX,
+	FolderOpen,
+	Info,
+} from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 

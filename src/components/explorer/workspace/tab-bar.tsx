@@ -1,13 +1,14 @@
 import {
-	type LucideIcon,
-	ChevronLeft,
-	ChevronRight,
+	type Icon,
+	CaretLeft as ChevronLeft,
+	CaretRight as ChevronRight,
 	FileImage,
+	FileMd,
 	FileText,
-	Focus,
-	SquareX,
+	Crosshair as Focus,
+	XSquare as SquareX,
 	X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -51,78 +52,98 @@ export function TabBar() {
 	const [showRightShadow, setShowRightShadow] = useState(false);
 	const isScroll = tabBarMode === 'scroll';
 	const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-	const dragIdRef = useRef<string | null>(null);
+	const [dragTabId, setDragTabId] = useState<string | null>(null);
+	const dragSessionRef = useRef<{
+		tabId: string;
+		startIndex: number;
+		pointerId: number;
+		startX: number;
+		startY: number;
+		active: boolean;
+	} | null>(null);
+	const dragOverIndexRef = useRef<number | null>(null);
+	const suppressClickRef = useRef(false);
+	const ghostRef = useRef<HTMLDivElement>(null);
 
-	const dragGhostRef = useRef<HTMLElement | null>(null);
+	// Custom drag-and-drop via pointer events: the browser's native drag
+	// preview is replaced by a styled ghost that follows the cursor, and the
+	// drop target is shown as an insertion line between tabs.
+	const handlePointerDown = (
+		e: React.PointerEvent,
+		tabId: string,
+		tabIndex: number
+	) => {
+		if (e.button !== 0) return;
+		// Ignore presses on the close button (role="button" span inside)
+		if ((e.target as HTMLElement).closest('[role="button"]')) return;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		dragSessionRef.current = {
+			tabId,
+			startIndex: tabIndex,
+			pointerId: e.pointerId,
+			startX: e.clientX,
+			startY: e.clientY,
+			active: false,
+		};
+	};
 
-	const handleDragStart = (e: React.DragEvent, tabId: string) => {
-		dragIdRef.current = tabId;
-		e.dataTransfer.effectAllowed = 'move';
-		e.dataTransfer.setData('text/plain', tabId);
+	const handlePointerMove = (e: React.PointerEvent) => {
+		const session = dragSessionRef.current;
+		if (!session || session.pointerId !== e.pointerId) return;
 
-		// Clone the actual tab so the drag preview matches the real tab styling.
-		// Use CSS transform:scale(1/dpr) to neutralise DPR differences — on a
-		// 2× display the clone is rendered at 0.5× so the browser-captured
-		// bitmap is the same pixel size as the CSS box, producing a consistent
-		// drag-image size across platforms and DPRs.
-		dragGhostRef.current?.remove();
-		const original = e.currentTarget as HTMLElement;
-		const ghost = original.cloneNode(true) as HTMLElement;
-		const dpr = window.devicePixelRatio || 1;
-		const style = getComputedStyle(document.documentElement);
-		const bgVar = style.getPropertyValue('--color-background').trim();
-		ghost.style.position = 'fixed';
-		ghost.style.top = '0';
-		ghost.style.left = '0';
-		ghost.style.pointerEvents = 'none';
-		ghost.style.zIndex = '-1';
-		ghost.style.transformOrigin = 'top left';
-		ghost.style.transform = `scale(${1 / dpr})`;
-		// Inactive tabs have no bg; give the ghost a solid bg so it isn't translucent
-		if (bgVar) ghost.style.backgroundColor = bgVar;
-		ghost.querySelector('[role="button"]')?.remove();
-		document.body.append(ghost);
-		dragGhostRef.current = ghost;
-		e.dataTransfer.setDragImage(ghost, 6 / dpr, 16 / dpr);
-
-		// Dim the source tab
-		if (e.currentTarget instanceof HTMLElement) {
-			requestAnimationFrame(() => {
-				e.currentTarget.classList.add('opacity-40');
-			});
+		if (!session.active) {
+			// Wait until the cursor moves far enough before entering drag mode
+			// so plain clicks (select / close) still work.
+			if (
+				Math.hypot(e.clientX - session.startX, e.clientY - session.startY) < 5
+			) {
+				return;
+			}
+			session.active = true;
+			document.body.style.userSelect = 'none';
+			setDragTabId(session.tabId);
 		}
-	};
 
-	const handleDragEnd = (e: React.DragEvent) => {
-		dragIdRef.current = null;
-		setDragOverIndex(null);
-		dragGhostRef.current?.remove();
-		dragGhostRef.current = null;
-		if (e.currentTarget instanceof HTMLElement) {
-			e.currentTarget.classList.remove('opacity-40');
+		if (ghostRef.current) {
+			ghostRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px)
+				translate(-50%, -50%)`;
 		}
+
+		// Compute the insertion point from the tab under the cursor: left half
+		// of a tab inserts before it, right half inserts after it.
+		const hit = document
+			.elementFromPoint(e.clientX, e.clientY)
+			?.closest<HTMLElement>('[data-tab-drag-index]');
+		let insertAt: number | null = null;
+		if (hit) {
+			const idx = Number(hit.dataset.tabDragIndex);
+			const rect = hit.getBoundingClientRect();
+			insertAt = e.clientX < rect.left + rect.width / 2 ? idx : idx + 1;
+		}
+		dragOverIndexRef.current = insertAt;
+		setDragOverIndex((prev) => (prev === insertAt ? prev : insertAt));
 	};
 
-	const handleDragOver = (e: React.DragEvent, targetIndex: number) => {
-		e.preventDefault();
-		e.dataTransfer.dropEffect = 'move';
-		setDragOverIndex(targetIndex);
-	};
+	const handlePointerEnd = (e: React.PointerEvent) => {
+		const session = dragSessionRef.current;
+		if (!session || session.pointerId !== e.pointerId) return;
+		dragSessionRef.current = null;
 
-	const handleDragLeave = (e: React.DragEvent) => {
-		// Only clear when leaving the target element itself, not its children
-		if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+		if (session.active) {
+			suppressClickRef.current = true;
+			document.body.style.userSelect = '';
+			const from = session.startIndex;
+			const insertAt = dragOverIndexRef.current;
+			// No-op when the tab would land back at its original position
+			if (insertAt !== null && insertAt !== from && insertAt !== from + 1) {
+				const to = from < insertAt ? insertAt - 1 : insertAt;
+				reorderTabs(from, to);
+			}
+		}
+
+		setDragTabId(null);
 		setDragOverIndex(null);
-	};
-
-	const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-		e.preventDefault();
-		const fromId = dragIdRef.current ?? e.dataTransfer.getData('text/plain');
-		const fromIndex = tabs.findIndex((t) => t.id === fromId);
-		setDragOverIndex(null);
-		dragIdRef.current = null;
-		if (fromIndex === -1 || fromIndex === targetIndex) return;
-		reorderTabs(fromIndex, targetIndex);
+		dragOverIndexRef.current = null;
 	};
 
 	useLayoutEffect(() => {
@@ -177,6 +198,9 @@ export function TabBar() {
 	}, [tabs, activeTabId, isScroll]);
 
 	if (tabs.length === 0) return null;
+	const draggedTab = dragTabId
+		? tabs.find((tab) => tab.id === dragTabId)
+		: null;
 
 	return (
 		<div className={isScroll ? 'relative' : ''}>
@@ -203,8 +227,12 @@ export function TabBar() {
 				>
 					{tabs.map((tab) => {
 						const isActive = tab.id === activeTabId;
-						const Icon: LucideIcon =
-							tab.node.fileKind === 'image' ? FileImage : FileText;
+						const Icon: Icon =
+							tab.node.fileKind === 'image'
+								? FileImage
+								: tab.node.fileKind === 'markdown'
+									? FileMd
+									: FileText;
 						const fileName =
 							tab.node.name ||
 							(tab.node.path.replace(/\\/g, '/').split('/').pop() ?? '');
@@ -215,6 +243,9 @@ export function TabBar() {
 							.filter((t) => t.id !== tab.id)
 							.map((t) => t.id);
 						const allTabIds = tabs.map((t) => t.id);
+						const insertBefore = dragOverIndex === tabIndex;
+						const insertAfter =
+							dragOverIndex === tabs.length && tabIndex === tabs.length - 1;
 
 						return (
 							<ContextMenuRoot key={tab.id}>
@@ -223,12 +254,13 @@ export function TabBar() {
 										<TooltipTrigger
 											render={
 												<button
-													draggable
-													onDragStart={(e) => handleDragStart(e, tab.id)}
-													onDragEnd={handleDragEnd}
-													onDragOver={(e) => handleDragOver(e, tabIndex)}
-													onDragLeave={handleDragLeave}
-													onDrop={(e) => handleDrop(e, tabIndex)}
+													onPointerDown={(e) =>
+														handlePointerDown(e, tab.id, tabIndex)
+													}
+													onPointerMove={handlePointerMove}
+													onPointerUp={handlePointerEnd}
+													onPointerCancel={handlePointerEnd}
+													data-tab-drag-index={tabIndex}
 													className={cn(
 														`group relative flex h-8 shrink-0 cursor-pointer
 														items-center gap-1.5 select-none`,
@@ -238,8 +270,10 @@ export function TabBar() {
 														'hover:bg-muted/50',
 														`focus-visible:outline-none
 														focus-visible:bg-muted/50`,
-														dragOverIndex === tabIndex &&
+														insertBefore &&
 															'border-l-2 border-l-primary border-r-0',
+														insertAfter && 'border-r-2 border-r-primary',
+														dragTabId === tab.id && 'opacity-40',
 														isActive
 															? 'bg-background text-foreground'
 															: 'text-muted-foreground hover:text-foreground',
@@ -247,7 +281,13 @@ export function TabBar() {
 															`text-muted-foreground/60
 															hover:text-muted-foreground/80`
 													)}
-													onClick={() => selectTab(tab.id)}
+													onClick={() => {
+														if (suppressClickRef.current) {
+															suppressClickRef.current = false;
+															return;
+														}
+														selectTab(tab.id);
+													}}
 													onMouseDown={(e) => {
 														if (e.button === 1) {
 															e.preventDefault();
@@ -393,6 +433,26 @@ export function TabBar() {
 						style={{ opacity: showRightShadow ? 1 : 0 }}
 					/>
 				</>
+			)}
+
+			{dragTabId && draggedTab && (
+				<div
+					ref={ghostRef}
+					className="pointer-events-none fixed left-0 top-0 z-50 flex h-8
+						items-center gap-1.5 rounded-md border border-border bg-background
+						pl-3 pr-2 text-xs text-foreground shadow-lg"
+					style={{ transform: 'translate(-9999px, -9999px)' }}
+				>
+					{draggedTab.node.fileKind === 'image' ? (
+						<FileImage className="size-3.5 shrink-0" />
+					) : (
+						<FileText className="size-3.5 shrink-0" />
+					)}
+					<span className="max-w-32 truncate">
+						{draggedTab.node.name ||
+							draggedTab.node.path.replace(/\\/g, '/').split('/').pop()}
+					</span>
+				</div>
 			)}
 		</div>
 	);

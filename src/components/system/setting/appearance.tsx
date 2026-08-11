@@ -1,4 +1,10 @@
-import { Check, Plus, Maximize2, Minimize2, ScanLine } from 'lucide-react';
+import {
+	Check,
+	Plus,
+	CornersOut as Maximize2,
+	CornersIn as Minimize2,
+	Scan as ScanLine,
+} from '@phosphor-icons/react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -88,10 +94,8 @@ const PRESETS: Array<[string, string]> = [
 
 function swatchCardCn(active: boolean) {
 	return cn(
-		'rounded-xl border transition-colors text-left',
-		active
-			? 'border-primary bg-primary/8'
-			: 'border-border bg-background hover:bg-muted/50'
+		'rounded-lg text-left transition-colors',
+		active ? 'bg-primary/8' : 'text-muted-foreground hover:bg-muted/50'
 	);
 }
 
@@ -101,7 +105,7 @@ function ActiveBadge() {
 			className="absolute bottom-1 right-1 flex h-4.5 w-4.5 items-center
 				justify-center rounded-full bg-white/90"
 		>
-			<Check className="h-3 w-3 text-gray-800" strokeWidth={2.5} />
+			<Check className="h-3 w-3 text-gray-800" weight="bold" />
 		</span>
 	);
 }
@@ -372,10 +376,7 @@ export function AppearanceSettings() {
 												className="flex h-5 w-5 items-center justify-center
 													rounded-full bg-white/80"
 											>
-												<Plus
-													className="h-3 w-3 text-gray-800"
-													strokeWidth={2.5}
-												/>
+												<Plus className="h-3 w-3 text-gray-800" weight="bold" />
 											</span>
 										</span>
 									)}

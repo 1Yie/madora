@@ -1,6 +1,9 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { gitStageFile } from '@/invoke/git';
-import { Check, ChevronsLeftRight } from 'lucide-react';
+import {
+	Check,
+	ArrowsLeftRight as ChevronsLeftRight,
+} from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
