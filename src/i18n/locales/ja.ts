@@ -372,6 +372,8 @@ const ja = {
 					availableHosts: '利用可能なホスト',
 					connection: '接続',
 					expiresAt: '{{time}} に失効',
+					expiresIn: 'あと {{time}}',
+					expired: '期限切れ',
 					fallbackCodeDescription:
 						'QR スキャンが使えない場合や、クライアントが自動チケットに未対応の場合のみ使います。',
 					hostMode: 'ホストモード',
@@ -395,6 +397,9 @@ const ja = {
 					loadFailed: 'Madora Sync 設定の読み込みに失敗しました',
 					pairingCodeFailed: 'ペアリングコードの更新に失敗しました',
 					pairingCodeIssued: 'ペアリングコードを生成しました',
+					pairingCodeCopied: 'ペアリングコードをコピーしました',
+					pairingUrlCopied: '接続アドレスをコピーしました',
+					copyFailed: 'コピーに失敗しました',
 					pairingQrFailed: 'ペアリング QR コードの読み込みに失敗しました',
 					removeDeviceFailed: '端末の削除に失敗しました',
 					saveFailed: 'Madora Sync 設定の保存に失敗しました',

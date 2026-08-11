@@ -347,6 +347,8 @@ const zhCN = {
 					availableHosts: '可用地址',
 					connection: '连接',
 					expiresAt: '到期时间 {{time}}',
+					expiresIn: '剩余 {{time}}',
+					expired: '已过期',
 					fallbackCodeDescription:
 						'仅在无法扫码或客户端暂不支持自动票据时使用这个验证码。',
 					hostMode: '主机模式',
@@ -369,6 +371,9 @@ const zhCN = {
 					loadFailed: '加载 Madora Sync 设置失败',
 					pairingCodeFailed: '更新验证码失败',
 					pairingCodeIssued: '验证码已生成',
+					pairingCodeCopied: '验证码已复制',
+					pairingUrlCopied: '连接地址已复制',
+					copyFailed: '复制失败',
 					pairingQrFailed: '加载配对二维码失败',
 					removeDeviceFailed: '移除配对设备失败',
 					saveFailed: '保存 Madora Sync 设置失败',

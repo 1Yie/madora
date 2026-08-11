@@ -382,6 +382,8 @@ const en = {
 					availableHosts: 'Available hosts',
 					connection: 'Connection',
 					expiresAt: 'Expires at {{time}}',
+					expiresIn: 'Expires in {{time}}',
+					expired: 'Expired',
 					fallbackCodeDescription:
 						'Use this only when QR scanning is unavailable or the client does not support automatic pairing tickets yet.',
 					hostMode: 'Host mode',
@@ -405,6 +407,9 @@ const en = {
 					loadFailed: 'Failed to load Madora Sync settings',
 					pairingCodeFailed: 'Failed to update pairing code',
 					pairingCodeIssued: 'Pairing code generated',
+					pairingCodeCopied: 'Pairing code copied',
+					pairingUrlCopied: 'Connection address copied',
+					copyFailed: 'Copy failed',
 					pairingQrFailed: 'Failed to load pairing QR code',
 					removeDeviceFailed: 'Failed to remove paired device',
 					saveFailed: 'Failed to save Madora Sync settings',

@@ -374,6 +374,8 @@ const ko = {
 					availableHosts: '사용 가능한 호스트',
 					connection: '연결',
 					expiresAt: '{{time}} 에 만료',
+					expiresIn: '남은 시간 {{time}}',
+					expired: '만료됨',
 					fallbackCodeDescription:
 						'QR 스캔을 쓸 수 없거나 클라이언트가 자동 페어링 티켓을 아직 지원하지 않을 때만 사용합니다.',
 					hostMode: '호스트 모드',
@@ -397,6 +399,9 @@ const ko = {
 					loadFailed: 'Madora Sync 설정을 불러오지 못했습니다',
 					pairingCodeFailed: '페어링 코드 갱신에 실패했습니다',
 					pairingCodeIssued: '페어링 코드를 생성했습니다',
+					pairingCodeCopied: '페어링 코드를 복사했습니다',
+					pairingUrlCopied: '연결 주소를 복사했습니다',
+					copyFailed: '복사에 실패했습니다',
 					pairingQrFailed: '페어링 QR 코드를 불러오지 못했습니다',
 					removeDeviceFailed: '페어링된 장치를 제거하지 못했습니다',
 					saveFailed: 'Madora Sync 설정을 저장하지 못했습니다',
