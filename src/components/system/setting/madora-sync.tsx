@@ -410,7 +410,7 @@ export function MadoraSyncSettings() {
 						/>
 					</SettingRow>
 					<div className="grid gap-3 md:grid-cols-3">
-						<div className="rounded-lg border bg-background px-4 py-3">
+						<div>
 							<div className="text-xs text-muted-foreground">
 								{t('settings.sync.madora.status.connection')}
 							</div>
@@ -425,7 +425,7 @@ export function MadoraSyncSettings() {
 								</Badge>
 							</div>
 						</div>
-						<div className="rounded-lg border bg-background px-4 py-3">
+						<div>
 							<div className="text-xs text-muted-foreground">
 								{t('settings.sync.madora.status.lastSync')}
 							</div>
@@ -433,7 +433,7 @@ export function MadoraSyncSettings() {
 								{lastSyncText}
 							</div>
 						</div>
-						<div className="rounded-lg border bg-background px-4 py-3">
+						<div>
 							<div className="text-xs text-muted-foreground">
 								{t('settings.sync.madora.status.pairedDevices')}
 							</div>
@@ -602,7 +602,7 @@ export function MadoraSyncSettings() {
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.features.title')}
 					>
-						<div className="space-y-3">
+						<div className="divide-y divide-border">
 							<SettingRow
 								title={t('settings.sync.madora.rows.autoStart.title')}
 								description={t(
@@ -686,20 +686,16 @@ export function MadoraSyncSettings() {
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.devices.title')}
 					>
-						<div className="space-y-3">
+						<div className="divide-y divide-border">
 							{config.pairedDevices.length === 0 ? (
-								<div
-									className="rounded-lg border bg-background px-4 py-3 text-sm
-										text-muted-foreground"
-								>
+								<div className="py-3 text-sm text-muted-foreground">
 									{t('settings.sync.madora.empty.devices')}
 								</div>
 							) : (
 								config.pairedDevices.map((device) => (
 									<div
 										key={device.id}
-										className="flex items-center justify-between gap-4
-											rounded-lg border bg-background px-4 py-3"
+										className="flex items-center justify-between gap-4 py-3"
 									>
 										<div className="min-w-0">
 											<div className="flex items-center gap-2">

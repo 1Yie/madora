@@ -140,13 +140,12 @@ export function AboutSettings() {
 				</SettingRow>
 			</SettingsSectionCard>
 			<SettingsSectionCard title={t('settings.about.cards.licenses.title')}>
-				<div className="-mx-5 -mb-5 overflow-hidden">
+				<div>
 					<div className="divide-y divide-border">
 						{licenses.map((entry) => (
 							<div
 								key={entry.name}
-								className="flex items-center justify-between gap-4 px-5 py-3
-									text-sm"
+								className="flex items-center justify-between gap-4 py-3 text-sm"
 							>
 								<ExternalLinkAnchor href={entry.url}>
 									{entry.name}

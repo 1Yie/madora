@@ -11,25 +11,25 @@ export function SettingsSectionCard({
 	children: ReactNode;
 }) {
 	return (
-		<section className="rounded-2xl border bg-card p-4 sm:p-5">
-			<div className="space-y-0.5">
+		<section>
+			<div className="border-b border-border pb-2">
 				<h3 className="text-sm font-medium text-foreground sm:text-base">
 					{title}
 				</h3>
 				{description && (
-					<p className="text-xs text-muted-foreground sm:text-sm">
+					<p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">
 						{description}
 					</p>
 				)}
 			</div>
-			<div className="mt-4">{children}</div>
+			<div className="mt-3">{children}</div>
 		</section>
 	);
 }
 
 export function Stat({ label, value }: { label: string; value: ReactNode }) {
 	return (
-		<div className="rounded-lg border border-border bg-background px-4 py-3">
+		<div>
 			<div className="text-xs text-muted-foreground">{label}</div>
 			<div
 				className="mt-1.5 break-all text-sm font-medium text-foreground
@@ -58,12 +58,11 @@ export function Option({
 		<button
 			type="button"
 			className={cn(
-				`relative rounded-lg border px-4 py-3 pr-10 text-left transition-colors
+				`relative rounded-lg px-3 py-2.5 pr-10 text-left transition-colors
 				duration-100`,
 				active
-					? 'border-primary/30 bg-primary/8 text-foreground'
-					: `border-border bg-background text-muted-foreground hover:bg-accent
-						hover:text-foreground`
+					? 'bg-primary/8 text-foreground'
+					: 'text-muted-foreground hover:bg-accent hover:text-foreground'
 			)}
 			onClick={onClick}
 		>
@@ -102,10 +101,7 @@ export function SettingRow({
 }) {
 	if (stacked) {
 		return (
-			<div
-				className="space-y-3 rounded-lg border border-border bg-background px-4
-					py-3"
-			>
+			<div className="space-y-3 py-3">
 				<div className="flex items-start justify-between gap-4">
 					<div className="min-w-0 space-y-0.5">
 						<div className="text-sm font-medium text-foreground">{title}</div>
@@ -121,10 +117,7 @@ export function SettingRow({
 	}
 
 	return (
-		<div
-			className="flex items-center justify-between gap-4 rounded-lg border
-				border-border bg-background px-4 py-3"
-		>
+		<div className="flex items-center justify-between gap-4 py-3">
 			<div className="min-w-0 space-y-0.5">
 				<div className="text-sm font-medium text-foreground">{title}</div>
 				{description && (
@@ -148,11 +141,8 @@ export function BrandShard({
 	children?: ReactNode;
 }) {
 	return (
-		<section
-			className="overflow-hidden rounded-2xl border bg-linear-to-br
-				from-primary/12 via-background to-background shadow-xs"
-		>
-			<div className="flex flex-col gap-6 p-5 sm:p-6">
+		<section>
+			<div className="flex flex-col gap-6">
 				<div className="flex flex-col items-start gap-4 sm:gap-6">
 					<div className="flex items-center gap-3">
 						<img
