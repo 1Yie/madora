@@ -1,14 +1,16 @@
 import {
-	BadgeCheck,
-	LoaderCircle,
-	MonitorSmartphone,
+	SealCheck as BadgeCheck,
+	Check,
+	CircleNotch as LoaderCircle,
+	Copy,
+	DeviceMobile as MonitorSmartphone,
 	QrCode,
-	RefreshCw,
+	ArrowsClockwise as RefreshCw,
 	ShieldCheck,
-	Smartphone,
-	Wifi,
-	WifiOff,
-} from 'lucide-react';
+	DeviceMobile as Smartphone,
+	WifiHigh as Wifi,
+	WifiSlash as WifiOff,
+} from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -34,6 +36,7 @@ import {
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
+import { cn } from '@/lib/utils';
 
 function getConnectionBadgeVariant(state: MadoraSyncConnectionState) {
 	switch (state) {
@@ -63,6 +66,20 @@ function renderConnectionIcon(state: MadoraSyncConnectionState) {
 	}
 }
 
+function formatRemaining(ms: number): string {
+	const total = Math.max(0, Math.floor(ms / 1000));
+	const hours = Math.floor(total / 3600);
+	const minutes = Math.floor((total % 3600) / 60);
+	const seconds = total % 60;
+	const mm = String(minutes).padStart(2, '0');
+	const ss = String(seconds).padStart(2, '0');
+	return hours > 0 ? `${hours}:${mm}:${ss}` : `${minutes}:${ss}`;
+}
+
+function groupPairingCode(code: string): string {
+	return code.replace(/\D/g, '').replace(/(\d{3})(?=\d)/g, '$1 ');
+}
+
 export function MadoraSyncSettings() {
 	const { t } = useTranslation();
 	const [config, setConfig] = useState<MadoraSyncConfig | null>(null);
@@ -72,6 +89,8 @@ export function MadoraSyncSettings() {
 	const [saving, setSaving] = useState(false);
 	const [pairingBusy, setPairingBusy] = useState(false);
 	const [pairingQr, setPairingQr] = useState<MadoraSyncPairingQr | null>(null);
+	const [copied, setCopied] = useState<'code' | 'url' | null>(null);
+	const [now, setNow] = useState(() => Date.now());
 
 	useEffect(() => {
 		let cancelled = false;
@@ -319,6 +338,50 @@ export function MadoraSyncSettings() {
 		}
 	};
 
+	useEffect(() => {
+		if (!copied) return;
+		const id = setTimeout(() => setCopied(null), 1500);
+		return () => clearTimeout(id);
+	}, [copied]);
+
+	const pairingExpiresAt =
+		pairingQr?.expiresAt ?? config?.pairingCodeExpiresAt ?? null;
+
+	useEffect(() => {
+		if (!config?.enabled || !pairingExpiresAt) return;
+		const id = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(id);
+	}, [config?.enabled, pairingExpiresAt]);
+
+	const remainingMs = pairingExpiresAt
+		? Date.parse(pairingExpiresAt) - now
+		: null;
+	const expired = remainingMs !== null && remainingMs <= 0;
+	const lowTime = remainingMs !== null && remainingMs <= 60_000;
+	const pairingCode = pairingQr?.code ?? config?.activePairingCode ?? null;
+	const pairingUrl = pairingQr?.primaryHost
+		? `http://${pairingQr.primaryHost}:${pairingQr.port}`
+		: null;
+
+	async function handleCopy(text: string, target: 'code' | 'url') {
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(target);
+			showSuccessToast(
+				t(
+					target === 'code'
+						? 'settings.sync.madora.toasts.pairingCodeCopied'
+						: 'settings.sync.madora.toasts.pairingUrlCopied'
+				)
+			);
+		} catch (error) {
+			showErrorToast(
+				t('settings.sync.madora.toasts.copyFailed'),
+				String(error)
+			);
+		}
+	}
+
 	if (loading) {
 		return (
 			<SettingsSectionCard title={t('settings.sync.madora.cards.status.title')}>
@@ -396,64 +459,118 @@ export function MadoraSyncSettings() {
 						title={t('settings.sync.madora.cards.pairing.title')}
 					>
 						<div className="space-y-4">
-							<div className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
-								<div
-									className="flex min-h-[220px] items-center justify-center
-										rounded-lg border bg-background p-4"
-								>
+							<div
+								className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]
+									sm:items-center"
+							>
+								<div className="flex min-h-[220px] items-center justify-center">
 									{pairingQr?.payload ? (
-										<QRCodeSVG
-											bgColor="transparent"
-											fgColor="currentColor"
-											level="M"
-											size={180}
-											value={pairingQr.payload}
-										/>
+										<div
+											className="rounded-xl border border-border/70 bg-white p-3
+												shadow-sm"
+										>
+											<QRCodeSVG
+												bgColor="#ffffff"
+												fgColor="#18181b"
+												level="M"
+												size={180}
+												value={pairingQr.payload}
+											/>
+										</div>
 									) : (
 										<div
-											className="flex flex-col items-center gap-2 text-center
-												text-muted-foreground"
+											className="flex size-[206px] flex-col items-center
+												justify-center gap-2 rounded-xl border border-dashed
+												border-border/70 text-center text-muted-foreground"
 										>
 											<QrCode className="size-10" />
-											<p className="text-xs">
+											<p className="max-w-40 text-xs">
 												{t('settings.sync.madora.status.qrUnavailable')}
 											</p>
 										</div>
 									)}
 								</div>
-								<div
-									className="rounded-lg border bg-background px-4 py-4
-										text-center tabular-nums sm:text-left"
-								>
-									<div className="text-xs text-muted-foreground">
-										{t('settings.sync.madora.fields.pairingCode')}
+								<div className="text-center sm:text-left">
+									<div
+										className="flex items-center justify-center gap-1.5
+											sm:justify-start"
+									>
+										<span className="text-xs font-medium text-muted-foreground">
+											{t('settings.sync.madora.fields.pairingCode')}
+										</span>
+										{pairingCode ? (
+											<Button
+												aria-label={t('common.actions.copy')}
+												onClick={() => void handleCopy(pairingCode, 'code')}
+												size="icon-xs"
+												variant="ghost"
+											>
+												{copied === 'code' ? <Check /> : <Copy />}
+											</Button>
+										) : null}
 									</div>
-									<div className="mt-2 text-3xl font-semibold text-foreground">
-										{pairingQr?.code ?? config.activePairingCode ?? '------'}
+									<div
+										className={cn(
+											`mt-1 font-mono text-4xl font-semibold tabular-nums
+												tracking-wide`,
+											expired || !pairingCode
+												? 'text-muted-foreground'
+												: 'text-foreground'
+										)}
+									>
+										{pairingCode ? groupPairingCode(pairingCode) : '------'}
 									</div>
-									<div className="mt-2 text-xs text-muted-foreground">
-										{(pairingQr?.expiresAt ?? config.pairingCodeExpiresAt)
-											? t('settings.sync.madora.status.expiresAt', {
-													time: new Date(
-														pairingQr?.expiresAt ??
-															config.pairingCodeExpiresAt ??
-															''
-													).toLocaleString(),
-												})
-											: t('settings.sync.madora.status.noPairingCode')}
+									<div className="mt-2 text-xs">
+										{!pairingExpiresAt ? (
+											<span className="text-muted-foreground">
+												{t('settings.sync.madora.status.noPairingCode')}
+											</span>
+										) : expired ? (
+											<span className="font-medium text-destructive">
+												{t('settings.sync.madora.status.expired')}
+											</span>
+										) : (
+											<span
+												className={cn(
+													lowTime
+														? 'font-medium text-destructive'
+														: 'text-muted-foreground'
+												)}
+											>
+												{t('settings.sync.madora.status.expiresIn', {
+													time: formatRemaining(remainingMs ?? 0),
+												})}
+											</span>
+										)}
 									</div>
-									<div className="mt-4 space-y-1 text-xs text-muted-foreground">
-										<div>
-											{t('settings.sync.madora.status.primaryHost')}:{' '}
-											{pairingQr?.primaryHost ??
-												t('settings.sync.madora.status.noReachableHost')}
-										</div>
-										<div>
-											{t('settings.sync.madora.fields.port')}:{' '}
-											{pairingQr?.port ?? config.port}
+									<div
+										className="mt-4 rounded-lg border border-border/60
+											bg-muted/40 px-3 py-2"
+									>
+										<div className="flex items-center justify-between gap-2">
+											<span
+												className="truncate font-mono text-xs
+													text-muted-foreground"
+											>
+												{pairingUrl ??
+													t('settings.sync.madora.status.noReachableHost')}
+											</span>
+											{pairingUrl ? (
+												<Button
+													aria-label={t('common.actions.copy')}
+													className="shrink-0"
+													onClick={() => void handleCopy(pairingUrl, 'url')}
+													size="icon-xs"
+													variant="ghost"
+												>
+													{copied === 'url' ? <Check /> : <Copy />}
+												</Button>
+											) : null}
 										</div>
 										{pairingQr?.availableHosts.length ? (
-											<div>
+											<div
+												className="mt-1 truncate text-xs text-muted-foreground"
+											>
 												{t('settings.sync.madora.status.availableHosts')}:{' '}
 												{pairingQr.availableHosts.join(', ')}
 											</div>
