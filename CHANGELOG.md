@@ -1,3 +1,12 @@
+## [Desktop 0.3.16](https://github.com/1Yie/madora/compare/v0.3.15...v0.3.16)（2026-08-11） | Mobile 0.0.4（2026-08-11）
+
+### Features
+
+- **sync:** polish pairing card with QR container and live countdown ([d66d27b](https://github.com/1Yie/madora/commit/d66d27bc8129b3d04df21e578e255c547e6f23ca))
+- **sync:** add pairing copy and countdown i18n strings ([fb16503](https://github.com/1Yie/madora/commit/fb16503780202e2b35f07c27b078c4317aeb7bab))
+- **ai:** add new models to catalogue ([aa8ad3c](https://github.com/1Yie/madora/commit/aa8ad3ca14cc247b5e62c1d4716e2a0a8d7cf2c0))
+- **settings:** redesign settings dialog with workbench layout ([ef90f49](https://github.com/1Yie/madora/commit/ef90f49a419b92e084cd9cc5ea14c83fa1a857b6))
+
 ## [Desktop 0.3.15](https://github.com/1Yie/madora/compare/v0.3.14...v0.3.15)（2026-07-09） | Mobile 0.0.3（2026-07-09）
 
 ### Bug Fixes
