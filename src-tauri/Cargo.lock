@@ -3147,7 +3147,7 @@ checksum = "7ef0d4ed8669f8f8826eb00dc878084aa8f253506c4fd5e8f58f5bce72ddb97e"
 
 [[package]]
 name = "madora"
-version = "0.3.15"
+version = "0.3.16"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
