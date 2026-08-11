@@ -593,8 +593,6 @@ const en = {
 		syncLabel: 'Sync',
 		settingsLabel: 'WebDAV Settings',
 		connection: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: 'Connection',
 			cardTitle: 'Server Configuration',
 			serverUrl: 'Server URL',
 			username: 'Username',
@@ -605,8 +603,6 @@ const en = {
 			clearAction: 'Clear Configuration',
 		},
 		syncPanel: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: 'Sync',
 			optionsTitle: 'Sync Options',
 			remoteSubdir: 'Remote Subdirectory',
 			remoteSubdirHint:
@@ -696,12 +692,8 @@ const en = {
 		},
 		tab: {
 			commit: 'Commit',
-			commitDesc: 'Create a new commit',
 			history: 'History',
-			historyDesc: 'Commit history',
 			remote: 'Remote',
-			remoteDesc: 'Remote sync configuration',
-			authDesc: 'Authentication & credentials',
 		},
 		status: {
 			notInitialized: 'Not initialized',

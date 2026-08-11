@@ -553,8 +553,6 @@ const zhCN = {
 		syncLabel: '同步',
 		settingsLabel: 'WebDAV 设置',
 		connection: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '连接',
 			cardTitle: '服务器配置',
 			serverUrl: '服务器地址',
 			username: '用户名',
@@ -565,8 +563,6 @@ const zhCN = {
 			clearAction: '清除配置',
 		},
 		syncPanel: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '同步',
 			optionsTitle: '同步选项',
 			remoteSubdir: '远端子目录',
 			remoteSubdirHint: '可选，用于当前工作区在 WebDAV 服务器上的独立子目录。',
@@ -650,12 +646,8 @@ const zhCN = {
 		},
 		tab: {
 			commit: '提交',
-			commitDesc: '创建新提交',
 			history: '历史',
-			historyDesc: '提交记录',
 			remote: '远端',
-			remoteDesc: '远端同步配置',
-			authDesc: '认证凭据设置',
 		},
 		status: {
 			notInitialized: '未初始化',

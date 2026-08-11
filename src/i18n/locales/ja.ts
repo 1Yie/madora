@@ -585,8 +585,6 @@ const ja = {
 		syncLabel: '同期',
 		settingsLabel: 'WebDAV 設定',
 		connection: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '接続',
 			cardTitle: 'サーバー設定',
 			serverUrl: 'サーバー URL',
 			username: 'ユーザー名',
@@ -597,8 +595,6 @@ const ja = {
 			clearAction: '設定を消去',
 		},
 		syncPanel: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '同期',
 			optionsTitle: '同期オプション',
 			remoteSubdir: 'リモートのサブディレクトリ',
 			remoteSubdirHint:
@@ -688,12 +684,8 @@ const ja = {
 		},
 		tab: {
 			commit: 'コミット',
-			commitDesc: '新しいコミットを作成',
 			history: '履歴',
-			historyDesc: 'コミット履歴',
 			remote: 'リモート',
-			remoteDesc: 'リモート同期設定',
-			authDesc: '認証情報',
 		},
 		status: {
 			notInitialized: '未初期化',

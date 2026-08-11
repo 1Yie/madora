@@ -585,8 +585,6 @@ const ko = {
 		syncLabel: '동기화',
 		settingsLabel: 'WebDAV 설정',
 		connection: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '연결',
 			cardTitle: '서버 설정',
 			serverUrl: '서버 URL',
 			username: '사용자 이름',
@@ -597,8 +595,6 @@ const ko = {
 			clearAction: '설정 지우기',
 		},
 		syncPanel: {
-			sectionLabel: 'WebDAV',
-			sectionTitle: '동기화',
 			optionsTitle: '동기화 옵션',
 			remoteSubdir: '원격 하위 디렉터리',
 			remoteSubdirHint:
@@ -687,12 +683,8 @@ const ko = {
 		},
 		tab: {
 			commit: '커밋',
-			commitDesc: '새 커밋 만들기',
 			history: '히스토리',
-			historyDesc: '커밋 기록',
 			remote: '원격',
-			remoteDesc: '원격 동기화 설정',
-			authDesc: '인증 정보 설정',
 		},
 		status: {
 			notInitialized: '초기화되지 않음',
