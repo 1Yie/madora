@@ -1250,7 +1250,11 @@ const FileTreeNode = memo(function FileTreeNode({
 	);
 });
 
-export function FileExplorerSidebar() {
+export function FileExplorerSidebar({
+	footerLeading,
+}: {
+	footerLeading?: ReactNode;
+}) {
 	const { t } = useTranslation();
 	const ctx = useWorkspace();
 	const {
@@ -2733,41 +2737,46 @@ export function FileExplorerSidebar() {
 				)}
 
 				<div className={explorerSidebarStatusBarClassName}>
-					{!initialised ? (
-						<div className="flex w-full items-center justify-center gap-1.5">
-							<div
-								className="size-3 animate-pulse rounded-full
-									bg-muted-foreground/30"
+					{footerLeading ? (
+						<div className="shrink-0 pl-1.5">{footerLeading}</div>
+					) : null}
+					<div className="flex min-w-0 flex-1 items-center">
+						{!initialised ? (
+							<div className="flex w-full items-center justify-center gap-1.5">
+								<div
+									className="size-3 animate-pulse rounded-full
+										bg-muted-foreground/30"
+								/>
+								<div
+									className="h-2.5 w-16 animate-pulse rounded
+										bg-muted-foreground/20"
+								/>
+							</div>
+						) : syncEnabled && syncMode === 'git' ? (
+							<GitPanel
+								busy={gitBusy}
+								disabled={!root || busy || createBusy || operationBusy !== null}
+								onRefresh={onGitRefresh}
+								onRefreshWorkspace={onGitRefreshWorkspace}
+								onStatusChange={onGitStatusChange}
+								rootPath={root?.path ?? null}
+								status={gitStatus}
 							/>
-							<div
-								className="h-2.5 w-16 animate-pulse rounded
-									bg-muted-foreground/20"
+						) : syncEnabled && syncMode === 'webdav' ? (
+							<WebDavPanel
+								disabled={!root || busy || createBusy || operationBusy !== null}
+								workspaceRoot={root?.path ?? null}
 							/>
-						</div>
-					) : syncEnabled && syncMode === 'git' ? (
-						<GitPanel
-							busy={gitBusy}
-							disabled={!root || busy || createBusy || operationBusy !== null}
-							onRefresh={onGitRefresh}
-							onRefreshWorkspace={onGitRefreshWorkspace}
-							onStatusChange={onGitStatusChange}
-							rootPath={root?.path ?? null}
-							status={gitStatus}
-						/>
-					) : syncEnabled && syncMode === 'webdav' ? (
-						<WebDavPanel
-							disabled={!root || busy || createBusy || operationBusy !== null}
-							workspaceRoot={root?.path ?? null}
-						/>
-					) : (
-						<div
-							className="flex w-full items-center justify-center gap-1.5
-								text-muted-foreground"
-						>
-							<CloudOff className="size-3" />
-							<span>{t('explorerPanel.syncNotEnabled')}</span>
-						</div>
-					)}
+						) : (
+							<div
+								className="flex w-full items-center justify-center gap-1.5
+									text-muted-foreground"
+							>
+								<CloudOff className="size-3" />
+								<span>{t('explorerPanel.syncNotEnabled')}</span>
+							</div>
+						)}
+					</div>
 				</div>
 			</aside>
 

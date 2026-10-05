@@ -21,6 +21,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
 import { useWorkspace } from '@/context/workspace-provider';
+import { isMac } from '@/lib/platform';
 import { isSameOrDescendantPath } from '@/lib/path-utils';
 
 export type TabEntry = {
@@ -197,225 +198,251 @@ export function TabBar() {
 		};
 	}, [tabs, activeTabId, isScroll]);
 
-	if (tabs.length === 0) return null;
 	const draggedTab = dragTabId
 		? tabs.find((tab) => tab.id === dragTabId)
 		: null;
 
 	return (
-		<div className={isScroll ? 'relative' : ''}>
+		<div className="relative">
+			{/* The top strip is also the window drag region. Scroll mode keeps a
+				trailing spacer for the frameless window controls; wrap mode carves
+				the same corner out of the first row with an in-flow float so later
+				rows use the full width again. Wrap mode never scrolls: the float
+				only protects the first row, so that row must stay at the top. */}
 			<div
-				ref={isScroll ? scrollRef : undefined}
-				style={isScroll ? { overflowX: 'auto' } : undefined}
-				data-no-os
-				className={
-					isScroll
-						? `h-8 shrink-0 border-b border-border bg-muted/30
-							[scrollbar-width:none] [-ms-overflow-style:none]
-							[&::-webkit-scrollbar]:hidden`
-						: 'shrink-0 overflow-hidden border-b border-border bg-muted/30'
-				}
-				role="tablist"
+				data-tauri-drag-region
+				className={cn(
+					'flex shrink-0 border-b border-border bg-muted/30',
+					isScroll && 'h-8'
+				)}
 			>
 				<div
-					ref={isScroll ? contentRef : undefined}
+					ref={scrollRef}
+					style={isScroll ? { overflowX: 'auto' } : undefined}
+					data-no-os
+					data-tauri-drag-region
 					className={
 						isScroll
-							? 'flex flex-row h-full w-max items-stretch'
-							: 'flex flex-row flex-wrap items-end -mb-px'
+							? `h-full min-w-0 flex-1 [scrollbar-width:none]
+								[-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden`
+							: 'min-w-0 flex-1 overflow-hidden'
 					}
+					role="tablist"
 				>
-					{tabs.map((tab) => {
-						const isActive = tab.id === activeTabId;
-						const Icon: Icon =
-							tab.node.fileKind === 'image'
-								? FileImage
-								: tab.node.fileKind === 'markdown'
-									? FileMd
-									: FileText;
-						const fileName =
-							tab.node.name ||
-							(tab.node.path.replace(/\\/g, '/').split('/').pop() ?? '');
-						const tabIndex = tabs.indexOf(tab);
-						const leftTabIds = tabs.slice(0, tabIndex).map((t) => t.id);
-						const rightTabIds = tabs.slice(tabIndex + 1).map((t) => t.id);
-						const otherTabIds = tabs
-							.filter((t) => t.id !== tab.id)
-							.map((t) => t.id);
-						const allTabIds = tabs.map((t) => t.id);
-						const insertBefore = dragOverIndex === tabIndex;
-						const insertAfter =
-							dragOverIndex === tabs.length && tabIndex === tabs.length - 1;
+					<div
+						ref={contentRef}
+						data-tauri-drag-region
+						className={
+							isScroll ? 'flex flex-row h-full w-max items-stretch' : '-mb-px'
+						}
+					>
+						{!isScroll && !isMac && (
+							<div
+								className="float-right h-8 w-[116px]"
+								data-tauri-drag-region
+							/>
+						)}
+						{tabs.map((tab) => {
+							const isActive = tab.id === activeTabId;
+							const Icon: Icon =
+								tab.node.fileKind === 'image'
+									? FileImage
+									: tab.node.fileKind === 'markdown'
+										? FileMd
+										: FileText;
+							const fileName =
+								tab.node.name ||
+								(tab.node.path.replace(/\\/g, '/').split('/').pop() ?? '');
+							const tabIndex = tabs.indexOf(tab);
+							const leftTabIds = tabs.slice(0, tabIndex).map((t) => t.id);
+							const rightTabIds = tabs.slice(tabIndex + 1).map((t) => t.id);
+							const otherTabIds = tabs
+								.filter((t) => t.id !== tab.id)
+								.map((t) => t.id);
+							const allTabIds = tabs.map((t) => t.id);
+							const insertBefore = dragOverIndex === tabIndex;
+							const insertAfter =
+								dragOverIndex === tabs.length && tabIndex === tabs.length - 1;
 
-						return (
-							<ContextMenuRoot key={tab.id}>
-								<ContextMenuTrigger>
-									<Tooltip>
-										<TooltipTrigger
-											render={
-												<button
-													onPointerDown={(e) =>
-														handlePointerDown(e, tab.id, tabIndex)
-													}
-													onPointerMove={handlePointerMove}
-													onPointerUp={handlePointerEnd}
-													onPointerCancel={handlePointerEnd}
-													data-tab-drag-index={tabIndex}
-													className={cn(
-														`group relative flex h-8 shrink-0 cursor-pointer
-														items-center gap-1.5 select-none`,
-														'border-r border-border pl-4 pr-1 text-xs',
-														!isScroll && 'border-b border-border',
-														'transition-colors duration-100',
-														'hover:bg-muted/50',
-														`focus-visible:outline-none
-														focus-visible:bg-muted/50`,
-														insertBefore &&
-															'border-l-2 border-l-primary border-r-0',
-														insertAfter && 'border-r-2 border-r-primary',
-														dragTabId === tab.id && 'opacity-40',
-														isActive
-															? 'bg-background text-foreground'
-															: 'text-muted-foreground hover:text-foreground',
-														tab.node.isMissing &&
-															`text-muted-foreground/60
-															hover:text-muted-foreground/80`
-													)}
-													onClick={() => {
-														if (suppressClickRef.current) {
-															suppressClickRef.current = false;
-															return;
+							return (
+								<ContextMenuRoot key={tab.id}>
+									{/* Wrap mode uses inline flow so tabs wrap around the
+									corner float — the trigger div is the flow item. */}
+									<ContextMenuTrigger
+										className={isScroll ? undefined : 'inline-flex align-top'}
+									>
+										<Tooltip>
+											<TooltipTrigger
+												render={
+													<button
+														onPointerDown={(e) =>
+															handlePointerDown(e, tab.id, tabIndex)
 														}
-														selectTab(tab.id);
+														onPointerMove={handlePointerMove}
+														onPointerUp={handlePointerEnd}
+														onPointerCancel={handlePointerEnd}
+														data-tab-drag-index={tabIndex}
+														className={cn(
+															`group relative flex h-8 shrink-0 cursor-pointer
+															items-center gap-1.5 select-none`,
+															'border-r border-border pl-4 pr-1 text-xs',
+															!isScroll && 'border-b border-border',
+															'transition-colors duration-100',
+															'hover:bg-muted/50',
+															`focus-visible:outline-none
+															focus-visible:bg-muted/50`,
+															insertBefore &&
+																'border-l-2 border-l-primary border-r-0',
+															insertAfter && 'border-r-2 border-r-primary',
+															dragTabId === tab.id && 'opacity-40',
+															isActive
+																? 'bg-background text-foreground'
+																: 'text-muted-foreground hover:text-foreground',
+															tab.node.isMissing &&
+																`text-muted-foreground/60
+																hover:text-muted-foreground/80`
+														)}
+														onClick={() => {
+															if (suppressClickRef.current) {
+																suppressClickRef.current = false;
+																return;
+															}
+															selectTab(tab.id);
+														}}
+														onMouseDown={(e) => {
+															if (e.button === 1) {
+																e.preventDefault();
+																closeTabAction(tab.id);
+															}
+														}}
+														role="tab"
+														aria-selected={isActive}
+														type="button"
+													/>
+												}
+											>
+												{isActive && (
+													<div
+														className={cn(
+															'absolute inset-x-0 top-0 h-0.5',
+															tab.node.isMissing
+																? 'bg-muted-foreground/40'
+																: 'bg-primary'
+														)}
+														aria-hidden="true"
+													/>
+												)}
+												<Icon
+													className={cn(
+														'size-3.5 shrink-0',
+														tab.node.isMissing && 'opacity-50'
+													)}
+												/>
+												<span
+													className={cn(
+														'max-w-32 truncate leading-4 pb-px',
+														tab.node.isMissing && 'line-through'
+													)}
+												>
+													{root &&
+													!isSameOrDescendantPath(tab.node.path, root.path) &&
+													!tab.node.isMissing
+														? `⟨${fileName}⟩`
+														: fileName}
+												</span>
+												<span
+													className={cn(
+														`ml-0.5 flex size-4 shrink-0 items-center
+														justify-center rounded-sm`,
+														'transition-colors',
+														'hover:bg-muted-foreground/20',
+														'focus-visible:outline-none'
+													)}
+													onClick={(e) => {
+														e.stopPropagation();
+														e.preventDefault();
+														closeTabAction(tab.id);
 													}}
-													onMouseDown={(e) => {
-														if (e.button === 1) {
-															e.preventDefault();
+													onKeyDown={(e) => {
+														if (e.key === 'Enter' || e.key === ' ') {
+															e.stopPropagation();
 															closeTabAction(tab.id);
 														}
 													}}
-													role="tab"
-													aria-selected={isActive}
-													type="button"
-												/>
-											}
-										>
-											{isActive && (
-												<div
-													className={cn(
-														'absolute inset-x-0 top-0 h-0.5',
-														tab.node.isMissing
-															? 'bg-muted-foreground/40'
-															: 'bg-primary'
+													role="button"
+													tabIndex={-1}
+													aria-label={t('tabBar.closeTabWithName', {
+														name: fileName,
+													})}
+												>
+													{tab.unsaved ? (
+														<>
+															<span className="group-hover:hidden">
+																<span
+																	className="block size-2 rounded-full
+																		bg-muted-foreground"
+																/>
+															</span>
+															<span className="hidden group-hover:block">
+																<X className="size-3" />
+															</span>
+														</>
+													) : (
+														<X className="size-3" />
 													)}
-													aria-hidden="true"
-												/>
-											)}
-											<Icon
-												className={cn(
-													'size-3.5 shrink-0',
-													tab.node.isMissing && 'opacity-50'
-												)}
-											/>
-											<span
-												className={cn(
-													'max-w-32 truncate leading-4 pb-px',
-													tab.node.isMissing && 'line-through'
-												)}
-											>
+												</span>
+											</TooltipTrigger>
+											<TooltipPopup side="bottom" sideOffset={0}>
+												{tab.node.path}
 												{root &&
-												!isSameOrDescendantPath(tab.node.path, root.path) &&
-												!tab.node.isMissing
-													? `⟨${fileName}⟩`
-													: fileName}
-											</span>
-											<span
-												className={cn(
-													`ml-0.5 flex size-4 shrink-0 items-center
-													justify-center rounded-sm`,
-													'transition-colors',
-													'hover:bg-muted-foreground/20',
-													'focus-visible:outline-none'
-												)}
-												onClick={(e) => {
-													e.stopPropagation();
-													e.preventDefault();
-													closeTabAction(tab.id);
-												}}
-												onKeyDown={(e) => {
-													if (e.key === 'Enter' || e.key === ' ') {
-														e.stopPropagation();
-														closeTabAction(tab.id);
-													}
-												}}
-												role="button"
-												tabIndex={-1}
-												aria-label={t('tabBar.closeTabWithName', {
-													name: fileName,
-												})}
-											>
-												{tab.unsaved ? (
-													<>
-														<span className="group-hover:hidden">
-															<span
-																className="block size-2 rounded-full
-																	bg-muted-foreground"
-															/>
-														</span>
-														<span className="hidden group-hover:block">
-															<X className="size-3" />
-														</span>
-													</>
-												) : (
-													<X className="size-3" />
-												)}
-											</span>
-										</TooltipTrigger>
-										<TooltipPopup side="bottom" sideOffset={0}>
-											{tab.node.path}
-											{root &&
-												!isSameOrDescendantPath(tab.node.path, root.path) &&
-												` - ${t('tabBar.outsideWorkspace')}`}
-										</TooltipPopup>
-									</Tooltip>
-								</ContextMenuTrigger>
-								<ContextMenuPopup align="start" sideOffset={4}>
-									<MenuItem onClick={() => closeTabAction(tab.id)}>
-										<X className="size-3.5" />
-										{t('tabBar.closeCurrent')}
-									</MenuItem>
-									<MenuSeparator />
-									<MenuItem
-										onClick={() => closeTabsAction(leftTabIds)}
-										disabled={leftTabIds.length === 0}
-									>
-										<ChevronLeft className="size-3.5" />
-										{t('tabBar.closeLeft')}
-									</MenuItem>
-									<MenuItem
-										onClick={() => closeTabsAction(rightTabIds)}
-										disabled={rightTabIds.length === 0}
-									>
-										<ChevronRight className="size-3.5" />
-										{t('tabBar.closeRight')}
-									</MenuItem>
-									<MenuSeparator />
-									<MenuItem
-										onClick={() => closeTabsAction(otherTabIds)}
-										disabled={otherTabIds.length === 0}
-									>
-										<Focus className="size-3.5" />
-										{t('tabBar.keepCurrentOnly')}
-									</MenuItem>
-									<MenuItem onClick={() => closeTabsAction(allTabIds)}>
-										<SquareX className="size-3.5" />
-										{t('tabBar.closeAll')}
-									</MenuItem>
-								</ContextMenuPopup>
-							</ContextMenuRoot>
-						);
-					})}
+													!isSameOrDescendantPath(tab.node.path, root.path) &&
+													` - ${t('tabBar.outsideWorkspace')}`}
+											</TooltipPopup>
+										</Tooltip>
+									</ContextMenuTrigger>
+									<ContextMenuPopup align="start" sideOffset={4}>
+										<MenuItem onClick={() => closeTabAction(tab.id)}>
+											<X className="size-3.5" />
+											{t('tabBar.closeCurrent')}
+										</MenuItem>
+										<MenuSeparator />
+										<MenuItem
+											onClick={() => closeTabsAction(leftTabIds)}
+											disabled={leftTabIds.length === 0}
+										>
+											<ChevronLeft className="size-3.5" />
+											{t('tabBar.closeLeft')}
+										</MenuItem>
+										<MenuItem
+											onClick={() => closeTabsAction(rightTabIds)}
+											disabled={rightTabIds.length === 0}
+										>
+											<ChevronRight className="size-3.5" />
+											{t('tabBar.closeRight')}
+										</MenuItem>
+										<MenuSeparator />
+										<MenuItem
+											onClick={() => closeTabsAction(otherTabIds)}
+											disabled={otherTabIds.length === 0}
+										>
+											<Focus className="size-3.5" />
+											{t('tabBar.keepCurrentOnly')}
+										</MenuItem>
+										<MenuItem onClick={() => closeTabsAction(allTabIds)}>
+											<SquareX className="size-3.5" />
+											{t('tabBar.closeAll')}
+										</MenuItem>
+									</ContextMenuPopup>
+								</ContextMenuRoot>
+							);
+						})}
+					</div>
 				</div>
+				{/* Reserved space for the frameless window controls (fixed top-right).
+					Wrap mode carves the corner inside the flow via the float instead. */}
+				{isScroll && !isMac && (
+					<div className="w-[116px] shrink-0" data-tauri-drag-region />
+				)}
 			</div>
 
 			{isScroll && (
@@ -423,14 +450,17 @@ export function TabBar() {
 					<div
 						className="pointer-events-none absolute left-0 top-0 bottom-0 w-6
 							bg-linear-to-r from-black/8 to-transparent transition-opacity
-							duration-150"
+							duration-150 dark:from-white/12"
 						style={{ opacity: showLeftShadow ? 1 : 0 }}
 					/>
 					<div
 						className="pointer-events-none absolute right-0 top-0 bottom-0 w-6
 							bg-linear-to-l from-black/8 to-transparent transition-opacity
-							duration-150"
-						style={{ opacity: showRightShadow ? 1 : 0 }}
+							duration-150 dark:from-white/12"
+						style={{
+							opacity: showRightShadow ? 1 : 0,
+							right: isMac ? 0 : 116,
+						}}
 					/>
 				</>
 			)}

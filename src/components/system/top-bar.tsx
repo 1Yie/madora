@@ -7,7 +7,6 @@ import { hideWindow, quitApp } from '@/invoke/system';
 import { X, Square, Minus } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { SettingsDialog } from '@/components/system/settings-dialog';
 import { Button } from '@/components/ui/button';
 import {
 	Dialog,
@@ -19,6 +18,12 @@ import {
 } from '@/components/ui/dialog';
 import { showErrorToast } from '@/components/ui/toast';
 import { useTranslation } from 'react-i18next';
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { isMac } from '@/lib/platform';
 import {
 	clearStoredMarkdownDrafts,
 	hasUnsaved,
@@ -150,44 +155,72 @@ export default function Titlebar() {
 
 	return (
 		<>
-			<div
-				data-tauri-drag-region
-				className="flex h-9 items-center justify-between border-b border-border
-					bg-muted/80 text-foreground select-none z-50"
-			>
-				<div className="flex items-center ml-4 gap-2 pointer-events-none">
-					<span className="text-sm font-medium text-muted-foreground">
-						Madora
-					</span>
+			{/* Frameless window controls pinned over the tab strip's right end.
+				macOS uses the native traffic lights instead. */}
+			{isMac ? null : (
+				<div
+					className="fixed top-0 right-0 z-[41] flex h-8 items-center
+						text-foreground select-none"
+				>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<button
+									type="button"
+									aria-label={t('topBar.controls.minimize')}
+									onClick={() => void minimizeWindow()}
+									className="flex h-full items-center px-3 text-muted-foreground
+										transition-colors hover:bg-accent
+										hover:text-accent-foreground"
+								/>
+							}
+						>
+							<Minus size={14} />
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t('topBar.controls.minimize')}
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<button
+									type="button"
+									aria-label={t('topBar.controls.maximize')}
+									onClick={() => void toggleMaximizeWindow()}
+									className="flex h-full items-center px-3 text-muted-foreground
+										transition-colors hover:bg-accent
+										hover:text-accent-foreground"
+								/>
+							}
+						>
+							<Square size={12} />
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t('topBar.controls.maximize')}
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<button
+									type="button"
+									aria-label={t('topBar.controls.close')}
+									onClick={() => void requestClose()}
+									className="group flex h-full items-center px-3
+										text-muted-foreground transition-colors hover:bg-red-500/80
+										hover:text-white"
+								/>
+							}
+						>
+							<X size={14} />
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{t('topBar.controls.close')}
+						</TooltipContent>
+					</Tooltip>
 				</div>
-				<div className="flex items-center h-full">
-					<SettingsDialog />
-					<button
-						type="button"
-						onClick={() => void minimizeWindow()}
-						className="flex h-full items-center px-3 text-muted-foreground
-							transition-colors hover:bg-accent hover:text-accent-foreground"
-					>
-						<Minus size={14} />
-					</button>
-					<button
-						type="button"
-						onClick={() => void toggleMaximizeWindow()}
-						className="flex h-full items-center px-3 text-muted-foreground
-							transition-colors hover:bg-accent hover:text-accent-foreground"
-					>
-						<Square size={12} />
-					</button>
-					<button
-						type="button"
-						onClick={() => void requestClose()}
-						className="group flex h-full items-center px-3 text-muted-foreground
-							transition-colors hover:bg-red-500/80 hover:text-white"
-					>
-						<X size={14} className="group-hover:text-white" />
-					</button>
-				</div>
-			</div>
+			)}
 			<Dialog
 				open={confirmMode !== null}
 				onOpenChange={(open) => {

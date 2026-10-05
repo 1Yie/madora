@@ -54,6 +54,8 @@ const ja = {
 	settings: {
 		openAria: '設定を開く',
 		dialogTitle: '設定',
+		back: 'ワークスペースに戻る',
+		groups: { basic: '基本設定', system: 'システム' },
 		sections: {
 			about: { label: '情報' },
 			appearance: { label: '外観' },
@@ -439,6 +441,11 @@ const ja = {
 		},
 	},
 	topBar: {
+		controls: {
+			minimize: '最小化',
+			maximize: '最大化',
+			close: '閉じる',
+		},
 		saveFailureFallback: '閉じる前の保存に失敗しました',
 		toasts: {
 			saveFailed: '閉じる前の保存に失敗しました',

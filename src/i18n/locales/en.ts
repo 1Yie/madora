@@ -55,6 +55,8 @@ const en = {
 	settings: {
 		openAria: 'Open settings',
 		dialogTitle: 'Settings',
+		back: 'Back to workspace',
+		groups: { basic: 'General', system: 'System' },
 		sections: {
 			about: { label: 'About' },
 			appearance: { label: 'Appearance' },
@@ -448,6 +450,11 @@ const en = {
 		},
 	},
 	topBar: {
+		controls: {
+			minimize: 'Minimize',
+			maximize: 'Maximize',
+			close: 'Close',
+		},
 		saveFailureFallback: 'Failed to save before closing',
 		toasts: {
 			saveFailed: 'Failed to save before closing',

@@ -54,6 +54,8 @@ const zhCN = {
 	settings: {
 		openAria: '打开设置',
 		dialogTitle: '设置',
+		back: '返回工作区',
+		groups: { basic: '基础设置', system: '系统' },
 		sections: {
 			about: { label: '关于' },
 			appearance: { label: '外观' },
@@ -412,6 +414,11 @@ const zhCN = {
 		},
 	},
 	topBar: {
+		controls: {
+			minimize: '最小化',
+			maximize: '最大化',
+			close: '关闭',
+		},
 		saveFailureFallback: '关闭前保存失败',
 		toasts: {
 			saveFailed: '关闭前保存失败',

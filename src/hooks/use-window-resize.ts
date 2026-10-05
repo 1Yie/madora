@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { startResizeDragging } from '@/invoke/window';
+import { isMac } from '@/lib/platform';
 
 type ResizeDirection =
 	| 'North'
@@ -50,6 +51,9 @@ function getResizeDirection(
 
 export function useWindowResize() {
 	useEffect(() => {
+		// macOS keeps native decorations, so edge resizing is handled by the OS.
+		if (isMac) return;
+
 		const handleMouseMove = (e: MouseEvent) => {
 			const dir = getResizeDirection(e, window.innerWidth, window.innerHeight);
 			document.body.style.cursor = dir ? CURSOR_MAP[dir] : '';

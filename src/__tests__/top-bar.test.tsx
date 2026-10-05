@@ -18,10 +18,6 @@ const appSettings = {
 	closeBehavior: 'minimize' as 'minimize' | 'exit',
 };
 
-vi.mock('@/components/system/settings-dialog', () => ({
-	SettingsDialog: () => <div data-testid="settings-dialog" />,
-}));
-
 vi.mock('@/invoke/window', () => ({
 	minimizeWindow: vi.fn(),
 	onCloseRequested: (...args: unknown[]) => mockOnCloseRequested(...args),

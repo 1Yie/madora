@@ -1,10 +1,13 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { WorkspaceProvider, useWorkspace } from '@/context/workspace-provider';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
 import { FilePreview } from '@/components/explorer/file/file-preview';
 import { TabBar } from '@/components/explorer/workspace/tab-bar';
+import appIcon from '@/assets/icon.png';
+import { explorerSidebarStatusBarClassName } from '@/components/explorer/layout';
+import { isMac } from '@/lib/platform';
 
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
@@ -13,15 +16,44 @@ function clampSidebarWidth(width: number): number {
 	return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 }
 
-export function WorkspaceBrowser() {
+type WorkspaceBrowserProps = {
+	/** Top bar of the content pane (drag region, window controls). */
+	header?: ReactNode;
+	/** Shown at the left of the sidebar status bar (the settings button). */
+	sidebarFooter?: ReactNode;
+};
+
+export function WorkspaceBrowser(props: WorkspaceBrowserProps) {
 	return (
 		<WorkspaceProvider>
-			<WorkspaceBrowserContent />
+			<WorkspaceBrowserContent {...props} />
 		</WorkspaceProvider>
 	);
 }
 
-function WorkspaceBrowserContent() {
+function SidebarBrand() {
+	return (
+		<div
+			data-tauri-drag-region
+			className="flex h-10 shrink-0 items-center gap-2 px-4 select-none"
+		>
+			{/* Clear the macOS traffic lights (they overlay the window top-left). */}
+			{isMac && <div className="w-[52px] shrink-0" />}
+			<img
+				alt=""
+				className="pointer-events-none size-5 rounded-md"
+				draggable={false}
+				src={appIcon}
+			/>
+			<span className="pointer-events-none text-sm font-semibold">Madora</span>
+		</div>
+	);
+}
+
+function WorkspaceBrowserContent({
+	header,
+	sidebarFooter,
+}: WorkspaceBrowserProps) {
 	const { t } = useTranslation();
 	const { sidebarWidth, setSidebarWidth, root, initialised } = useWorkspace();
 
@@ -61,27 +93,28 @@ function WorkspaceBrowserContent() {
 		[sidebarWidth, setSidebarWidth]
 	);
 
-	if (!initialised) {
-		return (
-			<div className="flex h-full min-h-0 bg-background text-foreground">
-				<div
-					className="relative flex h-full min-h-0 shrink-0"
-					style={{ width: `${sidebarWidth}px` }}
-				>
-					<div className="flex-1" />
-				</div>
-				<main className="flex min-w-0 flex-1 flex-col overflow-hidden" />
-			</div>
-		);
-	}
-
 	return (
 		<div className="flex h-full min-h-0 bg-background text-foreground">
 			<div
-				className="relative flex h-full min-h-0 shrink-0"
+				className="relative flex h-full min-h-0 shrink-0 flex-col bg-sidebar
+					text-sidebar-foreground"
 				style={{ width: `${sidebarWidth}px` }}
 			>
-				<FileExplorerSidebar key={root?.path ?? 'empty'} />
+				<SidebarBrand />
+				<div className="flex min-h-0 flex-1">
+					{initialised ? (
+						<FileExplorerSidebar
+							footerLeading={sidebarFooter}
+							key={root?.path ?? 'empty'}
+						/>
+					) : (
+						<div className="flex flex-1 flex-col justify-end">
+							<div className={explorerSidebarStatusBarClassName}>
+								<div className="pl-1.5">{sidebarFooter}</div>
+							</div>
+						</div>
+					)}
+				</div>
 				<div
 					aria-label={t('workspace.resizeSidebar')}
 					className="group absolute inset-y-0 right-0 z-10 w-3 translate-x-1/2
@@ -97,13 +130,18 @@ function WorkspaceBrowserContent() {
 				</div>
 			</div>
 			<main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-				<TabBar />
-				<div
-					className="flex min-h-0 flex-1 flex-col overflow-hidden"
-					data-no-os
-				>
-					<FilePreview />
-				</div>
+				{header}
+				{initialised ? (
+					<>
+						<TabBar />
+						<div
+							className="flex min-h-0 flex-1 flex-col overflow-hidden"
+							data-no-os
+						>
+							<FilePreview />
+						</div>
+					</>
+				) : null}
 			</main>
 		</div>
 	);

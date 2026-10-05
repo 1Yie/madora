@@ -55,6 +55,8 @@ const ko = {
 	settings: {
 		openAria: '설정 열기',
 		dialogTitle: '설정',
+		back: '작업 공간으로 돌아가기',
+		groups: { basic: '기본 설정', system: '시스템' },
 		sections: {
 			about: { label: '정보' },
 			appearance: { label: '모양' },
@@ -441,6 +443,11 @@ const ko = {
 		},
 	},
 	topBar: {
+		controls: {
+			minimize: '최소화',
+			maximize: '최대화',
+			close: '닫기',
+		},
 		saveFailureFallback: '닫기 전에 저장하지 못했습니다',
 		toasts: {
 			saveFailed: '닫기 전에 저장하지 못했습니다',

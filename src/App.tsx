@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showWindow } from '@/invoke/system';
 import { getAppInfo } from '@/invoke/app';
@@ -9,6 +9,10 @@ import {
 import { checkForAppUpdate } from '@/lib/update-check';
 import { showUpdateAvailableToast } from '@/lib/update-toast';
 import Titlebar from './components/system/top-bar';
+import {
+	SettingsButton,
+	SettingsPage,
+} from '@/components/system/settings-page';
 import { useWindowResize } from '@/hooks/use-window-resize';
 import { useZoomShortcuts } from '@/hooks/use-zoom-shortcuts';
 import { useOverlayScrollbars } from '@/hooks/use-overlay-scrollbars';
@@ -23,6 +27,9 @@ function App() {
 	const [showSetupWizard, setShowSetupWizard] = useState(() =>
 		shouldShowSetupWizard()
 	);
+
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
 	useWindowResize();
 	useOverlayScrollbars();
@@ -83,12 +90,17 @@ function App() {
 
 	return (
 		<div className="flex h-screen flex-col bg-background text-foreground">
-			<Titlebar />
 			{showSetupWizard && (
 				<SetupWizard onComplete={() => setShowSetupWizard(false)} />
 			)}
+			<SettingsPage open={settingsOpen} onClose={closeSettings} />
 			<div className="min-h-0 flex-1">
-				<MainLayout />
+				<MainLayout
+					header={<Titlebar />}
+					sidebarFooter={
+						<SettingsButton onClick={() => setSettingsOpen(true)} />
+					}
+				/>
 			</div>
 		</div>
 	);
