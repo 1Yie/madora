@@ -112,12 +112,12 @@ function renderTab(props = {}) {
 describe('GitTabCommit', () => {
 	it('renders empty state with no changes message', () => {
 		renderTab();
-		expect(screen.getByText('没有更改需要提交。')).toBeInTheDocument();
+		expect(screen.getByText('没有变更')).toBeInTheDocument();
 	});
 
 	it('shows unstaged files section', () => {
 		renderTab({ status: statusWithFiles });
-		expect(screen.getByText('更改')).toBeInTheDocument();
+		expect(screen.getByText('变更')).toBeInTheDocument();
 		expect(screen.getByText(/file1\.ts/)).toBeInTheDocument();
 	});
 
@@ -135,10 +135,12 @@ describe('GitTabCommit', () => {
 	it('shows markerless conflict guidance', () => {
 		renderTab({ status: statusWithMarkerlessConflicts });
 		expect(
-			screen.getByText('这些冲突没有内联标记；确认当前工作区版本后可直接暂存。')
+			screen.getByText(
+				'这些冲突没有内联标记，确认保留当前工作区版本后即可直接暂存。'
+			)
 		).toBeInTheDocument();
 		expect(
-			screen.getByRole('button', { name: '暂存并标记冲突已解决' })
+			screen.getByRole('button', { name: '暂存当前版本并标记为已解决' })
 		).toBeInTheDocument();
 	});
 });

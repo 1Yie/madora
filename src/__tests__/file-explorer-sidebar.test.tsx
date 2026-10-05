@@ -456,7 +456,7 @@ describe('FileExplorerSidebar', () => {
 		fireEvent.contextMenu(screen.getByRole('button', { name: 'readme.md' }));
 
 		expect(await screen.findByText('粘贴到此处')).toBeInTheDocument();
-		expect(screen.getByText('已复制: notes.txt')).toBeInTheDocument();
+		expect(screen.getByText('复制: notes.txt')).toBeInTheDocument();
 	});
 
 	describe('keyboard shortcuts', () => {

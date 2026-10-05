@@ -1,5 +1,16 @@
-import { vi } from 'vitest';
+import { beforeAll, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+
+// ── i18n ───────────────────────────────────────────────────────────────
+// Components render translated text, so the i18next instance must be
+// initialised and pinned to a known locale. Without this, files whose import
+// graph never reaches `@/i18n` render raw keys, and files that do reach it
+// follow the host locale instead of the locale the assertions expect.
+import i18n from '@/i18n';
+
+beforeAll(async () => {
+	await i18n.changeLanguage('zh-CN');
+});
 
 // ── DOM API polyfills for test environment ──────────────────────────────
 // @base-ui/react and other UI libs rely on APIs that jsdom/happy-dom lack.
