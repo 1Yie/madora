@@ -166,6 +166,9 @@ function ErrorToastDescription({
 			)}
 			<div
 				ref={containerRef}
+				// The scrollbar belongs to this container, so presses on it would
+				// bubble to Toast.Root and start a swipe-dismiss of the whole toast.
+				data-base-ui-swipe-ignore=""
 				className="mt-1 max-w-full overflow-x-auto overflow-y-hidden rounded-md
 					border border-border/80 bg-muted/60 overscroll-x-contain"
 				onWheelCapture={(event) => event.stopPropagation()}
