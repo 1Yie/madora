@@ -42,7 +42,7 @@ import {
 	DialogPopup,
 	DialogTitle,
 } from '@/components/ui/dialog';
-import { DialogWorkbench } from '@/components/ui/dialog-workbench';
+import { WorkbenchFooter, WorkbenchPage } from '@/components/ui/workbench-page';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverPopup, PopoverTrigger } from '@/components/ui/popover';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
@@ -850,13 +850,13 @@ export function GitPanel({
 									<span className="min-w-0 flex-1 truncate">{summary}</span>
 								</div>
 							</TooltipTrigger>
-							<TooltipContent className="max-w-80" side="top">
-								<div className="flex min-w-0 items-center gap-1.5">
+							<TooltipContent side="top">
+								<div className="flex items-center gap-1.5 whitespace-nowrap">
 									<span className="shrink-0 font-medium text-foreground">
 										{branchLabel}
 									</span>
 									<span className="text-muted-foreground">·</span>
-									<GitSummaryIcons status={status} />
+									<GitSummaryIcons className="flex-nowrap" status={status} />
 								</div>
 							</TooltipContent>
 						</Tooltip>
@@ -915,15 +915,21 @@ export function GitPanel({
 											}}
 											value={newBranchName}
 										/>
-										<Button
-											disabled={!newBranchName.trim() || branchActionBusy}
-											onClick={() => void createBranch()}
-											size="icon-lg"
-											className="rounded-full"
-											variant="outline"
-										>
-											<Plus />
-										</Button>
+										<Tooltip>
+											<TooltipTrigger render={<span />}>
+												<Button
+													aria-label={t('git.createBranch')}
+													disabled={!newBranchName.trim() || branchActionBusy}
+													onClick={() => void createBranch()}
+													size="icon-lg"
+													className="rounded-full"
+													variant="outline"
+												>
+													<Plus />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>{t('git.createBranch')}</TooltipContent>
+										</Tooltip>
 									</div>
 								</div>
 							</div>
@@ -966,13 +972,13 @@ export function GitPanel({
 								<span className="min-w-0 flex-1 truncate">{summary}</span>
 							</div>
 						</TooltipTrigger>
-						<TooltipContent className="max-w-80" side="top">
-							<div className="flex min-w-0 items-center gap-1.5">
+						<TooltipContent side="top">
+							<div className="flex items-center gap-1.5 whitespace-nowrap">
 								<span className="shrink-0 font-medium text-foreground">
 									{branchLabel}
 								</span>
 								<span className="text-muted-foreground">·</span>
-								<GitSummaryIcons status={status} />
+								<GitSummaryIcons className="flex-nowrap" status={status} />
 							</div>
 						</TooltipContent>
 					</Tooltip>
@@ -996,55 +1002,66 @@ export function GitPanel({
 						</Button>
 					) : (
 						<>
-							<Button
-								disabled={!canOperate}
-								onClick={() => void fetchRemote()}
-								size="icon-xs"
-								variant="ghost"
-							>
-								<ArrowDownToLine />
-							</Button>
-							<Button
-								disabled={!canOperate}
-								onClick={() => openWorkbench('remote')}
-								size="icon-xs"
-								variant="ghost"
-							>
-								<Settings2 />
-							</Button>
-							<Button
-								disabled={!canOperate}
-								onClick={() => openWorkbench('history')}
-								size="icon-xs"
-								variant="ghost"
-							>
-								<History />
-							</Button>
-							<Button
-								disabled={!canOperate}
-								onClick={() => openWorkbench('commit')}
-								size="icon-xs"
-								variant="ghost"
-							>
-								<Check />
-							</Button>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('git.fetch')}
+										disabled={!canOperate}
+										onClick={() => void fetchRemote()}
+										size="icon-xs"
+										variant="ghost"
+									>
+										<ArrowDownToLine />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{t('git.fetch')}</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('git.tab.commit')}
+										disabled={!canOperate}
+										onClick={() => openWorkbench('commit')}
+										size="icon-xs"
+										variant="ghost"
+									>
+										<Check />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('git.tab.commit')}
+								</TooltipContent>
+							</Tooltip>
 						</>
 					)}
-					<Button
-						disabled={!canOperate}
-						onClick={() => void refreshStatus()}
-						size="icon-xs"
-						variant="ghost"
-					>
-						<RefreshCw />
-					</Button>
+					<Tooltip>
+						<TooltipTrigger render={<span />}>
+							<Button
+								aria-label={t('git.refresh')}
+								disabled={!canOperate}
+								onClick={() => void refreshStatus()}
+								size="icon-xs"
+								variant="ghost"
+							>
+								<RefreshCw />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="top">{t('git.refresh')}</TooltipContent>
+					</Tooltip>
 				</div>
 			</div>
 
-			<DialogWorkbench
+			<WorkbenchPage
 				open={workbenchOpen}
-				onOpenChange={setWorkbenchOpen}
+				onClose={() => setWorkbenchOpen(false)}
 				title="Git"
+				backLabel={t('settings.back')}
+				heading={
+					workbenchSections.find((section) => section.id === activeTab)?.label
+				}
+				layout={
+					activeTab === 'commit' || activeTab === 'history' ? 'fill' : 'scroll'
+				}
 				items={workbenchSections}
 				activeId={activeTab}
 				onSelect={(id) => {
@@ -1052,7 +1069,7 @@ export function GitPanel({
 					setActiveTab(id as GitWorkbenchTab);
 				}}
 				footer={
-					<DialogFooter className="justify-between sm:justify-between">
+					<WorkbenchFooter>
 						<div
 							className="flex min-w-0 flex-1 items-center gap-2 text-xs
 								leading-4 text-muted-foreground"
@@ -1078,13 +1095,19 @@ export function GitPanel({
 							className="shrink-0 flex flex-col-reverse gap-2 sm:flex-row
 								sm:justify-end"
 						>
-							<Button
-								disabled={!canOperate}
-								onClick={() => void refreshStatus()}
-								variant="outline"
-							>
-								<RefreshCw />
-							</Button>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('git.refresh')}
+										disabled={!canOperate}
+										onClick={() => void refreshStatus()}
+										variant="outline"
+									>
+										<RefreshCw />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">{t('git.refresh')}</TooltipContent>
+							</Tooltip>
 							<Button
 								disabled={!canOperate}
 								loading={actionBusy}
@@ -1104,7 +1127,7 @@ export function GitPanel({
 								{t('git.push')}
 							</Button>
 						</div>
-					</DialogFooter>
+					</WorkbenchFooter>
 				}
 			>
 				{activeTab === 'history' && (
@@ -1138,47 +1161,41 @@ export function GitPanel({
 					/>
 				)}
 				{activeTab !== 'history' && activeTab !== 'commit' && (
-					<div className="overflow-auto size-full min-h-0 flex-1">
-						<div className="space-y-6 p-4 sm:p-6">
-							{activeTab === 'remote' && (
-								<div className="space-y-4">
-									<GitTabRemote
-										key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
-										actionBusy={actionBusy}
-										canOperate={canOperate}
-										initialRemoteName={primaryRemote?.name ?? 'origin'}
-										initialRemoteUrl={primaryRemote?.url ?? ''}
-										onPull={() => void pull()}
-										onPush={() => void push()}
-										onSave={(name, url) => {
-											setRemoteName(name);
-											void saveRemote(name, url);
-										}}
-									/>
-								</div>
-							)}
-							{activeTab === 'ssh' && (
-								<div className="space-y-4">
-									<GitTabSsh
-										actionBusy={actionBusy}
-										authPassword={authPassword}
-										authUsername={authUsername}
-										sshPassphrase={sshPassphrase}
-										sshPrivateKeyPath={sshPrivateKeyPath}
-										sshUsername={sshUsername}
-										onAuthPasswordChange={setAuthPassword}
-										onAuthUsernameChange={setAuthUsername}
-										onPickKeyFile={() => void pickSshPrivateKeyFile()}
-										onSshPassphraseChange={setSshPassphrase}
-										onSshPrivateKeyPathChange={setSshPrivateKeyPath}
-										onSshUsernameChange={setSshUsername}
-									/>
-								</div>
-							)}
-						</div>
-					</div>
+					<>
+						{activeTab === 'remote' && (
+							<GitTabRemote
+								key={`${primaryRemote?.name ?? 'origin'}-${primaryRemote?.url ?? ''}`}
+								actionBusy={actionBusy}
+								canOperate={canOperate}
+								initialRemoteName={primaryRemote?.name ?? 'origin'}
+								initialRemoteUrl={primaryRemote?.url ?? ''}
+								onPull={() => void pull()}
+								onPush={() => void push()}
+								onSave={(name, url) => {
+									setRemoteName(name);
+									void saveRemote(name, url);
+								}}
+							/>
+						)}
+						{activeTab === 'ssh' && (
+							<GitTabSsh
+								actionBusy={actionBusy}
+								authPassword={authPassword}
+								authUsername={authUsername}
+								sshPassphrase={sshPassphrase}
+								sshPrivateKeyPath={sshPrivateKeyPath}
+								sshUsername={sshUsername}
+								onAuthPasswordChange={setAuthPassword}
+								onAuthUsernameChange={setAuthUsername}
+								onPickKeyFile={() => void pickSshPrivateKeyFile()}
+								onSshPassphraseChange={setSshPassphrase}
+								onSshPrivateKeyPathChange={setSshPrivateKeyPath}
+								onSshUsernameChange={setSshUsername}
+							/>
+						)}
+					</>
 				)}
-			</DialogWorkbench>
+			</WorkbenchPage>
 
 			<Dialog
 				open={pendingHistoryAction !== null}

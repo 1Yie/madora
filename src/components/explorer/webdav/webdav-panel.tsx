@@ -17,7 +17,7 @@ import {
 	type WebDavSyncResult,
 } from '@/invoke/webdav';
 import { Button } from '@/components/ui/button';
-import { DialogWorkbench } from '@/components/ui/dialog-workbench';
+import { WorkbenchPage } from '@/components/ui/workbench-page';
 import {
 	Tooltip,
 	TooltipContent,
@@ -179,14 +179,19 @@ export function WebDavPanel({
 			<span className="flex-1 truncate text-muted-foreground">
 				{t('webdav.notConfigured')}
 			</span>
-			<Button
-				size="icon-xs"
-				variant="ghost"
-				onClick={handleOpenWorkbench}
-				aria-label={t('webdav.configureLabel')}
-			>
-				<Settings2 className="size-3.5" />
-			</Button>
+			<Tooltip>
+				<TooltipTrigger render={<span />}>
+					<Button
+						size="icon-xs"
+						variant="ghost"
+						onClick={handleOpenWorkbench}
+						aria-label={t('webdav.configureLabel')}
+					>
+						<Settings2 className="size-3.5" />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent side="top">{t('webdav.configureLabel')}</TooltipContent>
+			</Tooltip>
 		</div>
 	) : (
 		<div className="flex w-full items-center gap-2 px-2 py-1 leading-4">
@@ -224,27 +229,39 @@ export function WebDavPanel({
 				</Tooltip>
 			</div>
 			<div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-				<Button
-					disabled={!canSync || syncing}
-					onClick={handleSync}
-					size="icon-xs"
-					variant="ghost"
-					aria-label={t('webdav.syncLabel')}
-				>
-					{syncing ? (
-						<Loader2 className="size-3.5 animate-spin" />
-					) : (
-						<RefreshCw className="size-3.5" />
-					)}
-				</Button>
-				<Button
-					onClick={handleOpenWorkbench}
-					size="icon-xs"
-					variant="ghost"
-					aria-label={t('webdav.settingsLabel')}
-				>
-					<Settings2 className="size-3.5" />
-				</Button>
+				<Tooltip>
+					<TooltipTrigger render={<span />}>
+						<Button
+							disabled={!canSync || syncing}
+							onClick={handleSync}
+							size="icon-xs"
+							variant="ghost"
+							aria-label={t('webdav.syncLabel')}
+						>
+							{syncing ? (
+								<Loader2 className="size-3.5 animate-spin" />
+							) : (
+								<RefreshCw className="size-3.5" />
+							)}
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">{t('webdav.syncLabel')}</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger render={<span />}>
+						<Button
+							onClick={handleOpenWorkbench}
+							size="icon-xs"
+							variant="ghost"
+							aria-label={t('webdav.settingsLabel')}
+						>
+							<Settings2 className="size-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="top">
+						{t('webdav.settingsLabel')}
+					</TooltipContent>
+				</Tooltip>
 			</div>
 		</div>
 	);
@@ -253,10 +270,14 @@ export function WebDavPanel({
 		<>
 			{statusBar}
 
-			<DialogWorkbench
+			<WorkbenchPage
 				open={workbenchOpen}
-				onOpenChange={setWorkbenchOpen}
+				onClose={() => setWorkbenchOpen(false)}
 				title="WebDAV"
+				backLabel={t('settings.back')}
+				heading={
+					workbenchSections.find((section) => section.id === activeTab)?.label
+				}
 				items={workbenchSections}
 				activeId={activeTab}
 				onSelect={(id) => setActiveTab(id as WebDavWorkbenchTab)}
@@ -284,7 +305,7 @@ export function WebDavPanel({
 						onSync={handleSync}
 					/>
 				)}
-			</DialogWorkbench>
+			</WorkbenchPage>
 		</>
 	);
 }
