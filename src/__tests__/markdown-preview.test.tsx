@@ -141,4 +141,61 @@ describe('MarkdownPreview', () => {
 		expect(document.body.textContent).toContain('const x = 1;');
 		expect(document.body.textContent).toContain('console.log(x);');
 	});
+	it('renders YAML front matter as a key/value table', () => {
+		render(
+			<MarkdownPreview
+				content={
+					'---\nname: minimalist-paper-cover-illustration\nlicense: MIT\ntags:\n  - 插画\n  - 封面\n---\n\n正文段落。'
+				}
+				filePath="/workspace/skill.md"
+				rootPath="/workspace"
+			/>
+		);
+
+		expect(screen.getByRole('rowheader', { name: 'name' })).toBeInTheDocument();
+		expect(
+			screen.getByRole('rowheader', { name: 'license' })
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('cell', {
+				name: 'minimalist-paper-cover-illustration',
+			})
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole('cell', { name: '插画, 封面' })
+		).toBeInTheDocument();
+		expect(screen.getByText('正文段落。')).toBeInTheDocument();
+
+		// The fences are consumed by the metadata block, not rendered.
+		expect(document.querySelector('hr')).toBeNull();
+		expect(document.body.textContent).not.toContain('---');
+	});
+
+	it('keeps a leading block that is not metadata as markdown', () => {
+		render(
+			<MarkdownPreview
+				content={'---\nJust a sentence, not key/value pairs\n---\n\n正文。'}
+				filePath="/workspace/doc.md"
+				rootPath="/workspace"
+			/>
+		);
+
+		expect(
+			screen.getByText('Just a sentence, not key/value pairs')
+		).toBeInTheDocument();
+		expect(document.querySelector('table')).toBeNull();
+	});
+
+	it('only reads front matter at the start of the document', () => {
+		render(
+			<MarkdownPreview
+				content={'段落。\n\n---\nname: x\n---\n'}
+				filePath="/workspace/doc.md"
+				rootPath="/workspace"
+			/>
+		);
+
+		expect(document.querySelector('table')).toBeNull();
+		expect(document.body.textContent).toContain('name: x');
+	});
 });

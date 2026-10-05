@@ -2,6 +2,7 @@ import { useCallback, useState, type ComponentProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { parse as parseYaml } from 'yaml';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Plugin } from 'unified';
@@ -273,6 +274,88 @@ function MarkdownLink({
 	);
 }
 
+/** YAML front matter: a `---` fenced block on the very first line. */
+const FRONTMATTER_PATTERN =
+	/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Splits a leading front matter block off the document. Only a block that
+ * parses to a non-empty mapping counts as metadata; anything else is left in
+ * the document, so it keeps rendering as the markdown it already is.
+ */
+function splitFrontmatter(source: string): {
+	entries: Array<[string, unknown]>;
+	body: string;
+} {
+	const match = FRONTMATTER_PATTERN.exec(source);
+	if (!match) {
+		return { entries: [], body: source };
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = parseYaml(match[1]);
+	} catch {
+		return { entries: [], body: source };
+	}
+
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return { entries: [], body: source };
+	}
+
+	const entries = Object.entries(parsed as Record<string, unknown>);
+	if (entries.length === 0) {
+		return { entries: [], body: source };
+	}
+
+	return { entries, body: source.slice(match[0].length) };
+}
+
+/** Scalars are shown as-is, collections fall back to a JSON rendering. */
+function formatFrontmatterValue(value: unknown): string {
+	if (value === null || value === undefined) {
+		return '';
+	}
+
+	if (typeof value === 'string') {
+		return value;
+	}
+
+	if (typeof value === 'number' || typeof value === 'boolean') {
+		return String(value);
+	}
+
+	if (Array.isArray(value)) {
+		return value.map((item) => formatFrontmatterValue(item)).join(', ');
+	}
+
+	return JSON.stringify(value) ?? '';
+}
+
+/**
+ * Front matter rendered as the key/value table GitHub shows, rather than the
+ * horizontal rule and paragraph the `---` fences would otherwise produce.
+ * Inside `.prose-custom`, so it picks up the shared table theme.
+ */
+function FrontmatterTable({ entries }: { entries: Array<[string, unknown]> }) {
+	return (
+		<div className="my-6 overflow-x-auto">
+			{/* `table!` undoes the prose theme's `display: block`, so long values
+			wrap instead of widening the row into a horizontal scroll. */}
+			<table className="table! my-0! w-full">
+				<tbody>
+					{entries.map(([key, value]) => (
+						<tr key={key}>
+							<th scope="row">{key}</th>
+							<td>{formatFrontmatterValue(value)}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
 // ─── Components factory ─────────────────────────────────────────────────
 
 const components = (
@@ -388,10 +471,12 @@ export function MarkdownPreview({
 }: MarkdownPreviewProps) {
 	const { t } = useTranslation();
 
+	const { entries: frontmatter, body } = splitFrontmatter(content);
+
 	// Normalize leading whitespace: each indent unit (tab or 4 consecutive
 	// spaces) produces the same visual width — 4 em-spaces (\u2003).
 	// Leftover 1-3 spaces become NBSP (\u00A0) so they aren't collapsed.
-	const displayContent = content.replace(/^([ \t]+)/gm, (match) => {
+	const displayContent = body.replace(/^([ \t]+)/gm, (match) => {
 		// Normalize: treat each \t as 4 spaces, then produce 1 em-space per
 		// indent unit (tab or 4-space group).  This way pressing Tab twice
 		// yields \t\t → 2 em-spaces, the standard Chinese paragraph indent.
@@ -460,6 +545,9 @@ export function MarkdownPreview({
 			onDragStart={(e) => e.preventDefault()}
 		>
 			<div className="prose-custom p-6">
+				{frontmatter.length > 0 ? (
+					<FrontmatterTable entries={frontmatter} />
+				) : null}
 				<Markdown
 					components={components(
 						filePath,
