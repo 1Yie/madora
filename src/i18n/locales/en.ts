@@ -801,6 +801,8 @@ const en = {
 			'The file still appears in Git changes. Use Restore File from the sidebar context menu if needed.',
 		truncatedTitle: 'Preview truncated',
 		truncatedDescription: 'The file is large, so only the first part is shown.',
+		truncatedReadOnly:
+			'Editing is disabled here; open it in another editor to change it.',
 		emptyTitle: 'No preview available',
 		emptyDescription:
 			'This file type is not previewable yet, or the file is empty.',

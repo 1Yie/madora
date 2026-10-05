@@ -107,8 +107,12 @@ function renderPreviewBody(
 
 	const content = preview.content ?? '';
 	const hasConflictMarkers = content.includes('<<<<<<<');
+	// A truncated preview holds only a prefix of the file. No editable surface
+	// may be mounted for it, because saving that prefix would drop the rest.
+	const editable = !preview.truncated;
 
 	if (
+		editable &&
 		isConflicted &&
 		hasConflictMarkers &&
 		rootPath &&
@@ -140,7 +144,7 @@ function renderPreviewBody(
 		);
 	}
 
-	if (isConflicted && hasConflictMarkers && rootPath) {
+	if (editable && isConflicted && hasConflictMarkers && rootPath) {
 		return (
 			<ConflictEditor
 				content={content}
@@ -152,7 +156,7 @@ function renderPreviewBody(
 	}
 
 	const body =
-		preview.fileKind === 'markdown' ? (
+		preview.fileKind === 'markdown' && editable ? (
 			<MarkdownWorkspace
 				key={selectedFile.path}
 				content={content}
@@ -256,7 +260,8 @@ function PreviewState({
 						<Info className="size-4" />
 						<AlertTitle>{t('filePreview.truncatedTitle')}</AlertTitle>
 						<AlertDescription>
-							{t('filePreview.truncatedDescription')}
+							{t('filePreview.truncatedDescription')}{' '}
+							{t('filePreview.truncatedReadOnly')}
 						</AlertDescription>
 					</Alert>
 					<div className="min-h-0 flex-1">{body}</div>

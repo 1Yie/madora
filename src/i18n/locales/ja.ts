@@ -791,6 +791,8 @@ const ja = {
 		truncatedTitle: 'プレビューは途中までです',
 		truncatedDescription:
 			'ファイルが大きいため、先頭部分のみを表示しています。',
+		truncatedReadOnly:
+			'ここでは編集できません。別のエディターで編集してください。',
 		emptyTitle: '利用可能なプレビューがありません',
 		emptyDescription:
 			'この種類のファイルはまだプレビューできないか、内容が空です。',

@@ -231,6 +231,20 @@ fn read_text_preview(path: &Path) -> Result<(String, bool, String), String> {
 }
 
 pub fn write_workspace_file(file_path: &Path, content: &str) -> Result<(), String> {
+    // A file larger than the preview limit is only ever read as a prefix, so
+    // writing the shorter text back would silently destroy the remainder.
+    // Callers must not save a document they could not read in full.
+    if let Ok(metadata) = fs::metadata(file_path) {
+        let existing_len = metadata.len();
+
+        if metadata.is_file()
+            && existing_len > MAX_TEXT_PREVIEW_BYTES as u64
+            && (content.len() as u64) < existing_len
+        {
+            return Err(i18n::t("explorer.refuse_truncated_write"));
+        }
+    }
+
     let detected = if file_path.exists() {
         let bytes = fs::read(file_path).map_err(|error| error.to_string())?;
         Some(detect_text_encoding(&bytes))
@@ -932,6 +946,37 @@ mod tests {
         // encoding_rs has no UTF-16 encoder and would emit the UTF-8 bytes
         // [104, 105] here, corrupting the file behind its BOM.
         assert_eq!(bytes, vec![b'h', 0x00, b'i', 0x00]);
+    }
+
+    // ─── write_workspace_file ────────────────────────────────────────
+
+    #[test]
+    fn write_workspace_file_refuses_to_truncate_an_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.md");
+        let full = "x".repeat(MAX_TEXT_PREVIEW_BYTES + 1024);
+        std::fs::write(&path, &full).unwrap();
+
+        // This is what saving a truncated preview would do.
+        let result = write_workspace_file(&path, &full[..MAX_TEXT_PREVIEW_BYTES]);
+
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().len(),
+            full.len() as u64,
+            "the oversized file must be left untouched"
+        );
+    }
+
+    #[test]
+    fn write_workspace_file_still_shrinks_small_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("small.md");
+        std::fs::write(&path, b"hello world").unwrap();
+
+        write_workspace_file(&path, "hi").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hi");
     }
 
     // ─── decode_text_bytes ───────────────────────────────────────────

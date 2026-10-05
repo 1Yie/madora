@@ -789,6 +789,8 @@ const ko = {
 			'Git 변경 목록에는 아직 남아 있습니다. 필요하면 사이드바 컨텍스트 메뉴에서 복원하세요.',
 		truncatedTitle: '미리보기가 잘렸습니다',
 		truncatedDescription: '파일이 커서 앞부분만 표시합니다.',
+		truncatedReadOnly:
+			'여기서는 편집할 수 없습니다. 다른 편집기에서 수정해 주세요.',
 		emptyTitle: '미리보기를 사용할 수 없습니다',
 		emptyDescription:
 			'이 파일 형식은 아직 미리보기를 지원하지 않거나 파일이 비어 있습니다.',

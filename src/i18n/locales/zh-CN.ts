@@ -754,6 +754,7 @@ const zhCN = {
 			'文件仍保留在 Git 变更列表中。可在左侧右键菜单选择「恢复文件」。',
 		truncatedTitle: '预览已截断',
 		truncatedDescription: '文件内容较大，仅显示前部分。',
+		truncatedReadOnly: '此处不可编辑，请改用其他编辑器修改。',
 		emptyTitle: '暂无可用预览',
 		emptyDescription: '该文件类型暂不支持预览，或文件内容为空。',
 		selectFileTitle: '从左侧选择一个文件',

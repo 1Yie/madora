@@ -177,4 +177,40 @@ describe('FilePreview', () => {
 			screen.queryByText('这个冲突没有内联冲突标记')
 		).not.toBeInTheDocument();
 	});
+
+	it('renders a truncated markdown preview read-only', () => {
+		renderPreview({
+			fileKind: 'markdown',
+			content: '# 开头\n',
+			encoding: 'utf-8',
+			imageDataUrl: null,
+			size: 600_000,
+			truncated: true,
+		});
+
+		// Saving the prefix would drop the rest of the file, so the editable
+		// workspace must not be mounted for a truncated preview.
+		expect(screen.queryByTestId('markdown-workspace')).not.toBeInTheDocument();
+		expect(screen.getByTestId('code-block')).toBeInTheDocument();
+		// The notice shares its element with the truncation description, so
+		// match on a substring.
+		expect(
+			screen.getByText(/此处不可编辑，请改用其他编辑器修改。/)
+		).toBeInTheDocument();
+	});
+
+	it('does not open a conflict editor for a truncated preview', () => {
+		renderPreview({
+			fileKind: 'markdown',
+			content: '<<<<<<< HEAD\nours\n',
+			encoding: 'utf-8',
+			imageDataUrl: null,
+			size: 600_000,
+			truncated: true,
+		});
+
+		expect(screen.queryByTestId('conflict-editor')).not.toBeInTheDocument();
+		expect(screen.queryByTestId('text-workspace')).not.toBeInTheDocument();
+		expect(screen.getByTestId('code-block')).toBeInTheDocument();
+	});
 });
