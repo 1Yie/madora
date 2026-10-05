@@ -56,6 +56,14 @@
 		user-select: text;
 		-webkit-user-select: text;
 	}
+
+	.cm-editor .cm-gutters,
+	.cm-editor .cm-gutters * {
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-user-drag: none;
+		user-drag: none;
+	}
 }
 
 @theme inline {
