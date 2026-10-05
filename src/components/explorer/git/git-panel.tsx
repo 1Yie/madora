@@ -1069,6 +1069,22 @@ export function GitPanel({
 									{t('git.tab.commit')}
 								</TooltipContent>
 							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('git.tab.remote')}
+										disabled={!canOperate}
+										onClick={() => openWorkbench('remote')}
+										size="icon-xs"
+										variant="ghost"
+									>
+										<Settings2 />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('git.tab.remote')}
+								</TooltipContent>
+							</Tooltip>
 						</>
 					)}
 					<Tooltip>
