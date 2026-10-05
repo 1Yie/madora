@@ -283,12 +283,11 @@ export function TabBar() {
 														onPointerCancel={handlePointerEnd}
 														data-tab-drag-index={tabIndex}
 														className={cn(
-															`group relative flex h-8 shrink-0 cursor-pointer
+															`group flex h-8 shrink-0 cursor-pointer
 															items-center gap-1.5 select-none`,
 															'border-r border-border pl-4 pr-1 text-xs',
 															!isScroll && 'border-b border-border',
 															'transition-colors duration-100',
-															'hover:bg-muted/50',
 															`focus-visible:outline-none
 															focus-visible:bg-muted/50`,
 															insertBefore &&
@@ -296,8 +295,9 @@ export function TabBar() {
 															insertAfter && 'border-r-2 border-r-primary',
 															dragTabId === tab.id && 'opacity-40',
 															isActive
-																? 'bg-background text-foreground'
-																: 'text-muted-foreground hover:text-foreground',
+																? 'bg-primary/10 text-foreground'
+																: `text-muted-foreground hover:bg-muted/50
+																	hover:text-foreground`,
 															tab.node.isMissing &&
 																`text-muted-foreground/60
 																hover:text-muted-foreground/80`
@@ -321,17 +321,6 @@ export function TabBar() {
 													/>
 												}
 											>
-												{isActive && (
-													<div
-														className={cn(
-															'absolute inset-x-0 top-0 h-0.5',
-															tab.node.isMissing
-																? 'bg-muted-foreground/40'
-																: 'bg-primary'
-														)}
-														aria-hidden="true"
-													/>
-												)}
 												<Icon
 													className={cn(
 														'size-3.5 shrink-0',
