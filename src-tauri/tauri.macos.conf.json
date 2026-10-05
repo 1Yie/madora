@@ -1,0 +1,18 @@
+{
+	"app": {
+		"windows": [
+			{
+				"decorations": true,
+				"height": 800,
+				"hiddenTitle": true,
+				"minHeight": 600,
+				"minWidth": 900,
+				"title": "Madora",
+				"titleBarStyle": "Overlay",
+				"trafficLightPosition": { "x": 16, "y": 14 },
+				"visible": false,
+				"width": 1000
+			}
+		]
+	}
+}
