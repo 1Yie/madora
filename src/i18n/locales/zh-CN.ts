@@ -640,6 +640,7 @@ const zhCN = {
 		startBrowsing: '选择一个文件夹开始浏览',
 		noFilesFound: '未找到文件',
 		itemsSelected: '已选择 {{count}} 项',
+		clearSelection: '清除选择',
 		itemsCopied: '已复制 {{count}} 项',
 		itemsCut: '已剪切 {{count}} 项',
 		syncNotEnabled: '同步未开启',

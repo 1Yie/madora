@@ -15,6 +15,11 @@ import {
 	MenuSeparator,
 } from '@/components/ui/context-menu';
 import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
 	ClipboardText as Clipboard,
 	Scissors,
 	Copy,
@@ -172,16 +177,21 @@ function FormatToolbar({ onAction }: { onAction: (key: FormatKey) => void }) {
 			{FORMAT_ACTIONS.map(({ labelKey, icon: Icon, key }) => {
 				const label = t(labelKey);
 				return (
-					<MenuItem
-						key={key}
-						aria-label={label}
-						title={label}
-						className="inline-flex size-7 items-center justify-center rounded-sm
-							p-0"
-						onClick={() => onAction(key)}
-					>
-						<Icon className="size-3.5" />
-					</MenuItem>
+					<Tooltip key={key}>
+						<TooltipTrigger
+							render={
+								<MenuItem
+									aria-label={label}
+									className="inline-flex size-7 items-center justify-center
+										rounded-sm p-0"
+									onClick={() => onAction(key)}
+								/>
+							}
+						>
+							<Icon className="size-3.5" />
+						</TooltipTrigger>
+						<TooltipContent side="bottom">{label}</TooltipContent>
+					</Tooltip>
 				);
 			})}
 		</div>
@@ -436,23 +446,29 @@ export function MarkdownEditor({
 						{lineEnding}
 					</span>
 					{onToggleMode && (
-						<button
-							onClick={onToggleMode}
-							className="flex size-5 items-center justify-center rounded
-								hover:bg-muted-foreground/20"
-							title={
-								mode === 'edit'
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<button
+										onClick={onToggleMode}
+										className="flex size-5 items-center justify-center rounded
+											hover:bg-muted-foreground/20"
+										type="button"
+									/>
+								}
+							>
+								{mode === 'edit' ? (
+									<Eye className="size-3.5" />
+								) : (
+									<EyeOff className="size-3.5" />
+								)}
+							</TooltipTrigger>
+							<TooltipContent>
+								{mode === 'edit'
 									? t('markdownEditor.toggle.preview')
-									: t('markdownEditor.toggle.edit')
-							}
-							type="button"
-						>
-							{mode === 'edit' ? (
-								<Eye className="size-3.5" />
-							) : (
-								<EyeOff className="size-3.5" />
-							)}
-						</button>
+									: t('markdownEditor.toggle.edit')}
+							</TooltipContent>
+						</Tooltip>
 					)}
 				</div>
 			</div>

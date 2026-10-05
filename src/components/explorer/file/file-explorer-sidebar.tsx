@@ -2670,68 +2670,102 @@ export function FileExplorerSidebar({
 							{t('explorerPanel.itemsSelected', { count: selectedPaths.size })}
 						</span>
 						<div className="flex items-center gap-1">
-							<Button
-								size="icon-sm"
-								variant="ghost"
-								onClick={() => {
-									for (const path of selectedPaths) {
-										const fileNode = mergedRoot
-											? findNodeByPath(mergedRoot, path)
-											: null;
-										if (fileNode) onCopyNode(fileNode);
-									}
-									showSuccessToast(
-										t('explorerPanel.itemsCopied', {
-											count: selectedPaths.size,
-										})
-									);
-								}}
-							>
-								<Copy className="size-3.5" />
-							</Button>
-							<Button
-								size="icon-sm"
-								variant="ghost"
-								onClick={() => {
-									for (const path of selectedPaths) {
-										const fileNode = mergedRoot
-											? findNodeByPath(mergedRoot, path)
-											: null;
-										if (fileNode) onCutNode(fileNode);
-									}
-									showSuccessToast(
-										t('explorerPanel.itemsCut', { count: selectedPaths.size })
-									);
-								}}
-							>
-								<Scissors className="size-3.5" />
-							</Button>
-							<Button
-								size="icon-sm"
-								variant="ghost"
-								onClick={() => {
-									const nodes: ExplorerNode[] = [];
-									for (const path of selectedPaths) {
-										const node = mergedRoot
-											? findNodeByPath(mergedRoot, path)
-											: null;
-										if (node) nodes.push(node);
-									}
-									if (nodes.length > 0) {
-										setPendingAction({ nodes, type: 'batchDelete' });
-									}
-								}}
-							>
-								<Trash2 className="size-3.5" />
-							</Button>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('common.actions.copy')}
+										size="icon-sm"
+										variant="ghost"
+										onClick={() => {
+											for (const path of selectedPaths) {
+												const fileNode = mergedRoot
+													? findNodeByPath(mergedRoot, path)
+													: null;
+												if (fileNode) onCopyNode(fileNode);
+											}
+											showSuccessToast(
+												t('explorerPanel.itemsCopied', {
+													count: selectedPaths.size,
+												})
+											);
+										}}
+									>
+										<Copy className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('common.actions.copy')}
+								</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('common.actions.cut')}
+										size="icon-sm"
+										variant="ghost"
+										onClick={() => {
+											for (const path of selectedPaths) {
+												const fileNode = mergedRoot
+													? findNodeByPath(mergedRoot, path)
+													: null;
+												if (fileNode) onCutNode(fileNode);
+											}
+											showSuccessToast(
+												t('explorerPanel.itemsCut', {
+													count: selectedPaths.size,
+												})
+											);
+										}}
+									>
+										<Scissors className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('common.actions.cut')}
+								</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('common.actions.delete')}
+										size="icon-sm"
+										variant="ghost"
+										onClick={() => {
+											const nodes: ExplorerNode[] = [];
+											for (const path of selectedPaths) {
+												const node = mergedRoot
+													? findNodeByPath(mergedRoot, path)
+													: null;
+												if (node) nodes.push(node);
+											}
+											if (nodes.length > 0) {
+												setPendingAction({ nodes, type: 'batchDelete' });
+											}
+										}}
+									>
+										<Trash2 className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('common.actions.delete')}
+								</TooltipContent>
+							</Tooltip>
 							<div className="mx-1 h-4 w-px shrink-0 bg-border" />
-							<Button
-								size="icon-sm"
-								variant="ghost"
-								onClick={() => setSelectedPaths(new Set())}
-							>
-								<X className="size-3.5" />
-							</Button>
+							<Tooltip>
+								<TooltipTrigger render={<span />}>
+									<Button
+										aria-label={t('explorerPanel.clearSelection')}
+										size="icon-sm"
+										variant="ghost"
+										onClick={() => setSelectedPaths(new Set())}
+									>
+										<X className="size-3.5" />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									{t('explorerPanel.clearSelection')}
+								</TooltipContent>
+							</Tooltip>
 						</div>
 					</div>
 				)}

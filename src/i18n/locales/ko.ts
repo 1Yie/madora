@@ -675,6 +675,7 @@ const ko = {
 		startBrowsing: '폴더를 열어 탐색 시작',
 		noFilesFound: '파일을 찾을 수 없습니다',
 		itemsSelected: '{{count}}개 항목 선택됨',
+		clearSelection: '선택 해제',
 		itemsCopied: '{{count}}개 항목을 복사했습니다',
 		itemsCut: '{{count}}개 항목을 잘라냈습니다',
 		syncNotEnabled: '동기화가 활성화되지 않았습니다',

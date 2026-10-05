@@ -676,6 +676,7 @@ const ja = {
 		startBrowsing: 'フォルダーを開いてブラウズを開始',
 		noFilesFound: 'ファイルが見つかりません',
 		itemsSelected: '{{count}} 項目を選択中',
+		clearSelection: '選択を解除',
 		itemsCopied: '{{count}} 項目をコピーしました',
 		itemsCut: '{{count}} 項目を切り取りました',
 		syncNotEnabled: '同期は有効化されていません',

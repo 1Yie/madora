@@ -355,16 +355,21 @@ function FileRow({
 				<FileBadge status={file.status} />
 				<FileLabel file={file} />
 			</div>
-			<Button
-				aria-label={actionLabel}
-				disabled={!canOperate}
-				onClick={onAction}
-				size="icon-xs"
-				variant="ghost"
-				className="shrink-0"
-			>
-				{actionIcon}
-			</Button>
+			<Tooltip>
+				<TooltipTrigger render={<span />}>
+					<Button
+						aria-label={actionLabel}
+						disabled={!canOperate}
+						onClick={onAction}
+						size="icon-xs"
+						variant="ghost"
+						className="shrink-0"
+					>
+						{actionIcon}
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent side="top">{actionLabel}</TooltipContent>
+			</Tooltip>
 		</div>
 	);
 }

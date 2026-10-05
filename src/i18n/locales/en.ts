@@ -687,6 +687,7 @@ const en = {
 		startBrowsing: 'Open a folder to start browsing',
 		noFilesFound: 'No files found',
 		itemsSelected: '{{count}} item(s) selected',
+		clearSelection: 'Clear selection',
 		itemsCopied: 'Copied {{count}} item(s)',
 		itemsCut: 'Cut {{count}} item(s)',
 		syncNotEnabled: 'Sync not enabled',
