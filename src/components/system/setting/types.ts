@@ -4,15 +4,9 @@ import {
 	Keyboard,
 	Palette,
 	GearSix as Settings2,
-	ShieldCheck,
 } from '@phosphor-icons/react';
 
-export type SettingsSectionId =
-	| 'appearance'
-	| 'editor'
-	| 'license'
-	| 'sync'
-	| 'about';
+export type SettingsSectionId = 'appearance' | 'editor' | 'sync' | 'about';
 
 export type SettingsSection = {
 	id: SettingsSectionId;
@@ -36,11 +30,6 @@ export function getSettingsSections(t: TFunction): SettingsSection[] {
 			id: 'sync',
 			label: t('settings.sections.sync.label'),
 			icon: Cloud,
-		},
-		{
-			id: 'license',
-			label: t('settings.sections.license.label'),
-			icon: ShieldCheck,
 		},
 		{
 			id: 'about',

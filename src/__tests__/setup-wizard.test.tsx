@@ -26,22 +26,6 @@ vi.mock('@/components/ui/provider-icons', () => ({
 		'zhipu-coding': () => <span data-testid="provider-icon">ZC</span>,
 	},
 }));
-vi.mock('@/context/license-provider', () => {
-	const MockLicenseProvider = ({ children }: { children: React.ReactNode }) => (
-		<>{children}</>
-	);
-	return {
-		LicenseProvider: MockLicenseProvider,
-		useLicense: () => ({
-			status: { state: 'active' },
-			isLoading: false,
-			activate: vi.fn(),
-			deactivate: vi.fn(),
-			refresh: vi.fn(),
-		}),
-	};
-});
-
 import { AiSettingsProvider } from '@/context/ai-settings-provider';
 import {
 	AppSettingsProvider,
@@ -130,10 +114,7 @@ describe('SetupWizard', () => {
 
 		await user.click(screen.getByRole('button', { name: '完成验证' }));
 
-		// Step 4: License — skip trial
-		await user.click(screen.getByRole('button', { name: '先试用' }));
-
-		// Step 5: Success
+		// Step 4: Success
 		expect(screen.getByText('一切就绪')).toBeInTheDocument();
 		await user.click(screen.getByRole('button', { name: /进入编辑器/ }));
 

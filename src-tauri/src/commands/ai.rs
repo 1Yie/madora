@@ -9,7 +9,6 @@ use crate::{
     i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult},
     services::ai,
-    services::license::LicenseService,
 };
 
 use super::secure_storage;
@@ -51,11 +50,9 @@ pub(crate) fn invalidate_api_key_cache() {
 #[tauri::command]
 pub async fn generate_completion(
     service: State<'_, ai::AiCompletionService>,
-    license_service: State<'_, LicenseService>,
     mut config: AiCompletionConfig,
     request: CompletionRequest,
 ) -> Result<CompletionResult, String> {
-    license_service.ensure_valid().await?;
     let provider = config.provider.unwrap_or_default();
     config.api_key = require_api_key(provider)?;
 
@@ -65,12 +62,10 @@ pub async fn generate_completion(
 #[tauri::command]
 pub async fn generate_completion_stream(
     service: State<'_, ai::AiCompletionService>,
-    license_service: State<'_, LicenseService>,
     mut config: AiCompletionConfig,
     request: CompletionRequest,
     channel: Channel<String>,
 ) -> Result<(), String> {
-    license_service.ensure_valid().await?;
     let provider = config.provider.unwrap_or_default();
     config.api_key = require_api_key(provider)?;
 

@@ -2,13 +2,13 @@ use std::env;
 
 use crate::{
     commands::{
-        ai, explorer, git, license, madora_sync, project, secure_storage, system, utility, webdav,
+        ai, explorer, git, madora_sync, project, secure_storage, system, utility, webdav,
         workspace,
     },
     protocol::MadoraProtocolState,
     services::{
-        ai::AiCompletionService, license::LicenseService, madora_sync::MadoraSyncStore,
-        webdav::WebDavStore, workspace::WorkspaceStore,
+        ai::AiCompletionService, madora_sync::MadoraSyncStore, webdav::WebDavStore,
+        workspace::WorkspaceStore,
     },
 };
 #[cfg(not(target_os = "linux"))]
@@ -85,7 +85,6 @@ pub fn run() {
         #[cfg(all(target_os = "windows", not(debug_assertions)))]
         configure_windows_webview(app);
 
-        app.manage(LicenseService::new());
         app.manage(MadoraProtocolState::new());
 
         // Initialize workspace store with app data directory for persistence
@@ -187,11 +186,6 @@ pub fn run() {
             system::hide_window,
             system::quit_app,
             system::set_app_locale,
-            license::get_license_status,
-            license::activate_license,
-            license::verify_license,
-            license::force_verify_license,
-            license::deactivate_license,
             webdav::webdav_get_config,
             webdav::webdav_save_config,
             webdav::webdav_delete_config,

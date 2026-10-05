@@ -18,7 +18,6 @@ const ja = {
 			retry: '再テスト',
 			save: '保存',
 			skip: 'スキップ',
-			tryFirst: 'まず試す',
 		},
 		labels: {
 			apiKey: 'API Key',
@@ -60,7 +59,6 @@ const ja = {
 			appearance: { label: '外観' },
 			cli: { description: 'コマンドラインツール', label: 'CLI' },
 			editor: { label: 'エディタ' },
-			license: { label: 'ライセンス' },
 			sync: { label: '同期' },
 		},
 		appearance: {
@@ -237,44 +235,6 @@ const ja = {
 				removedAndPathCleaned: 'CLI を削除し、PATH 設定も整理しました',
 				uninstallFailed: 'CLI の削除に失敗しました: {{error}}',
 			},
-		},
-		license: {
-			cards: {
-				details: { title: 'ライセンス詳細' },
-			},
-			status: {
-				active: '有効',
-				expired: '期限切れ',
-				revoked: '取り消し済み',
-				trial: '試用中',
-			},
-			labels: {
-				licensed: '認証済み',
-				license: 'Madora ライセンス',
-			},
-			descriptions: {
-				active: 'この端末ではフル機能を利用できます。',
-				missing: '有効なライセンスが見つかりませんでした。',
-				trialRemaining: '試用期間は残り {{days}} 日です',
-			},
-			actions: {
-				activate: '有効化',
-				deactivate: 'この端末を無効化',
-				manage: 'ライセンス管理',
-				purchase: '購入する',
-			},
-			purchase: 'ライセンスをお持ちでないですか？購入してください。',
-			deviceHint:
-				'別の端末で使う必要がありますか？先にこの端末を無効化してください。',
-			confirm: {
-				title: '無効化の確認',
-				description:
-					'無効化すると、この端末では再度有効化するまで Madora Pro 機能を利用できなくなります。その後、同じキーを別の端末で利用できます。',
-				action: '無効化',
-				success: 'ライセンスを無効化しました',
-				failed: 'ライセンスの無効化に失敗しました',
-			},
-			loading: 'ライセンス情報を読み込み中...',
 		},
 		sync: {
 			cards: {
@@ -467,12 +427,6 @@ const ja = {
 			retry: '再テスト',
 			finish: '確認を完了',
 		},
-		license: {
-			title: 'ライセンス',
-			description:
-				'すでにライセンスをお持ちですか？有効化するとすべての機能を利用できます。後で設定から有効化することもできます。',
-			activate: 'ライセンスを有効化',
-		},
 		success: {
 			title: '準備完了',
 			description:
@@ -482,36 +436,6 @@ const ja = {
 			title: 'セットアップをスキップしますか？',
 			description: '今はスキップして、あとで設定から AI 補完を構成できます。',
 			action: 'セットアップをスキップ',
-		},
-	},
-	licenseDialog: {
-		title: 'ライセンスを有効化',
-		description: 'ライセンスキーを入力して Madora を有効化してください。',
-		label: 'ライセンスキー',
-		purchaseAction: 'ライセンスを購入',
-		purchase: 'まだライセンスをお持ちではありませんか？購入してください。',
-		action: '有効化',
-		validation: '完全なライセンスキーを入力してください',
-		success: '有効化に成功しました',
-	},
-	licenseBanner: {
-		verifying: 'ライセンスを確認しています...',
-		revoked: {
-			title: 'ライセンスの更新が必要です',
-			description:
-				'この端末のライセンスは無効になりました。Madora を使い続けるには新しいキーを入力してください。',
-			action: '新しいライセンスを有効化',
-			switchToTrial: '試用に切り替える',
-		},
-		expired: {
-			title: '試用期間が終了しました',
-			description:
-				'14 日間の試用期間が終了しました。Madora を使い続けるにはライセンスを有効化してください。',
-			action: 'ライセンスを有効化',
-		},
-		trial: {
-			remaining: '試用期間は残り {{days}} 日です',
-			action: '有効化',
 		},
 	},
 	topBar: {
@@ -547,13 +471,6 @@ const ja = {
 		generating: 'AI 提案を生成しています...',
 		ready: 'AI 補完の準備ができました',
 		saveApiKeyToUse: 'API Key を保存すると利用できます',
-	},
-	licenseProvider: {
-		activateFailed: '有効化に失敗しました',
-		deactivateFailed: '無効化に失敗しました',
-		revokedTitle: 'ライセンスが取り消されました',
-		revokedDescription:
-			'ライセンスが取り消されたため、AI 補完は無効になりました',
 	},
 	aiSettingsProvider: {
 		keychainAccessFailed: 'システムキーチェーンにアクセスできません',

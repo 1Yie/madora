@@ -6,7 +6,6 @@ import {
 	SetupWizard,
 	shouldShowSetupWizard,
 } from '@/components/system/setup-wizard';
-import { LicenseBanner } from '@/components/system/license-banner';
 import { checkForAppUpdate } from '@/lib/update-check';
 import { showUpdateAvailableToast } from '@/lib/update-toast';
 import Titlebar from './components/system/top-bar';
@@ -85,7 +84,6 @@ function App() {
 	return (
 		<div className="flex h-screen flex-col bg-background text-foreground">
 			<Titlebar />
-			<LicenseBanner />
 			{showSetupWizard && (
 				<SetupWizard onComplete={() => setShowSetupWizard(false)} />
 			)}

@@ -18,7 +18,6 @@ const ko = {
 			retry: '다시 테스트',
 			save: '저장',
 			skip: '건너뛰기',
-			tryFirst: '먼저 체험하기',
 		},
 		labels: {
 			apiKey: 'API Key',
@@ -61,7 +60,6 @@ const ko = {
 			appearance: { label: '모양' },
 			cli: { description: '명령줄 도구', label: 'CLI' },
 			editor: { label: '에디터' },
-			license: { label: '라이선스' },
 			sync: { label: '동기화' },
 		},
 		appearance: {
@@ -240,44 +238,6 @@ const ko = {
 				removedAndPathCleaned: 'CLI 를 제거했고 PATH 설정도 정리했습니다',
 				uninstallFailed: 'CLI 제거에 실패했습니다: {{error}}',
 			},
-		},
-		license: {
-			cards: {
-				details: { title: '라이선스 정보' },
-			},
-			status: {
-				active: '활성화됨',
-				expired: '만료됨',
-				revoked: '회수됨',
-				trial: '체험판',
-			},
-			labels: {
-				licensed: '인증됨',
-				license: 'Madora 라이선스',
-			},
-			descriptions: {
-				active: '이 기기에서 전체 기능을 사용할 수 있습니다.',
-				missing: '유효한 라이선스를 찾지 못했습니다.',
-				trialRemaining: '체험 기간이 {{days}}일 남았습니다',
-			},
-			actions: {
-				activate: '활성화',
-				deactivate: '이 기기 비활성화',
-				manage: '라이선스 관리',
-				purchase: '구매하기',
-			},
-			purchase: '아직 라이선스가 없으신가요? 구매하세요.',
-			deviceHint:
-				'다른 기기에서 사용해야 하나요? 먼저 이 기기를 비활성화하세요.',
-			confirm: {
-				title: '비활성화 확인',
-				description:
-					'비활성화 후에는 다시 활성화할 때까지 이 기기에서 Madora Pro 기능을 사용할 수 없습니다. 이후 같은 라이선스 키를 다른 기기에서 사용할 수 있습니다.',
-				action: '비활성화',
-				success: '라이선스를 비활성화했습니다',
-				failed: '라이선스 비활성화에 실패했습니다',
-			},
-			loading: '라이선스 정보를 불러오는 중...',
 		},
 		sync: {
 			cards: {
@@ -468,12 +428,6 @@ const ko = {
 			retry: '다시 테스트',
 			finish: '검증 완료',
 		},
-		license: {
-			title: '라이선스',
-			description:
-				'이미 라이선스가 있다면 활성화하여 전체 기능을 사용하세요. 지금은 체험으로 진행하고 나중에 설정에서 활성화해도 됩니다.',
-			activate: '라이선스 활성화',
-		},
 		success: {
 			title: '준비 완료',
 			description:
@@ -484,36 +438,6 @@ const ko = {
 			description:
 				'지금은 건너뛰고 나중에 설정에서 AI 자동완성을 다시 구성할 수 있습니다.',
 			action: '설정 건너뛰기',
-		},
-	},
-	licenseDialog: {
-		title: '라이선스 활성화',
-		description: '라이선스 키를 입력해 Madora 를 활성화하세요.',
-		label: '라이선스 키',
-		purchaseAction: '라이선스 구매',
-		purchase: '아직 라이선스가 없으신가요? 구매하세요.',
-		action: '활성화',
-		validation: '전체 라이선스 키를 입력해 주세요',
-		success: '활성화에 성공했습니다',
-	},
-	licenseBanner: {
-		verifying: '라이선스를 확인하는 중...',
-		revoked: {
-			title: '라이선스 업데이트가 필요합니다',
-			description:
-				'이 기기의 라이선스가 더 이상 유효하지 않습니다. 계속 사용하려면 새 키를 입력해 주세요.',
-			action: '새 라이선스 활성화',
-			switchToTrial: '체험판으로 전환',
-		},
-		expired: {
-			title: '체험 기간이 종료되었습니다',
-			description:
-				'14일 체험 기간이 끝났습니다. Madora 를 계속 사용하려면 라이선스를 활성화하세요.',
-			action: '라이선스 활성화',
-		},
-		trial: {
-			remaining: '체험 기간이 {{days}}일 남았습니다',
-			action: '활성화',
 		},
 	},
 	topBar: {
@@ -548,12 +472,6 @@ const ko = {
 		generating: 'AI 제안을 생성하는 중...',
 		ready: 'AI 자동완성이 준비되었습니다',
 		saveApiKeyToUse: '사용하려면 API Key 를 저장하세요',
-	},
-	licenseProvider: {
-		activateFailed: '활성화에 실패했습니다',
-		deactivateFailed: '비활성화에 실패했습니다',
-		revokedTitle: '라이선스가 회수되었습니다',
-		revokedDescription: '라이선스가 회수되어 AI 자동완성이 비활성화되었습니다',
 	},
 	aiSettingsProvider: {
 		keychainAccessFailed: '시스템 키체인에 접근할 수 없습니다',

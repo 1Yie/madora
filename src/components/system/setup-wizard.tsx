@@ -3,14 +3,12 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	Check as CheckIcon,
-	Crown,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import appIcon from '@/assets/icon.png';
 import providerModels from '@/assets/models.json';
-import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogPopup } from '@/components/ui/dialog';
 import {
@@ -39,7 +37,6 @@ import {
 	getProviderDefinitions,
 } from '@/context/ai-settings-provider';
 import { useAppSettings } from '@/context/app-settings-provider';
-import { useLicense } from '@/context/license-provider';
 import type { LocalePreference } from '@/i18n/locale';
 import { cn } from '@/lib/utils';
 
@@ -63,13 +60,7 @@ const CUSTOM_PROTOCOL_OPTIONS: Array<{
 	},
 ];
 
-const WIZARD_STEPS = [
-	'welcome',
-	'configure',
-	'test',
-	'license',
-	'success',
-] as const;
+const WIZARD_STEPS = ['welcome', 'configure', 'test', 'success'] as const;
 
 type WizardStep = (typeof WIZARD_STEPS)[number];
 type ProviderModelOption = { name: string; value: string };
@@ -102,8 +93,6 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 		setUseSsl,
 		useSsl,
 	} = useAiSettings();
-	const { isLoading: licenseLoading } = useLicense();
-
 	const { localePreference, setLocalePreference } = useAppSettings();
 
 	const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
@@ -113,7 +102,6 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 	const [configBusy, setConfigBusy] = useState(false);
 	const [testStatus, setTestStatus] = useState<TestStatus>('idle');
 	const [testResult, setTestResult] = useState('');
-	const [showActivation, setShowActivation] = useState(false);
 	const testAbortRef = useRef<AbortController | null>(null);
 
 	const providers = getProviderDefinitions();
@@ -125,15 +113,6 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 
 	useEffect(() => {
 		return () => testAbortRef.current?.abort();
-	}, []);
-
-	const handleLicenseActivated = useCallback(() => {
-		setShowActivation(false);
-		setStep('success');
-	}, []);
-
-	const handleSkipTrial = useCallback(() => {
-		setStep('success');
 	}, []);
 
 	const handleTestCompletion = useCallback(async () => {
@@ -234,588 +213,505 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 	const stepIndex = WIZARD_STEPS.indexOf(step);
 
 	return (
-		<>
-			<Dialog open onOpenChange={() => {}}>
-				<DialogPopup
-					showCloseButton={false}
-					className="max-w-110 overflow-hidden rounded-[24px] border-border/40
-						p-0 shadow-2xl"
-				>
-					<div className="relative flex min-h-125 flex-col bg-background">
-						{step === 'configure' || step === 'test' || step === 'license' ? (
+		<Dialog open onOpenChange={() => {}}>
+			<DialogPopup
+				showCloseButton={false}
+				className="max-w-110 overflow-hidden rounded-[24px] border-border/40 p-0
+					shadow-2xl"
+			>
+				<div className="relative flex min-h-125 flex-col bg-background">
+					{step === 'configure' || step === 'test' ? (
+						<button
+							onClick={() => setStep(step === 'test' ? 'configure' : 'welcome')}
+							className="absolute left-6 top-6 z-10 text-muted-foreground
+								transition-colors hover:text-foreground"
+						>
+							<ArrowLeft className="size-6" />
+						</button>
+					) : null}
+
+					{step !== 'success' && (
+						<div className="absolute right-6 top-6 z-10 flex items-center gap-2">
 							<button
-								onClick={() =>
-									setStep(
-										step === 'license'
-											? 'test'
-											: step === 'test'
-												? 'configure'
-												: 'welcome'
-									)
-								}
-								className="absolute left-6 top-6 z-10 text-muted-foreground
+								onClick={() => setSkipConfirmOpen(true)}
+								className="text-[13px] font-medium text-muted-foreground
 									transition-colors hover:text-foreground"
 							>
-								<ArrowLeft className="size-6" />
+								{t('common.actions.skip')}
 							</button>
-						) : null}
+						</div>
+					)}
 
-						{step !== 'success' && (
+					<div className="flex flex-1 flex-col px-8 pt-12 pb-6 sm:px-10">
+						{step === 'welcome' && (
 							<div
-								className="absolute right-6 top-6 z-10 flex items-center gap-2"
+								className="flex h-full flex-1 animate-in fade-in
+									slide-in-from-bottom-4 flex-col duration-500"
 							>
-								<button
-									onClick={() => setSkipConfirmOpen(true)}
-									className="text-[13px] font-medium text-muted-foreground
-										transition-colors hover:text-foreground"
+								<div
+									className="flex flex-1 flex-col items-center justify-center
+										text-center"
 								>
-									{t('common.actions.skip')}
-								</button>
+									<img src={appIcon} alt="Madora" className="mb-8 size-18" />
+									<h1
+										className="mb-3 text-3xl font-semibold tracking-tight
+											text-foreground"
+									>
+										{t('setup.welcome.title')}
+									</h1>
+									<p className="font-mono text-xl font-medium tracking-tight">
+										{t('setup.welcome.taglineTop')}
+										<br />
+										<span className="text-muted-foreground">
+											{t('setup.welcome.taglineBottom')}
+										</span>
+									</p>
+
+									{/* Language selector — inline pills on the welcome page */}
+									<div
+										className="mt-8 flex flex-wrap items-center justify-center
+											gap-1.5"
+									>
+										{(
+											[
+												{
+													label: t('language.options.system'),
+													value: 'system' as LocalePreference,
+												},
+												{
+													label: t('language.options.zhCN'),
+													value: 'zh-CN' as LocalePreference,
+												},
+												{
+													label: t('language.options.en'),
+													value: 'en' as LocalePreference,
+												},
+												{
+													label: t('language.options.ja'),
+													value: 'ja' as LocalePreference,
+												},
+												{
+													label: t('language.options.ko'),
+													value: 'ko' as LocalePreference,
+												},
+											] as const
+										).map((option) => {
+											const isActive = localePreference === option.value;
+											return (
+												<button
+													key={option.value}
+													type="button"
+													onClick={() => setLocalePreference(option.value)}
+													className={cn(
+														`rounded-full px-3.5 py-1.5 text-[13px] font-medium
+														transition-colors`,
+														isActive
+															? 'bg-primary text-primary-foreground'
+															: `bg-muted/40 text-muted-foreground
+																hover:bg-muted hover:text-foreground`
+													)}
+												>
+													{option.label}
+												</button>
+											);
+										})}
+									</div>
+								</div>
+								<div className="mt-auto w-full pt-6">
+									<Button
+										className="w-full rounded-full"
+										size="lg"
+										onClick={() => setStep('configure')}
+									>
+										{t('setup.welcome.action')}
+									</Button>
+								</div>
 							</div>
 						)}
 
-						<div className="flex flex-1 flex-col px-8 pt-12 pb-6 sm:px-10">
-							{step === 'welcome' && (
-								<div
-									className="flex h-full flex-1 animate-in fade-in
-										slide-in-from-bottom-4 flex-col duration-500"
-								>
-									<div
-										className="flex flex-1 flex-col items-center justify-center
-											text-center"
-									>
-										<img src={appIcon} alt="Madora" className="mb-8 size-18" />
-										<h1
-											className="mb-3 text-3xl font-semibold tracking-tight
-												text-foreground"
-										>
-											{t('setup.welcome.title')}
-										</h1>
-										<p className="font-mono text-xl font-medium tracking-tight">
-											{t('setup.welcome.taglineTop')}
-											<br />
-											<span className="text-muted-foreground">
-												{t('setup.welcome.taglineBottom')}
-											</span>
+						{step === 'configure' && (
+							<div
+								className="flex h-full flex-1 animate-in fade-in
+									slide-in-from-right-4 flex-col duration-500"
+							>
+								<div className="flex-1">
+									<div className="mb-8 mt-4 text-center">
+										<h2 className="text-xl font-medium tracking-tight">
+											{t('setup.configure.title')}
+										</h2>
+										<p className="mt-1.5 text-[13px] text-muted-foreground">
+											{t('setup.configure.description')}
 										</p>
-
-										{/* Language selector — inline pills on the welcome page */}
-										<div
-											className="mt-8 flex flex-wrap items-center justify-center
-												gap-1.5"
-										>
-											{(
-												[
-													{
-														label: t('language.options.system'),
-														value: 'system' as LocalePreference,
-													},
-													{
-														label: t('language.options.zhCN'),
-														value: 'zh-CN' as LocalePreference,
-													},
-													{
-														label: t('language.options.en'),
-														value: 'en' as LocalePreference,
-													},
-													{
-														label: t('language.options.ja'),
-														value: 'ja' as LocalePreference,
-													},
-													{
-														label: t('language.options.ko'),
-														value: 'ko' as LocalePreference,
-													},
-												] as const
-											).map((option) => {
-												const isActive = localePreference === option.value;
-												return (
-													<button
-														key={option.value}
-														type="button"
-														onClick={() => setLocalePreference(option.value)}
-														className={cn(
-															`rounded-full px-3.5 py-1.5 text-[13px]
-															font-medium transition-colors`,
-															isActive
-																? 'bg-primary text-primary-foreground'
-																: `bg-muted/40 text-muted-foreground
-																	hover:bg-muted hover:text-foreground`
-														)}
-													>
-														{option.label}
-													</button>
-												);
-											})}
-										</div>
 									</div>
-									<div className="mt-auto w-full pt-6">
-										<Button
-											className="w-full rounded-full"
-											size="lg"
-											onClick={() => setStep('configure')}
-										>
-											{t('setup.welcome.action')}
-										</Button>
-									</div>
-								</div>
-							)}
 
-							{step === 'configure' && (
-								<div
-									className="flex h-full flex-1 animate-in fade-in
-										slide-in-from-right-4 flex-col duration-500"
-								>
-									<div className="flex-1">
-										<div className="mb-8 mt-4 text-center">
-											<h2 className="text-xl font-medium tracking-tight">
-												{t('setup.configure.title')}
-											</h2>
-											<p className="mt-1.5 text-[13px] text-muted-foreground">
-												{t('setup.configure.description')}
-											</p>
-										</div>
-
-										<div className="space-y-5">
-											<div className="space-y-1.5">
-												<label
-													className="text-[13px] font-medium text-foreground"
-												>
-													{t('common.labels.provider')}
-												</label>
-												<Select
-													value={provider}
-													onValueChange={(value) => {
-														if (value === null) return;
-														setProvider(value);
-														setConfigError(null);
-														setApiKeyDraft('');
-													}}
-												>
-													<SelectTrigger className="bg-muted/20">
-														<SelectValue>
-															<div className="flex items-center gap-2">
-																{(() => {
-																	const IconComponent =
-																		providerIconMap[selectedProvider.key];
-																	return IconComponent ? (
+									<div className="space-y-5">
+										<div className="space-y-1.5">
+											<label className="text-[13px] font-medium text-foreground">
+												{t('common.labels.provider')}
+											</label>
+											<Select
+												value={provider}
+												onValueChange={(value) => {
+													if (value === null) return;
+													setProvider(value);
+													setConfigError(null);
+													setApiKeyDraft('');
+												}}
+											>
+												<SelectTrigger className="bg-muted/20">
+													<SelectValue>
+														<div className="flex items-center gap-2">
+															{(() => {
+																const IconComponent =
+																	providerIconMap[selectedProvider.key];
+																return IconComponent ? (
+																	<IconComponent className="size-4" />
+																) : null;
+															})()}
+															{selectedProvider?.label}
+														</div>
+													</SelectValue>
+												</SelectTrigger>
+												<SelectContent>
+													{providers.map((item) => {
+														const IconComponent = providerIconMap[item.key];
+														return (
+															<SelectItem key={item.key} value={item.key}>
+																<div className="flex items-center gap-2">
+																	{IconComponent && (
 																		<IconComponent className="size-4" />
-																	) : null;
-																})()}
-																{selectedProvider?.label}
-															</div>
-														</SelectValue>
-													</SelectTrigger>
-													<SelectContent>
-														{providers.map((item) => {
-															const IconComponent = providerIconMap[item.key];
-															return (
-																<SelectItem key={item.key} value={item.key}>
-																	<div className="flex items-center gap-2">
-																		{IconComponent && (
-																			<IconComponent className="size-4" />
-																		)}
-																		{item.label}
-																	</div>
-																</SelectItem>
-															);
-														})}
-													</SelectContent>
-												</Select>
-											</div>
+																	)}
+																	{item.label}
+																</div>
+															</SelectItem>
+														);
+													})}
+												</SelectContent>
+											</Select>
+										</div>
 
-											{isCustom && (
-												<>
+										{isCustom && (
+											<>
+												<div className="space-y-1.5">
+													<label className="text-[13px] font-medium
+														text-foreground">
+														{t('common.labels.apiUrl')}
+													</label>
+													<Input
+														placeholder={
+															selectedProvider?.defaultApiUrl ||
+															'https://api.example.com'
+														}
+														value={apiUrl}
+														onChange={(event) => setApiUrl(event.target.value)}
+													/>
+												</div>
+												<div className="grid grid-cols-2 gap-4">
 													<div className="space-y-1.5">
 														<label
 															className="text-[13px] font-medium
 																text-foreground"
 														>
-															{t('common.labels.apiUrl')}
+															{t('common.labels.https')}
 														</label>
-														<Input
-															placeholder={
-																selectedProvider?.defaultApiUrl ||
-																'https://api.example.com'
-															}
-															value={apiUrl}
-															onChange={(event) =>
-																setApiUrl(event.target.value)
-															}
-														/>
-													</div>
-													<div className="grid grid-cols-2 gap-4">
-														<div className="space-y-1.5">
-															<label
-																className="text-[13px] font-medium
-																	text-foreground"
-															>
-																{t('common.labels.https')}
-															</label>
-															<div className="flex items-center">
-																<Switch
-																	checked={useSsl}
-																	onCheckedChange={setUseSsl}
-																/>
-															</div>
-														</div>
-														<div className="space-y-1.5">
-															<label
-																className="text-[13px] font-medium
-																	text-foreground"
-															>
-																{t('common.labels.protocol')}
-															</label>
-															<Select
-																value={customProtocol}
-																onValueChange={(value) => {
-																	if (value === null) return;
-																	setCustomProtocol(
-																		value as CustomProviderProtocol
-																	);
-																}}
-															>
-																<SelectTrigger className="bg-muted/20">
-																	<SelectValue>
-																		{t(
-																			CUSTOM_PROTOCOL_OPTIONS.find(
-																				(option) =>
-																					option.value === customProtocol
-																			)?.labelKey ??
-																				'settings.editor.customProtocolOptions.openai.label'
-																		)}
-																	</SelectValue>
-																</SelectTrigger>
-																<SelectContent>
-																	{CUSTOM_PROTOCOL_OPTIONS.map((option) => (
-																		<SelectItem
-																			key={option.value}
-																			value={option.value}
-																		>
-																			{t(option.labelKey)}
-																		</SelectItem>
-																	))}
-																</SelectContent>
-															</Select>
+														<div className="flex items-center">
+															<Switch
+																checked={useSsl}
+																onCheckedChange={setUseSsl}
+															/>
 														</div>
 													</div>
-												</>
-											)}
-
-											<div className="space-y-1.5">
-												<label
-													className="text-[13px] font-medium text-foreground"
-												>
-													{t('common.labels.model')}
-												</label>
-												{isCustom ? (
-													<Input
-														className="bg-muted/20"
-														placeholder={
-															selectedProvider?.defaultModel || 'model-name'
-														}
-														value={model}
-														onChange={(event) => setModel(event.target.value)}
-													/>
-												) : (
-													<Select
-														value={model}
-														onValueChange={(value) =>
-															value !== null && setModel(value)
-														}
-													>
-														<SelectTrigger className="bg-muted/20">
-															<SelectValue
-																placeholder={t(
-																	'settings.editor.modelPlaceholder'
-																)}
-															>
-																{availableModels.find(
-																	(item) => item.value === model
-																)?.name ?? model}
-															</SelectValue>
-														</SelectTrigger>
-														<SelectContent>
-															{availableModels.map((option) => (
-																<SelectItem
-																	key={option.value}
-																	value={option.value}
-																>
-																	{option.name}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												)}
-											</div>
-
-											<div className="space-y-1.5">
-												<label
-													className="flex items-center justify-between
-														text-[13px] font-medium text-foreground"
-												>
-													<span>{t('common.labels.apiKey')}</span>
-													{hasApiKey && (
-														<span
-															className="text-[11px] font-normal
-																text-muted-foreground"
+													<div className="space-y-1.5">
+														<label
+															className="text-[13px] font-medium
+																text-foreground"
 														>
-															{t('common.status.saved')}
-														</span>
-													)}
-												</label>
+															{t('common.labels.protocol')}
+														</label>
+														<Select
+															value={customProtocol}
+															onValueChange={(value) => {
+																if (value === null) return;
+																setCustomProtocol(
+																	value as CustomProviderProtocol
+																);
+															}}
+														>
+															<SelectTrigger className="bg-muted/20">
+																<SelectValue>
+																	{t(
+																		CUSTOM_PROTOCOL_OPTIONS.find(
+																			(option) =>
+																				option.value === customProtocol
+																		)?.labelKey ??
+																			'settings.editor.customProtocolOptions.openai.label'
+																	)}
+																</SelectValue>
+															</SelectTrigger>
+															<SelectContent>
+																{CUSTOM_PROTOCOL_OPTIONS.map((option) => (
+																	<SelectItem
+																		key={option.value}
+																		value={option.value}
+																	>
+																		{t(option.labelKey)}
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+													</div>
+												</div>
+											</>
+										)}
+
+										<div className="space-y-1.5">
+											<label className="text-[13px] font-medium text-foreground">
+												{t('common.labels.model')}
+											</label>
+											{isCustom ? (
 												<Input
-													type="password"
 													className="bg-muted/20"
 													placeholder={
-														hasApiKey ? t('common.status.saved') : 'sk-...'
+														selectedProvider?.defaultModel || 'model-name'
 													}
-													value={apiKeyDraft}
-													onChange={(event) =>
-														setApiKeyDraft(event.target.value)
-													}
+													value={model}
+													onChange={(event) => setModel(event.target.value)}
 												/>
-											</div>
-
-											{configError && (
-												<p
-													className="animate-in fade-in text-[13px]
-														text-destructive"
+											) : (
+												<Select
+													value={model}
+													onValueChange={(value) =>
+														value !== null && setModel(value)
+													}
 												>
-													{configError}
-												</p>
+													<SelectTrigger className="bg-muted/20">
+														<SelectValue
+															placeholder={t(
+																'settings.editor.modelPlaceholder'
+															)}
+														>
+															{availableModels.find(
+																(item) => item.value === model
+															)?.name ?? model}
+														</SelectValue>
+													</SelectTrigger>
+													<SelectContent>
+														{availableModels.map((option) => (
+															<SelectItem
+																key={option.value}
+																value={option.value}
+															>
+																{option.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
 											)}
 										</div>
-									</div>
 
-									<div className="mt-auto w-full pt-6">
-										<Button
-											className="w-full rounded-full"
-											loading={configBusy}
-											onClick={() => void handleContinueToTest()}
-										>
-											{t('common.actions.continue')}
-										</Button>
-									</div>
-								</div>
-							)}
+										<div className="space-y-1.5">
+											<label
+												className="flex items-center justify-between text-[13px]
+													font-medium text-foreground"
+											>
+												<span>{t('common.labels.apiKey')}</span>
+												{hasApiKey && (
+													<span
+														className="text-[11px] font-normal
+															text-muted-foreground"
+													>
+														{t('common.status.saved')}
+													</span>
+												)}
+											</label>
+											<Input
+												type="password"
+												className="bg-muted/20"
+												placeholder={
+													hasApiKey ? t('common.status.saved') : 'sk-...'
+												}
+												value={apiKeyDraft}
+												onChange={(event) => setApiKeyDraft(event.target.value)}
+											/>
+										</div>
 
-							{step === 'test' && (
-								<div
-									className="flex h-full flex-1 animate-in fade-in
-										slide-in-from-right-4 flex-col duration-500"
-								>
-									<div className="flex min-h-0 flex-1 flex-col">
-										<div className="mb-6 mt-4 text-center">
-											<h2 className="text-xl font-medium tracking-tight">
-												{t('setup.test.title')}
-											</h2>
-											<p className="mt-1.5 text-[13px] text-muted-foreground">
-												{t('setup.test.description')}
+										{configError && (
+											<p
+												className="animate-in fade-in text-[13px]
+													text-destructive"
+											>
+												{configError}
 											</p>
-										</div>
-
-										<div
-											className={cn(
-												`flex flex-1 flex-col rounded-xl border p-4 text-[13px]
-												leading-relaxed transition-colors duration-300`,
-												testStatus === 'error'
-													? `border-destructive/30 bg-destructive/5
-														text-destructive`
-													: testStatus === 'success'
-														? 'border-primary/20 bg-primary/5 text-foreground'
-														: `border-border/50 bg-muted/20
-															text-muted-foreground font-mono`
-											)}
-										>
-											{testStatus === 'loading' && !testResult && (
-												<div
-													className="flex h-full flex-col items-center
-														justify-center gap-3"
-												>
-													<MathCurveLoader className="size-8 text-primary" />
-													{t('setup.test.waiting')}
-												</div>
-											)}
-											<div className="whitespace-pre-wrap wrap-break-word">
-												{testResult}
-											</div>
-										</div>
-									</div>
-
-									<div className="mt-auto w-full pt-6">
-										{testStatus === 'error' ? (
-											<Button
-												variant="secondary"
-												className="w-full rounded-full"
-												onClick={() => void handleTestCompletion()}
-											>
-												{t('setup.test.retry')}
-											</Button>
-										) : (
-											<Button
-												className="w-full rounded-full"
-												disabled={testStatus !== 'success'}
-												onClick={() => setStep('license')}
-											>
-												{t('setup.test.finish')}
-											</Button>
 										)}
 									</div>
 								</div>
-							)}
 
-							{step === 'license' && (
-								<div
-									className="flex h-full flex-1 animate-in fade-in zoom-in-95
-										flex-col duration-500"
-								>
-									<div
-										className="flex flex-1 flex-col items-center justify-center
-											text-center"
+								<div className="mt-auto w-full pt-6">
+									<Button
+										className="w-full rounded-full"
+										loading={configBusy}
+										onClick={() => void handleContinueToTest()}
 									>
-										<div
-											className="mb-8 flex size-16 items-center justify-center
-												rounded-full bg-primary/10 text-primary"
-										>
-											<Crown className="size-10" />
-										</div>
-										<h1
-											className="mb-3 text-2xl font-semibold tracking-tight
-												text-foreground"
-										>
-											{t('setup.license.title')}
-										</h1>
-										<p
-											className="mb-4 text-sm leading-relaxed
-												text-muted-foreground"
-										>
-											{t('setup.license.description')}
+										{t('common.actions.continue')}
+									</Button>
+								</div>
+							</div>
+						)}
+
+						{step === 'test' && (
+							<div
+								className="flex h-full flex-1 animate-in fade-in
+									slide-in-from-right-4 flex-col duration-500"
+							>
+								<div className="flex min-h-0 flex-1 flex-col">
+									<div className="mb-6 mt-4 text-center">
+										<h2 className="text-xl font-medium tracking-tight">
+											{t('setup.test.title')}
+										</h2>
+										<p className="mt-1.5 text-[13px] text-muted-foreground">
+											{t('setup.test.description')}
 										</p>
 									</div>
 
-									<div className="mt-auto w-full space-y-2 pt-6">
-										<div className="flex flex-col gap-2 sm:flex-row">
-											<Button
-												variant="outline"
-												className="flex-1 rounded-full"
-												size="lg"
-												disabled={licenseLoading}
-												onClick={handleSkipTrial}
+									<div
+										className={cn(
+											`flex flex-1 flex-col rounded-xl border p-4 text-[13px]
+											leading-relaxed transition-colors duration-300`,
+											testStatus === 'error'
+												? `border-destructive/30 bg-destructive/5
+													text-destructive`
+												: testStatus === 'success'
+													? 'border-primary/20 bg-primary/5 text-foreground'
+													: `border-border/50 bg-muted/20 text-muted-foreground
+														font-mono`
+										)}
+									>
+										{testStatus === 'loading' && !testResult && (
+											<div
+												className="flex h-full flex-col items-center
+													justify-center gap-3"
 											>
-												{t('common.actions.tryFirst')}
-											</Button>
-											<Button
-												className="flex-1 rounded-full"
-												size="lg"
-												disabled={licenseLoading}
-												onClick={() => setShowActivation(true)}
-											>
-												<Crown className="size-4" />
-												{t('setup.license.activate')}
-											</Button>
+												<MathCurveLoader className="size-8 text-primary" />
+												{t('setup.test.waiting')}
+											</div>
+										)}
+										<div className="whitespace-pre-wrap wrap-break-word">
+											{testResult}
 										</div>
 									</div>
 								</div>
-							)}
 
-							{step === 'success' && (
-								<div
-									className="flex h-full flex-1 animate-in fade-in zoom-in-95
-										flex-col duration-500"
-								>
-									<div
-										className="flex flex-1 flex-col items-center justify-center
-											text-center"
-									>
-										<div
-											className="mb-8 flex size-16 items-center justify-center
-												rounded-full bg-primary/10 text-primary"
+								<div className="mt-auto w-full pt-6">
+									{testStatus === 'error' ? (
+										<Button
+											variant="secondary"
+											className="w-full rounded-full"
+											onClick={() => void handleTestCompletion()}
 										>
-											<CheckIcon className="size-10" />
-										</div>
-										<h1
-											className="mb-3 text-2xl font-semibold tracking-tight
-												text-foreground"
-										>
-											{t('setup.success.title')}
-										</h1>
-										<p
-											className="mb-10 text-sm leading-relaxed
-												text-muted-foreground"
-										>
-											{t('setup.success.description')}
-										</p>
-									</div>
-
-									<div className="mt-auto w-full pt-6">
+											{t('setup.test.retry')}
+										</Button>
+									) : (
 										<Button
 											className="w-full rounded-full"
-											size="lg"
-											onClick={() => {
-												markSetupComplete();
-												onComplete();
-											}}
+											disabled={testStatus !== 'success'}
+											onClick={() => setStep('success')}
 										>
-											{t('common.actions.enterEditor')}{' '}
-											<ArrowRight className="ml-2 size-4" />
+											{t('setup.test.finish')}
 										</Button>
-									</div>
-								</div>
-							)}
-						</div>
-
-						<div className="flex items-center justify-center gap-2 pb-8">
-							{WIZARD_STEPS.map((_, index) => (
-								<div
-									key={index}
-									className={cn(
-										'h-1.5 rounded-full transition-all duration-300',
-										stepIndex === index
-											? 'w-6 bg-primary'
-											: stepIndex > index
-												? 'w-1.5 bg-primary/40'
-												: 'w-1.5 bg-border'
 									)}
-								/>
-							))}
-						</div>
-					</div>
-				</DialogPopup>
-				<AlertDialog open={skipConfirmOpen} onOpenChange={setSkipConfirmOpen}>
-					<AlertDialogPopup>
-						<AlertDialogHeader>
-							<AlertDialogTitle>
-								{t('setup.skipConfirm.title')}
-							</AlertDialogTitle>
-							<AlertDialogDescription>
-								{t('setup.skipConfirm.description')}
-							</AlertDialogDescription>
-						</AlertDialogHeader>
-						<AlertDialogFooter>
-							<AlertDialogClose
-								render={
-									<Button variant="secondary">
-										{t('common.actions.cancel')}
+								</div>
+							</div>
+						)}
+
+						{step === 'success' && (
+							<div
+								className="flex h-full flex-1 animate-in fade-in zoom-in-95
+									flex-col duration-500"
+							>
+								<div
+									className="flex flex-1 flex-col items-center justify-center
+										text-center"
+								>
+									<div
+										className="mb-8 flex size-16 items-center justify-center
+											rounded-full bg-primary/10 text-primary"
+									>
+										<CheckIcon className="size-10" />
+									</div>
+									<h1
+										className="mb-3 text-2xl font-semibold tracking-tight
+											text-foreground"
+									>
+										{t('setup.success.title')}
+									</h1>
+									<p
+										className="mb-10 text-sm leading-relaxed
+											text-muted-foreground"
+									>
+										{t('setup.success.description')}
+									</p>
+								</div>
+
+								<div className="mt-auto w-full pt-6">
+									<Button
+										className="w-full rounded-full"
+										size="lg"
+										onClick={() => {
+											markSetupComplete();
+											onComplete();
+										}}
+									>
+										{t('common.actions.enterEditor')}{' '}
+										<ArrowRight className="ml-2 size-4" />
 									</Button>
-								}
+								</div>
+							</div>
+						)}
+					</div>
+
+					<div className="flex items-center justify-center gap-2 pb-8">
+						{WIZARD_STEPS.map((_, index) => (
+							<div
+								key={index}
+								className={cn(
+									'h-1.5 rounded-full transition-all duration-300',
+									stepIndex === index
+										? 'w-6 bg-primary'
+										: stepIndex > index
+											? 'w-1.5 bg-primary/40'
+											: 'w-1.5 bg-border'
+								)}
 							/>
-							<AlertDialogClose
-								render={<Button>{t('setup.skipConfirm.action')}</Button>}
-								onClick={() => {
-									markSetupComplete();
-									onComplete();
-								}}
-							/>
-						</AlertDialogFooter>
-					</AlertDialogPopup>
-				</AlertDialog>
-			</Dialog>
-			<LicenseActivationDialog
-				open={showActivation}
-				onOpenChange={setShowActivation}
-				onActivated={handleLicenseActivated}
-			/>
-		</>
+						))}
+					</div>
+				</div>
+			</DialogPopup>
+			<AlertDialog open={skipConfirmOpen} onOpenChange={setSkipConfirmOpen}>
+				<AlertDialogPopup>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{t('setup.skipConfirm.title')}</AlertDialogTitle>
+						<AlertDialogDescription>
+							{t('setup.skipConfirm.description')}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogClose
+							render={
+								<Button variant="secondary">
+									{t('common.actions.cancel')}
+								</Button>
+							}
+						/>
+						<AlertDialogClose
+							render={<Button>{t('setup.skipConfirm.action')}</Button>}
+							onClick={() => {
+								markSetupComplete();
+								onComplete();
+							}}
+						/>
+					</AlertDialogFooter>
+				</AlertDialogPopup>
+			</AlertDialog>
+		</Dialog>
 	);
 }

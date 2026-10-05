@@ -18,7 +18,6 @@ const zhCN = {
 			retry: '重新测试',
 			save: '保存',
 			skip: '跳过',
-			tryFirst: '先试用',
 		},
 		labels: {
 			apiKey: 'API Key',
@@ -60,7 +59,6 @@ const zhCN = {
 			appearance: { label: '外观' },
 			cli: { description: '命令行工具', label: 'CLI' },
 			editor: { label: '编辑器' },
-			license: { label: '许可证' },
 			sync: { label: '同步' },
 		},
 		appearance: {
@@ -219,43 +217,6 @@ const zhCN = {
 				removedAndPathCleaned: 'CLI 已移除，PATH 设置已清理',
 				uninstallFailed: '移除 CLI 失败: {{error}}',
 			},
-		},
-		license: {
-			cards: {
-				details: { title: '许可证详情' },
-			},
-			status: {
-				active: '已激活',
-				expired: '已过期',
-				revoked: '已吊销',
-				trial: '试用中',
-			},
-			labels: {
-				licensed: '已授权',
-				license: 'Madora 许可证',
-			},
-			descriptions: {
-				active: '当前设备已获得完整功能访问权限。',
-				missing: '未检测到有效的许可证。',
-				trialRemaining: '剩余 {{days}} 天试用期',
-			},
-			actions: {
-				activate: '激活',
-				deactivate: '停用此设备',
-				manage: '管理许可证',
-				purchase: '前往购买',
-			},
-			purchase: '还没有许可证？前往购买。',
-			deviceHint: '需要在其他设备上使用？请先停用当前设备。',
-			confirm: {
-				title: '确认停用',
-				description:
-					'停用后当前设备将无法使用 Madora 的专业功能，直到重新激活。你随后可以在其他设备上使用此许可证密钥。',
-				action: '停用',
-				success: '许可证已停用',
-				failed: '停用失败',
-			},
-			loading: '加载许可证信息...',
 		},
 		sync: {
 			cards: {
@@ -440,12 +401,6 @@ const zhCN = {
 			retry: '重新测试',
 			finish: '完成验证',
 		},
-		license: {
-			title: '许可证',
-			description:
-				'已有许可证？激活它以获得完整功能。你也可以稍后在设置中激活，先试用再决定。',
-			activate: '激活许可证',
-		},
 		success: {
 			title: '一切就绪',
 			description: 'Madora 已配置完毕。打开你的 Markdown 文件，即刻开始写作。',
@@ -454,35 +409,6 @@ const zhCN = {
 			title: '跳过设置？',
 			description: '确定要跳过设置步骤吗？你可以稍后在设置中重新配置 AI 补全。',
 			action: '确定跳过',
-		},
-	},
-	licenseDialog: {
-		title: '激活许可证',
-		description: '请输入许可证密钥以激活 Madora。',
-		label: '许可证密钥',
-		purchaseAction: '购买许可证',
-		purchase: '还没有许可证？前往购买。',
-		action: '激活',
-		validation: '请输入完整的许可证密钥',
-		success: '激活成功',
-	},
-	licenseBanner: {
-		verifying: '正在验证许可证...',
-		revoked: {
-			title: '许可证需要更新',
-			description:
-				'此设备上的许可证已失效，请重新输入许可证密钥以继续使用 Madora。',
-			action: '激活新许可证',
-			switchToTrial: '切换到试用期',
-		},
-		expired: {
-			title: '试用期已结束',
-			description: '您的 14 天试用期已到期。请激活许可证以继续使用 Madora。',
-			action: '激活许可证',
-		},
-		trial: {
-			remaining: '试用期剩余 {{days}} 天',
-			action: '激活',
 		},
 	},
 	topBar: {
@@ -517,12 +443,6 @@ const zhCN = {
 		generating: '正在生成 AI 建议...',
 		ready: 'AI 自动补全已就绪',
 		saveApiKeyToUse: '保存 API Key 后可用',
-	},
-	licenseProvider: {
-		activateFailed: '激活失败',
-		deactivateFailed: '停用失败',
-		revokedTitle: '许可证被吊销',
-		revokedDescription: '您的许可证已被吊销，AI 补全功能已禁用',
 	},
 	aiSettingsProvider: {
 		keychainAccessFailed: '无法访问系统密钥存储',

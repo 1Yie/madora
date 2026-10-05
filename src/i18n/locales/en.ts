@@ -18,7 +18,6 @@ const en = {
 			retry: 'Retry',
 			save: 'Save',
 			skip: 'Skip',
-			tryFirst: 'Start Trial',
 		},
 		labels: {
 			apiKey: 'API Key',
@@ -61,7 +60,6 @@ const en = {
 			appearance: { label: 'Appearance' },
 			cli: { description: 'Command line tools', label: 'CLI' },
 			editor: { label: 'Editor' },
-			license: { label: 'License' },
 			sync: { label: 'Sync' },
 		},
 		appearance: {
@@ -245,44 +243,6 @@ const en = {
 				removedAndPathCleaned: 'CLI removed and PATH cleaned up',
 				uninstallFailed: 'Failed to remove CLI: {{error}}',
 			},
-		},
-		license: {
-			cards: {
-				details: { title: 'License Details' },
-			},
-			status: {
-				active: 'Activated',
-				expired: 'Expired',
-				revoked: 'Revoked',
-				trial: 'Trial',
-			},
-			labels: {
-				licensed: 'Licensed',
-				license: 'Madora License',
-			},
-			descriptions: {
-				active: 'This device currently has access to the full feature set.',
-				missing: 'No valid license was detected.',
-				trialRemaining: '{{days}} days of trial remaining',
-			},
-			actions: {
-				activate: 'Activate',
-				deactivate: 'Deactivate this device',
-				manage: 'Manage license',
-				purchase: 'Purchase',
-			},
-			purchase: 'Don’t have a license yet? Purchase one.',
-			deviceHint:
-				'Need to use it on another device? Deactivate this one first.',
-			confirm: {
-				title: 'Confirm Deactivation',
-				description:
-					'After deactivation, this device will lose access to Madora Pro features until the license is activated again. You can then use the same license key on another device.',
-				action: 'Deactivate',
-				success: 'License deactivated',
-				failed: 'Failed to deactivate license',
-			},
-			loading: 'Loading license information...',
 		},
 		sync: {
 			cards: {
@@ -475,12 +435,6 @@ const en = {
 			retry: 'Run Test Again',
 			finish: 'Finish Verification',
 		},
-		license: {
-			title: 'License',
-			description:
-				'Already have a license? Activate it to unlock the full feature set. You can also continue with the trial and activate later in settings.',
-			activate: 'Activate License',
-		},
 		success: {
 			title: 'Ready to Go',
 			description:
@@ -491,34 +445,6 @@ const en = {
 			description:
 				'You can skip for now and return to AI completion settings later.',
 			action: 'Skip Setup',
-		},
-	},
-	licenseDialog: {
-		title: 'Activate License',
-		description: 'Enter your license key to activate Madora.',
-		label: 'License Key',
-		purchaseAction: 'Go to purchase',
-		purchase: 'Don’t have a license yet? Purchase one.',
-		action: 'Activate',
-		validation: 'Please enter the full license key',
-		success: 'Activation successful',
-	},
-	licenseBanner: {
-		verifying: 'Verifying license...',
-		revoked: {
-			title: 'License update required',
-			action: 'Activate New License',
-			switchToTrial: 'Switch to Trial',
-		},
-		expired: {
-			title: 'Trial expired',
-			description:
-				'Your 14-day trial has ended. Activate a license to continue using Madora.',
-			action: 'Activate License',
-		},
-		trial: {
-			remaining: '{{days}} days left in trial',
-			action: 'Activate',
 		},
 	},
 	topBar: {
@@ -555,13 +481,6 @@ const en = {
 		generating: 'Generating AI suggestion...',
 		ready: 'AI completion is ready',
 		saveApiKeyToUse: 'Save an API key to enable it',
-	},
-	licenseProvider: {
-		activateFailed: 'Activation failed',
-		deactivateFailed: 'Deactivation failed',
-		revokedTitle: 'License revoked',
-		revokedDescription:
-			'Your license has been revoked, so AI completion has been disabled.',
 	},
 	aiSettingsProvider: {
 		keychainAccessFailed: 'Unable to access the system keychain',

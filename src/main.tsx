@@ -5,7 +5,6 @@ import App from './App';
 import { ErrorBoundary } from '@/components/system/error-boundary';
 import { AiSettingsProvider } from '@/context/ai-settings-provider';
 import { AppSettingsProvider } from '@/context/app-settings-provider';
-import { LicenseProvider } from '@/context/license-provider';
 import { ProseThemeProvider } from '@/context/prose-theme-provider';
 import { ThemeProvider } from '@/context/theme-provider';
 import { ToastProvider } from './components/ui/toast';
@@ -14,7 +13,6 @@ import './index.css';
 const providers = [
 	ThemeProvider,
 	ToastProvider,
-	LicenseProvider,
 	AppSettingsProvider,
 	AiSettingsProvider,
 	ProseThemeProvider,

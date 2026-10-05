@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { AboutSettings } from '@/components/system/setting/about';
 import { AppearanceSettings } from '@/components/system/setting/appearance';
 import { EditorSettings } from '@/components/system/setting/editor';
-import { LicenseActivationDialog } from '@/components/system/license-activation-dialog';
-import { LicenseSettings } from '@/components/system/setting/license';
 import { SyncSettings } from '@/components/system/setting/sync';
 import { Button } from '@/components/ui/button';
 import { DialogWorkbench } from '@/components/ui/dialog-workbench';
@@ -15,16 +13,8 @@ import {
 	type SettingsSectionId,
 } from '@/components/system/setting/types';
 
-function SettingsContent({
-	section,
-	onRequestLicenseActivation,
-}: {
-	section: SettingsSectionId;
-	onRequestLicenseActivation: () => void;
-}) {
+function SettingsContent({ section }: { section: SettingsSectionId }) {
 	if (section === 'editor') return <EditorSettings />;
-	if (section === 'license')
-		return <LicenseSettings onRequestActivation={onRequestLicenseActivation} />;
 	if (section === 'sync') return <SyncSettings />;
 	if (section === 'about') return <AboutSettings />;
 	return <AppearanceSettings />;
@@ -35,7 +25,6 @@ export function SettingsDialog() {
 	const [open, setOpen] = useState(false);
 	const [activeSection, setActiveSection] =
 		useState<SettingsSectionId>('appearance');
-	const [showLicenseActivation, setShowLicenseActivation] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const settingsSections = useMemo(() => getSettingsSections(t), [t]);
 
@@ -73,19 +62,10 @@ export function SettingsDialog() {
 					className="overflow-auto size-full min-h-0 flex-1"
 				>
 					<div className="space-y-6 p-4 sm:p-6">
-						<SettingsContent
-							section={currentSection.id}
-							onRequestLicenseActivation={() => setShowLicenseActivation(true)}
-						/>
+						<SettingsContent section={currentSection.id} />
 					</div>
 				</div>
 			</DialogWorkbench>
-
-			{/* Mounted at the same level as the settings dialog, not nested inside it */}
-			<LicenseActivationDialog
-				open={showLicenseActivation}
-				onOpenChange={setShowLicenseActivation}
-			/>
 		</>
 	);
 }
