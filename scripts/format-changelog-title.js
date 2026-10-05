@@ -35,7 +35,7 @@ function parseDesktopVersion(heading) {
 
 function findReleaseCommit(version) {
 	const needle = `"version": "${version}"`;
-	let candidates = [];
+	let candidates;
 	try {
 		candidates = runGit([
 			'log',
