@@ -9,7 +9,7 @@ import {
 	X,
 } from '@keyline-icons/react';
 import type { Icon } from '@/components/ui/icon';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -101,7 +101,6 @@ export function TabBar() {
 				return;
 			}
 			session.active = true;
-			document.body.style.userSelect = 'none';
 			setDragTabId(session.tabId);
 		}
 
@@ -132,7 +131,6 @@ export function TabBar() {
 
 		if (session.active) {
 			suppressClickRef.current = true;
-			document.body.style.userSelect = '';
 			const from = session.startIndex;
 			const insertAt = dragOverIndexRef.current;
 			// No-op when the tab would land back at its original position
@@ -146,6 +144,17 @@ export function TabBar() {
 		setDragOverIndex(null);
 		dragOverIndexRef.current = null;
 	};
+
+	// Suppress text selection while a tab drag is active. Kept in an effect so
+	// the style is restored on unmount (e.g. dropping outside the tab bar).
+	useEffect(() => {
+		if (dragTabId === null) return;
+		const previous = document.body.style.userSelect;
+		document.body.style.userSelect = 'none';
+		return () => {
+			document.body.style.userSelect = previous;
+		};
+	}, [dragTabId]);
 
 	useLayoutEffect(() => {
 		if (!isScroll) return;
