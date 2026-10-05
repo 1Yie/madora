@@ -2,11 +2,14 @@ const GITHUB_REPO = '1Yie/madora';
 const GITHUB_API_ACCEPT = 'application/vnd.github+json';
 
 export const GITHUB_RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
-const GITHUB_LATEST_RELEASE_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+const GITHUB_RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`;
 
-type GitHubLatestReleaseResponse = {
+type GitHubReleaseResponse = {
 	html_url?: string;
 	tag_name?: string;
+	name?: string;
+	draft?: boolean;
+	prerelease?: boolean;
 };
 
 export type AppUpdateInfo = {
@@ -123,10 +126,29 @@ function compareVersions(left: string, right: string): number {
 	return 0;
 }
 
+function extractVersionFromName(name: string | undefined): string | null {
+	// Release names look like "Madora Desktop 0.3.16 | Mobile 0.0.4" —
+	// the first version-like token is the desktop version.
+	const match = name?.match(/\d+(?:\.\d+)+(?:-[0-9A-Za-z.-]+)?/);
+	return match?.[0] ?? null;
+}
+
+function resolveReleaseVersion(release: GitHubReleaseResponse): string | null {
+	const tagVersion = release.tag_name ? normalizeVersion(release.tag_name) : '';
+
+	if (parseVersion(tagVersion)) {
+		return tagVersion;
+	}
+
+	// Tags such as "untagged-<sha>" carry no version; fall back to the name.
+	const nameVersion = extractVersionFromName(release.name);
+	return nameVersion && parseVersion(nameVersion) ? nameVersion : null;
+}
+
 export async function checkForAppUpdate(
 	currentVersion: string
 ): Promise<AppUpdateInfo> {
-	const response = await fetch(GITHUB_LATEST_RELEASE_API_URL, {
+	const response = await fetch(GITHUB_RELEASES_API_URL, {
 		headers: {
 			Accept: GITHUB_API_ACCEPT,
 		},
@@ -136,25 +158,42 @@ export async function checkForAppUpdate(
 		throw new Error(`GitHub API responded with ${response.status}`);
 	}
 
-	const release = (await response.json()) as GitHubLatestReleaseResponse;
-	const latestVersion = release.tag_name
-		? normalizeVersion(release.tag_name)
-		: '';
+	const releases = (await response.json()) as GitHubReleaseResponse[];
 	const normalizedCurrentVersion = normalizeVersion(currentVersion);
 
 	if (!parseVersion(normalizedCurrentVersion)) {
 		throw new Error('Current app version is invalid.');
 	}
 
-	if (!parseVersion(latestVersion)) {
-		throw new Error('Latest release version is invalid.');
+	let latest: { version: string; releaseUrl: string } | null = null;
+
+	for (const release of Array.isArray(releases) ? releases : []) {
+		if (release.draft || release.prerelease) {
+			continue;
+		}
+
+		const version = resolveReleaseVersion(release);
+		if (!version) {
+			continue;
+		}
+
+		if (!latest || compareVersions(version, latest.version) > 0) {
+			latest = {
+				version,
+				releaseUrl: release.html_url ?? GITHUB_RELEASES_URL,
+			};
+		}
+	}
+
+	if (!latest) {
+		throw new Error('No valid release found.');
 	}
 
 	return {
 		currentVersion: normalizedCurrentVersion,
-		latestVersion,
-		releaseUrl: release.html_url ?? GITHUB_RELEASES_URL,
+		latestVersion: latest.version,
+		releaseUrl: latest.releaseUrl,
 		updateAvailable:
-			compareVersions(latestVersion, normalizedCurrentVersion) > 0,
+			compareVersions(latest.version, normalizedCurrentVersion) > 0,
 	};
 }

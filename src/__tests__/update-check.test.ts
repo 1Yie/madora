@@ -25,10 +25,12 @@ describe('checkForAppUpdate', () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () =>
-				mockJsonResponse({
-					html_url: 'https://github.com/1Yie/madora/releases/tag/v0.4.0',
-					tag_name: 'v0.4.0',
-				})
+				mockJsonResponse([
+					{
+						html_url: 'https://github.com/1Yie/madora/releases/tag/v0.4.0',
+						tag_name: 'v0.4.0',
+					},
+				])
 			)
 		);
 
@@ -44,9 +46,11 @@ describe('checkForAppUpdate', () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () =>
-				mockJsonResponse({
-					tag_name: 'v0.3.9',
-				})
+				mockJsonResponse([
+					{
+						tag_name: 'v0.3.9',
+					},
+				])
 			)
 		);
 
@@ -61,9 +65,11 @@ describe('checkForAppUpdate', () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () =>
-				mockJsonResponse({
-					tag_name: 'v0.4.0',
-				})
+				mockJsonResponse([
+					{
+						tag_name: 'v0.4.0',
+					},
+				])
 			)
 		);
 
@@ -74,18 +80,75 @@ describe('checkForAppUpdate', () => {
 		});
 	});
 
-	it('rejects invalid release tags', async () => {
+	it('falls back to the release name when the tag is not a version', async () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () =>
-				mockJsonResponse({
-					tag_name: 'latest',
-				})
+				mockJsonResponse([
+					{
+						html_url:
+							'https://github.com/1Yie/madora/releases/tag/untagged-c00cce0a168073402b1d',
+						name: 'Madora Desktop 0.3.16 | Mobile 0.0.4',
+						tag_name: 'untagged-c00cce0a168073402b1d',
+					},
+					{
+						tag_name: 'v0.3.14',
+					},
+				])
+			)
+		);
+
+		await expect(checkForAppUpdate('0.3.14')).resolves.toMatchObject({
+			latestVersion: '0.3.16',
+			releaseUrl:
+				'https://github.com/1Yie/madora/releases/tag/untagged-c00cce0a168073402b1d',
+			updateAvailable: true,
+		});
+	});
+
+	it('ignores drafts, prereleases, and releases without a version', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				mockJsonResponse([
+					{
+						draft: true,
+						tag_name: 'v9.9.9',
+					},
+					{
+						prerelease: true,
+						tag_name: 'v0.5.0',
+					},
+					{
+						tag_name: 'latest',
+					},
+					{
+						tag_name: 'v0.3.9',
+					},
+				])
+			)
+		);
+
+		await expect(checkForAppUpdate('0.3.9')).resolves.toMatchObject({
+			latestVersion: '0.3.9',
+			updateAvailable: false,
+		});
+	});
+
+	it('rejects when no release has a resolvable version', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				mockJsonResponse([
+					{
+						tag_name: 'latest',
+					},
+				])
 			)
 		);
 
 		await expect(checkForAppUpdate('0.3.9')).rejects.toThrow(
-			'Latest release version is invalid.'
+			'No valid release found.'
 		);
 	});
 });
