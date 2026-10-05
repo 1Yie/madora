@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
 	FieldBlock,
+	SettingsPanel,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 
@@ -40,9 +41,9 @@ export function GitTabSsh({
 	const { t } = useTranslation();
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<SettingsSectionCard title={t('git.sshAuth')}>
-				<div className="space-y-3">
+				<SettingsPanel>
 					<FieldBlock label={t('git.sshUsername')}>
 						<Input
 							nativeInput
@@ -81,10 +82,10 @@ export function GitTabSsh({
 							value={sshPassphrase}
 						/>
 					</FieldBlock>
-				</div>
+				</SettingsPanel>
 			</SettingsSectionCard>
 			<SettingsSectionCard title={t('git.httpsAuth')}>
-				<div className="space-y-3">
+				<SettingsPanel>
 					<FieldBlock label={t('git.httpsUsername')}>
 						<Input
 							nativeInput
@@ -102,7 +103,7 @@ export function GitTabSsh({
 							value={authPassword}
 						/>
 					</FieldBlock>
-				</div>
+				</SettingsPanel>
 			</SettingsSectionCard>
 		</div>
 	);

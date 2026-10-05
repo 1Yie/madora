@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { MadoraSyncSettings } from '@/components/system/setting/madora-sync';
 import { Switch } from '@/components/ui/switch';
 import {
+	SettingsGroup,
 	SettingsSectionCard,
 	Option,
 	SettingRow,
@@ -33,20 +34,22 @@ export function SyncSettings() {
 	);
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<SettingsSectionCard title={t('settings.sync.cards.mode.title')}>
-				<div className="divide-y divide-border">
-					<SettingRow
-						title={t('settings.sync.rows.enabled.title')}
-						description={t('settings.sync.rows.enabled.description')}
-					>
-						<Switch
-							checked={syncEnabled}
-							onCheckedChange={(checked) => setSyncEnabled(checked)}
-						/>
-					</SettingRow>
+				<div className="space-y-3">
+					<SettingsGroup>
+						<SettingRow
+							title={t('settings.sync.rows.enabled.title')}
+							description={t('settings.sync.rows.enabled.description')}
+						>
+							<Switch
+								checked={syncEnabled}
+								onCheckedChange={(checked) => setSyncEnabled(checked)}
+							/>
+						</SettingRow>
+					</SettingsGroup>
 					{syncEnabled && (
-						<div className="grid gap-2 py-3 sm:grid-cols-2">
+						<div className="grid gap-3 sm:grid-cols-2">
 							{syncModeOptions.map((option) => (
 								<Option
 									key={option.id}

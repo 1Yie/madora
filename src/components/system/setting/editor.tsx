@@ -24,6 +24,8 @@ import {
 	FieldBlock,
 	Option,
 	SettingRow,
+	SettingsGroup,
+	SettingsPanel,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { providerIconMap } from '@/components/ui/provider-icons';
@@ -36,6 +38,11 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Switch } from '@/components/ui/switch';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
@@ -210,9 +217,9 @@ export function EditorSettings() {
 	};
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<SettingsSectionCard title={t('settings.editor.cards.input.title')}>
-				<div className="divide-y divide-border">
+				<SettingsGroup>
 					<SettingRow
 						title={t('settings.editor.rows.autoSave.title')}
 						description={t('settings.editor.rows.autoSave.description')}
@@ -239,7 +246,7 @@ export function EditorSettings() {
 							onCheckedChange={setShowHiddenFiles}
 						/>
 					</SettingRow>
-				</div>
+				</SettingsGroup>
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.editor.cards.window.title')}>
@@ -247,227 +254,248 @@ export function EditorSettings() {
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.editor.cards.ai.title')}>
-				<div className="space-y-5">
-					<SettingRow
-						title={
-							<span className="flex items-center gap-2">
-								<Sparkles className="size-4" />
-								{t('settings.editor.rows.enableAi.title')}
+				<div className="space-y-4">
+					<SettingsGroup>
+						<SettingRow
+							icon={<Sparkles />}
+							title={t('settings.editor.rows.enableAi.title')}
+							description={t('settings.editor.rows.enableAi.description')}
+						>
+							<Switch checked={enabled} onCheckedChange={setEnabled} />
+						</SettingRow>
+					</SettingsGroup>
+					<SettingsPanel className="space-y-5">
+						<div className="space-y-2">
+							<span className="text-sm font-medium text-foreground">
+								{t('common.labels.provider')}
 							</span>
-						}
-						description={t('settings.editor.rows.enableAi.description')}
-					>
-						<Switch checked={enabled} onCheckedChange={setEnabled} />
-					</SettingRow>
-
-					<div className="space-y-2">
-						<span className="text-sm font-medium text-foreground">
-							{t('common.labels.provider')}
-						</span>
-						<div className="grid gap-2 md:grid-cols-2">
-							{getProviderDefinitions().map((item) => {
-								const IconComponent = providerIconMap[item.key];
-								return (
-									<Option
-										key={item.key}
-										active={provider === item.key}
-										label={item.label}
-										icon={IconComponent ? <IconComponent /> : undefined}
-										onClick={() => setProvider(item.key)}
-									/>
-								);
-							})}
-						</div>
-						<p className="text-xs text-muted-foreground">
-							{t('settings.editor.providerHint')}
-						</p>
-					</div>
-
-					{isCustom && (
-						<div className="space-y-4">
-							<p
-								className="text-xs font-medium uppercase tracking-wide
-									text-muted-foreground"
-							>
-								{t('settings.editor.customConfigTitle')}
+							<div className="grid gap-2 md:grid-cols-2">
+								{getProviderDefinitions().map((item) => {
+									const IconComponent = providerIconMap[item.key];
+									return (
+										<Option
+											key={item.key}
+											active={provider === item.key}
+											label={item.label}
+											icon={IconComponent ? <IconComponent /> : undefined}
+											onClick={() => setProvider(item.key)}
+										/>
+									);
+								})}
+							</div>
+							<p className="text-xs text-muted-foreground">
+								{t('settings.editor.providerHint')}
 							</p>
+						</div>
 
-							<FieldBlock
-								label={t('common.labels.protocol')}
-								icon={<Globe />}
-								hint={selectedCustomProtocolOption?.description}
-							>
-								<Select
-									value={customProtocol}
-									onValueChange={(value) => {
-										if (
-											value === 'anthropic' ||
-											value === 'google' ||
-											value === 'openai'
-										) {
-											setCustomProtocol(value);
+						{isCustom && (
+							<div className="space-y-4">
+								<p
+									className="text-xs font-medium uppercase tracking-wide
+										text-muted-foreground"
+								>
+									{t('settings.editor.customConfigTitle')}
+								</p>
+
+								<FieldBlock
+									label={t('common.labels.protocol')}
+									icon={<Globe />}
+									hint={selectedCustomProtocolOption?.description}
+								>
+									<Select
+										value={customProtocol}
+										onValueChange={(value) => {
+											if (
+												value === 'anthropic' ||
+												value === 'google' ||
+												value === 'openai'
+											) {
+												setCustomProtocol(value);
+											}
+										}}
+									>
+										<SelectTrigger>
+											<SelectValue
+												placeholder={t(
+													'settings.editor.customProtocolPlaceholder'
+												)}
+											>
+												{selectedCustomProtocolOption?.label}
+											</SelectValue>
+										</SelectTrigger>
+										<SelectContent>
+											{customProtocolOptions.map((option) => (
+												<SelectItem key={option.value} value={option.value}>
+													{option.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</FieldBlock>
+
+								<FieldBlock
+									label={t('common.labels.apiUrl')}
+									icon={<Server />}
+									hint={t('settings.editor.apiUrlHint')}
+								>
+									<Input
+										autoComplete="off"
+										placeholder={
+											selectedProvider?.defaultApiUrl ||
+											'https://api.example.com'
 										}
-									}}
+										value={apiUrl}
+										onChange={(e) => setApiUrl(e.target.value)}
+									/>
+								</FieldBlock>
+
+								<div className="flex items-center justify-between gap-4">
+									<div className="flex items-center">
+										<div className="space-y-1.5">
+											<div className="flex items-center gap-1.5">
+												<Lock className="size-3.5 text-muted-foreground" />
+												<span className="text-sm font-medium text-foreground">
+													{t('common.labels.https')}
+												</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												{t('settings.editor.httpsHint')}
+											</p>
+										</div>
+									</div>
+									<Switch checked={useSsl} onCheckedChange={setUseSsl} />
+								</div>
+							</div>
+						)}
+
+						<FieldBlock
+							label={t('common.labels.apiKey')}
+							icon={<KeyRound />}
+							hint={
+								<span className="space-y-0.5">
+									<span className="block">
+										{hasApiKey
+											? t('settings.editor.apiKeyHint.existing')
+											: t('settings.editor.apiKeyHint.missing')}
+									</span>
+									<span className="block">
+										{t('settings.editor.apiKeyHint.storage')}
+									</span>
+								</span>
+							}
+						>
+							<InputGroup>
+								<Input
+									autoComplete="off"
+									placeholder={
+										hasApiKey && !isEditing
+											? t('settings.editor.apiKeyPlaceholderSaved')
+											: 'sk-...'
+									}
+									type="password"
+									value={apiKeyDraft}
+									onChange={(e) => setApiKeyDraft(e.target.value)}
+									aria-label={t('common.labels.apiKey')}
+									disabled={!isEditing}
+								/>
+								<InputGroupAddon align="inline-end">
+									{!isEditing ? (
+										<Tooltip>
+											<TooltipTrigger render={<span />}>
+												<Button
+													size="icon-xs"
+													variant="ghost"
+													onClick={() => setIsEditing(true)}
+													aria-label={t('settings.editor.editApiKeyAria')}
+												>
+													<Edit />
+												</Button>
+											</TooltipTrigger>
+											<TooltipContent>
+												{t('settings.editor.editApiKeyAria')}
+											</TooltipContent>
+										</Tooltip>
+									) : (
+										<div className="flex items-center gap-1">
+											<Tooltip>
+												<TooltipTrigger render={<span />}>
+													<Button
+														size="icon-xs"
+														variant="ghost"
+														onClick={() => void handleConfirm()}
+														aria-label={t('settings.editor.confirmSaveAria')}
+													>
+														<Check />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>
+													{t('settings.editor.confirmSaveAria')}
+												</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger render={<span />}>
+													<Button
+														size="icon-xs"
+														variant="ghost"
+														onClick={handleCancel}
+														aria-label={t('settings.editor.cancelEditAria')}
+													>
+														<X />
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>
+													{t('settings.editor.cancelEditAria')}
+												</TooltipContent>
+											</Tooltip>
+										</div>
+									)}
+								</InputGroupAddon>
+							</InputGroup>
+						</FieldBlock>
+
+						<FieldBlock
+							label={t('common.labels.model')}
+							icon={<Bot />}
+							hint={isCustom ? t('settings.editor.modelHintCustom') : undefined}
+						>
+							{isCustom ? (
+								<Input
+									autoComplete="off"
+									placeholder={selectedProvider?.defaultModel || 'model-name'}
+									value={model}
+									onChange={(e) => setModel(e.target.value)}
+								/>
+							) : availableModels.length > 0 ? (
+								<Select
+									value={model}
+									onValueChange={(value) => value && setModel(value)}
 								>
 									<SelectTrigger>
 										<SelectValue
-											placeholder={t(
-												'settings.editor.customProtocolPlaceholder'
-											)}
+											placeholder={
+												loadingModels
+													? t('settings.editor.loadingSelect')
+													: t('settings.editor.modelPlaceholder')
+											}
 										>
-											{selectedCustomProtocolOption?.label}
+											{selectedModelLabel || undefined}
 										</SelectValue>
 									</SelectTrigger>
 									<SelectContent>
-										{customProtocolOptions.map((option) => (
+										{availableModels.map((option) => (
 											<SelectItem key={option.value} value={option.value}>
-												{option.label}
+												{option.name}
 											</SelectItem>
 										))}
 									</SelectContent>
 								</Select>
-							</FieldBlock>
-
-							<FieldBlock
-								label={t('common.labels.apiUrl')}
-								icon={<Server />}
-								hint={t('settings.editor.apiUrlHint')}
-							>
-								<Input
-									autoComplete="off"
-									placeholder={
-										selectedProvider?.defaultApiUrl || 'https://api.example.com'
-									}
-									value={apiUrl}
-									onChange={(e) => setApiUrl(e.target.value)}
-								/>
-							</FieldBlock>
-
-							<div className="flex items-center justify-between gap-4">
-								<div className="flex items-center">
-									<div className="space-y-1.5">
-										<div className="flex items-center gap-1.5">
-											<Lock className="size-3.5 text-muted-foreground" />
-											<span className="text-sm font-medium text-foreground">
-												{t('common.labels.https')}
-											</span>
-										</div>
-										<p className="text-xs text-muted-foreground">
-											{t('settings.editor.httpsHint')}
-										</p>
-									</div>
-								</div>
-								<Switch checked={useSsl} onCheckedChange={setUseSsl} />
-							</div>
-						</div>
-					)}
-
-					<FieldBlock
-						label={t('common.labels.apiKey')}
-						icon={<KeyRound />}
-						hint={
-							<span className="space-y-0.5">
-								<span className="block">
-									{hasApiKey
-										? t('settings.editor.apiKeyHint.existing')
-										: t('settings.editor.apiKeyHint.missing')}
-								</span>
-								<span className="block">
-									{t('settings.editor.apiKeyHint.storage')}
-								</span>
-							</span>
-						}
-					>
-						<InputGroup>
-							<Input
-								autoComplete="off"
-								placeholder={
-									hasApiKey && !isEditing
-										? t('settings.editor.apiKeyPlaceholderSaved')
-										: 'sk-...'
-								}
-								type="password"
-								value={apiKeyDraft}
-								onChange={(e) => setApiKeyDraft(e.target.value)}
-								aria-label={t('common.labels.apiKey')}
-								disabled={!isEditing}
-							/>
-							<InputGroupAddon align="inline-end">
-								{!isEditing ? (
-									<Button
-										size="icon-xs"
-										variant="ghost"
-										onClick={() => setIsEditing(true)}
-										aria-label={t('settings.editor.editApiKeyAria')}
-									>
-										<Edit />
-									</Button>
-								) : (
-									<div className="flex items-center gap-1">
-										<Button
-											size="icon-xs"
-											variant="ghost"
-											onClick={() => void handleConfirm()}
-											aria-label={t('settings.editor.confirmSaveAria')}
-										>
-											<Check />
-										</Button>
-										<Button
-											size="icon-xs"
-											variant="ghost"
-											onClick={handleCancel}
-											aria-label={t('settings.editor.cancelEditAria')}
-										>
-											<X />
-										</Button>
-									</div>
-								)}
-							</InputGroupAddon>
-						</InputGroup>
-					</FieldBlock>
-
-					<FieldBlock
-						label={t('common.labels.model')}
-						icon={<Bot />}
-						hint={isCustom ? t('settings.editor.modelHintCustom') : undefined}
-					>
-						{isCustom ? (
-							<Input
-								autoComplete="off"
-								placeholder={selectedProvider?.defaultModel || 'model-name'}
-								value={model}
-								onChange={(e) => setModel(e.target.value)}
-							/>
-						) : availableModels.length > 0 ? (
-							<Select
-								value={model}
-								onValueChange={(value) => value && setModel(value)}
-							>
-								<SelectTrigger>
-									<SelectValue
-										placeholder={
-											loadingModels
-												? t('settings.editor.loadingSelect')
-												: t('settings.editor.modelPlaceholder')
-										}
-									>
-										{selectedModelLabel || undefined}
-									</SelectValue>
-								</SelectTrigger>
-								<SelectContent>
-									{availableModels.map((option) => (
-										<SelectItem key={option.value} value={option.value}>
-											{option.name}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						) : loadingModels ? (
-							<p className="text-xs text-muted-foreground">
-								{t('settings.editor.loadingModels')}
-							</p>
-						) : null}
-					</FieldBlock>
+							) : loadingModels ? (
+								<p className="text-xs text-muted-foreground">
+									{t('settings.editor.loadingModels')}
+								</p>
+							) : null}
+						</FieldBlock>
+					</SettingsPanel>
 				</div>
 			</SettingsSectionCard>
 		</div>

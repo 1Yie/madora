@@ -5,6 +5,7 @@ import licenses from '@/assets/licenses.json';
 import {
 	BrandShard,
 	SettingRow,
+	SettingsGroup,
 	SettingsSectionCard,
 	Stat,
 } from '@/components/system/setting/shared';
@@ -101,7 +102,7 @@ export function AboutSettings() {
 	};
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<BrandShard
 				logoSrc={logo}
 				appName="Madora"
@@ -122,30 +123,33 @@ export function AboutSettings() {
 				</div>
 			</BrandShard>
 			<SettingsSectionCard title={t('settings.about.cards.update.title')}>
-				<SettingRow
-					title={t('settings.about.actions.check')}
-					description={t('settings.about.currentVersionDescription', {
-						version: appInfo.version,
-					})}
-				>
-					<Button
-						loading={checkingForUpdate}
-						variant="outline"
-						onClick={() => {
-							void handleCheckForUpdate();
-						}}
+				<SettingsGroup>
+					<SettingRow
+						title={t('settings.about.actions.check')}
+						description={t('settings.about.currentVersionDescription', {
+							version: appInfo.version,
+						})}
 					>
-						{t('settings.about.actions.check')}
-					</Button>
-				</SettingRow>
+						<Button
+							loading={checkingForUpdate}
+							variant="outline"
+							onClick={() => {
+								void handleCheckForUpdate();
+							}}
+						>
+							{t('settings.about.actions.check')}
+						</Button>
+					</SettingRow>
+				</SettingsGroup>
 			</SettingsSectionCard>
 			<SettingsSectionCard title={t('settings.about.cards.licenses.title')}>
 				<div>
-					<div className="divide-y divide-border">
+					<SettingsGroup>
 						{licenses.map((entry) => (
 							<div
 								key={entry.name}
-								className="flex items-center justify-between gap-4 py-3 text-sm"
+								className="flex items-center justify-between gap-4 px-4 py-3
+									text-sm"
 							>
 								<ExternalLinkAnchor href={entry.url}>
 									{entry.name}
@@ -155,7 +159,7 @@ export function AboutSettings() {
 								</span>
 							</div>
 						))}
-					</div>
+					</SettingsGroup>
 				</div>
 			</SettingsSectionCard>
 		</div>

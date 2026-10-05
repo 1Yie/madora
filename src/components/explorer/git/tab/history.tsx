@@ -9,6 +9,11 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu';
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { SettingsSectionCard } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
 
@@ -37,8 +42,8 @@ export function GitTabHistory({
 
 	return (
 		<>
-			<div className="shrink-0 space-y-4 px-6 pt-4 pb-2">
-				<SettingsSectionCard title={t('git.history')}>
+			<div className="shrink-0 px-8 pb-4">
+				<SettingsSectionCard>
 					<div className="flex items-center gap-2">
 						<Button
 							disabled={actionBusy || gitLog.length === 0}
@@ -52,8 +57,8 @@ export function GitTabHistory({
 				</SettingsSectionCard>
 			</div>
 
-			<div className="overflow-auto size-full min-h-0 flex-1 pr-1">
-				<div className="space-y-0.5 p-3">
+			<div className="h-full min-h-0 flex-1 overflow-auto">
+				<div className="space-y-0.5 px-8 pb-8">
 					{gitLog.map((entry, index) => {
 						const shortCommitId = entry.id.slice(0, 7);
 						const isHead = index === 0;
@@ -98,26 +103,39 @@ export function GitTabHistory({
 									)}
 								>
 									<div className="flex items-start justify-between gap-2">
-										<div
-											className="min-w-0 flex-1 truncate font-sans text-sm
-												font-medium text-foreground"
-											title={entry.summary}
-										>
-											{entry.summary}
-										</div>
+										<Tooltip>
+											<TooltipTrigger
+												render={
+													<div
+														className="min-w-0 flex-1 truncate font-sans text-sm
+															font-medium text-foreground"
+													/>
+												}
+											>
+												{entry.summary}
+											</TooltipTrigger>
+											<TooltipContent>{entry.summary}</TooltipContent>
+										</Tooltip>
 
 										<Menu>
-											<MenuTrigger
-												render={
-													<Button
-														aria-label={`${t('git.moreActions')} ${shortCommitId}`}
-														size="icon-xs"
-														variant="ghost"
-													>
-														<Ellipsis />
-													</Button>
-												}
-											/>
+											<Tooltip>
+												<TooltipTrigger
+													render={
+														<MenuTrigger
+															render={
+																<Button
+																	aria-label={`${t('git.moreActions')} ${shortCommitId}`}
+																	size="icon-xs"
+																	variant="ghost"
+																/>
+															}
+														/>
+													}
+												>
+													<Ellipsis />
+												</TooltipTrigger>
+												<TooltipContent>{t('git.moreActions')}</TooltipContent>
+											</Tooltip>
 
 											<MenuPopup align="end">
 												<MenuItem

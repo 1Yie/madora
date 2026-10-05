@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
 	FieldBlock,
+	SettingsPanel,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 
@@ -38,9 +39,9 @@ export function GitTabRemote({
 	const [remoteUrl, setRemoteUrl] = useState(initialRemoteUrl);
 
 	return (
-		<div className="space-y-4">
-			<SettingsSectionCard title={t('git.tab.remote')}>
-				<div className="space-y-3">
+		<div className="space-y-8">
+			<SettingsSectionCard>
+				<SettingsPanel>
 					<FieldBlock label={t('git.remoteName')}>
 						<Input
 							nativeInput
@@ -84,7 +85,7 @@ export function GitTabRemote({
 							{t('git.pushAction')}
 						</Button>
 					</div>
-				</div>
+				</SettingsPanel>
 			</SettingsSectionCard>
 		</div>
 	);

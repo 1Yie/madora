@@ -33,6 +33,8 @@ import { Badge } from '@/components/ui/badge';
 import {
 	FieldBlock,
 	SettingRow,
+	SettingsGroup,
+	SettingsPanel,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
@@ -396,20 +398,22 @@ export function MadoraSyncSettings() {
 	if (!config) return null;
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<SettingsSectionCard title={t('settings.sync.madora.cards.status.title')}>
-				<div className="space-y-4">
-					<SettingRow
-						title={t('settings.sync.madora.rows.enabled.title')}
-						description={t('settings.sync.madora.rows.enabled.description')}
-					>
-						<Switch
-							checked={config.enabled}
-							disabled={saving || pairingBusy}
-							onCheckedChange={(checked) => void handleEnabledChange(checked)}
-						/>
-					</SettingRow>
-					<div className="grid gap-3 md:grid-cols-3">
+				<div className="space-y-3">
+					<SettingsGroup>
+						<SettingRow
+							title={t('settings.sync.madora.rows.enabled.title')}
+							description={t('settings.sync.madora.rows.enabled.description')}
+						>
+							<Switch
+								checked={config.enabled}
+								disabled={saving || pairingBusy}
+								onCheckedChange={(checked) => void handleEnabledChange(checked)}
+							/>
+						</SettingRow>
+					</SettingsGroup>
+					<SettingsPanel className="grid gap-4 space-y-0 md:grid-cols-3">
 						<div>
 							<div className="text-xs text-muted-foreground">
 								{t('settings.sync.madora.status.connection')}
@@ -441,7 +445,7 @@ export function MadoraSyncSettings() {
 								{config.pairedDevices.length}
 							</div>
 						</div>
-					</div>
+					</SettingsPanel>
 				</div>
 				{config.lastError && (
 					<div
@@ -458,7 +462,7 @@ export function MadoraSyncSettings() {
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.pairing.title')}
 					>
-						<div className="space-y-4">
+						<SettingsPanel>
 							<div
 								className="grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]
 									sm:items-center"
@@ -596,13 +600,13 @@ export function MadoraSyncSettings() {
 									{t('settings.sync.madora.actions.clearPairingCode')}
 								</Button>
 							</div>
-						</div>
+						</SettingsPanel>
 					</SettingsSectionCard>
 
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.features.title')}
 					>
-						<div className="divide-y divide-border">
+						<SettingsGroup>
 							<SettingRow
 								title={t('settings.sync.madora.rows.autoStart.title')}
 								description={t(
@@ -642,13 +646,13 @@ export function MadoraSyncSettings() {
 									}
 								/>
 							</SettingRow>
-						</div>
+						</SettingsGroup>
 					</SettingsSectionCard>
 
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.host.title')}
 					>
-						<div className="space-y-4">
+						<SettingsPanel>
 							<FieldBlock
 								label={t('settings.sync.madora.fields.deviceName')}
 								icon={<MonitorSmartphone />}
@@ -680,22 +684,23 @@ export function MadoraSyncSettings() {
 									{t('common.actions.save')}
 								</Button>
 							</div>
-						</div>
+						</SettingsPanel>
 					</SettingsSectionCard>
 
 					<SettingsSectionCard
 						title={t('settings.sync.madora.cards.devices.title')}
 					>
-						<div className="divide-y divide-border">
+						<SettingsGroup>
 							{config.pairedDevices.length === 0 ? (
-								<div className="py-3 text-sm text-muted-foreground">
+								<div className="px-4 py-3.5 text-sm text-muted-foreground">
 									{t('settings.sync.madora.empty.devices')}
 								</div>
 							) : (
 								config.pairedDevices.map((device) => (
 									<div
 										key={device.id}
-										className="flex items-center justify-between gap-4 py-3"
+										className="flex items-center justify-between gap-4 px-4
+											py-3.5"
 									>
 										<div className="min-w-0">
 											<div className="flex items-center gap-2">
@@ -735,7 +740,7 @@ export function MadoraSyncSettings() {
 									</div>
 								))
 							)}
-						</div>
+						</SettingsGroup>
 					</SettingsSectionCard>
 				</>
 			) : null}

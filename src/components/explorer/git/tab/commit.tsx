@@ -9,7 +9,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { SettingsSectionCard } from '@/components/system/setting/shared';
+import {
+	SettingsPanel,
+	SettingsSectionCard,
+} from '@/components/system/setting/shared';
 import {
 	Tooltip,
 	TooltipContent,
@@ -139,10 +142,10 @@ export function GitTabCommit({
 	const conflictHintText = getConflictHintText(conflictedFiles, t);
 
 	return (
-		<div className="flex h-full flex-col">
-			<div className="shrink-0 space-y-4 px-6 pt-4 pb-4">
+		<div className="flex min-h-0 flex-1 flex-col">
+			<div className="shrink-0 px-8 pb-6">
 				<SettingsSectionCard title={t('git.commitMessage')}>
-					<div className="space-y-3">
+					<SettingsPanel className="space-y-3">
 						<Textarea
 							onChange={(event) => onCommitMessageChange(event.target.value)}
 							placeholder={t('git.commitPlaceholder')}
@@ -168,19 +171,19 @@ export function GitTabCommit({
 								{t('git.commitAll')}
 							</Button>
 						</div>
-					</div>
+					</SettingsPanel>
 				</SettingsSectionCard>
 			</div>
 
-			<div className="min-h-0 flex-1 flex flex-col overflow-hidden pt-2">
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 				{hasFiles ? (
-					<div className="overflow-auto size-full min-h-0 flex-1 px-6 pb-6">
-						<div className="space-y-3">
+					<div className="h-full min-h-0 flex-1 overflow-auto px-8 pb-8">
+						<div className="space-y-6">
 							{conflictedFiles.length > 0 && (
 								<div>
 									<div
 										className="sticky top-0 z-10 flex items-center
-											justify-between bg-popover pb-1.5 pt-0.5"
+											justify-between bg-background pb-2 pt-0.5"
 									>
 										<div className="flex items-center gap-2">
 											<span
@@ -197,7 +200,10 @@ export function GitTabCommit({
 											{conflictHintText}
 										</span>
 									</div>
-									<div className="divide-y divide-border/40">
+									<div
+										className="divide-y divide-border overflow-hidden
+											rounded-2xl border border-border bg-card"
+									>
 										{conflictedFiles.map((file) => (
 											<ConflictFileRow
 												key={file.path}
@@ -213,7 +219,7 @@ export function GitTabCommit({
 								<div>
 									<div
 										className="sticky top-0 z-10 flex items-center
-											justify-between bg-popover pb-1.5 pt-0.5"
+											justify-between bg-background pb-2 pt-0.5"
 									>
 										<div className="flex items-center gap-2">
 											<span className="text-sm font-medium text-foreground">
@@ -233,7 +239,10 @@ export function GitTabCommit({
 											{t('git.stageAll')}
 										</Button>
 									</div>
-									<div className="divide-y divide-border/40">
+									<div
+										className="divide-y divide-border overflow-hidden
+											rounded-2xl border border-border bg-card"
+									>
 										{unstagedFiles.map((file) => (
 											<FileRow
 												key={file.path}
@@ -252,7 +261,7 @@ export function GitTabCommit({
 								<div>
 									<div
 										className="sticky top-0 z-10 flex items-center
-											justify-between bg-popover pb-1.5 pt-0.5"
+											justify-between bg-background pb-2 pt-0.5"
 									>
 										<div className="flex items-center gap-2">
 											<span className="text-sm font-medium text-foreground">
@@ -272,7 +281,10 @@ export function GitTabCommit({
 											{t('git.unstageAll')}
 										</Button>
 									</div>
-									<div className="divide-y divide-border/40">
+									<div
+										className="divide-y divide-border overflow-hidden
+											rounded-2xl border border-border bg-card"
+									>
 										{stagedFiles.map((file) => (
 											<FileRow
 												key={file.path}
@@ -336,8 +348,8 @@ function FileRow({
 }) {
 	return (
 		<div
-			className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30
-				transition-colors"
+			className="flex items-center justify-between px-4 py-2 transition-colors
+				hover:bg-accent/40"
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				<FileBadge status={file.status} />
@@ -370,8 +382,8 @@ function ConflictFileRow({
 	const hasMarkers = file.hasConflictMarkers;
 	return (
 		<div
-			className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30
-				transition-colors"
+			className="flex items-center justify-between px-4 py-2 transition-colors
+				hover:bg-accent/40"
 		>
 			<div className="flex min-w-0 items-center gap-2">
 				<FileBadge status={file.status} />

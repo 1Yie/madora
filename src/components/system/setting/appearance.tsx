@@ -20,8 +20,9 @@ import type { LocalePreference } from '@/i18n/locale';
 import { ColorPicker } from '@/components/ui/color-picker';
 import { Slider } from '@/components/ui/slider';
 import {
-	FieldBlock,
 	Option,
+	SettingRow,
+	SettingsGroup,
 	SettingsSectionCard,
 } from '@/components/system/setting/shared';
 import { cn } from '@/lib/utils';
@@ -94,8 +95,10 @@ const PRESETS: Array<[string, string]> = [
 
 function swatchCardCn(active: boolean) {
 	return cn(
-		'rounded-lg text-left transition-colors',
-		active ? 'bg-primary/8' : 'text-muted-foreground hover:bg-muted/50'
+		'rounded-2xl border text-left transition-colors',
+		active
+			? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+			: 'border-border bg-card hover:bg-accent/50'
 	);
 }
 
@@ -177,7 +180,7 @@ function EditorTextSizeSetting() {
 	const { editorFontSize, setEditorFontSize } = useAppSettings();
 
 	return (
-		<FieldBlock label={t('settings.appearance.editorTextSize.label')}>
+		<SettingRow stacked title={t('settings.appearance.editorTextSize.label')}>
 			<div className="flex items-center gap-3">
 				<Slider
 					className="flex-1"
@@ -204,7 +207,7 @@ function EditorTextSizeSetting() {
 				<span>{MIN_EDITOR_FONT_SIZE}px</span>
 				<span>{MAX_EDITOR_FONT_SIZE}px</span>
 			</div>
-		</FieldBlock>
+		</SettingRow>
 	);
 }
 
@@ -231,7 +234,7 @@ function ZoomLevelSetting() {
 	];
 
 	return (
-		<FieldBlock label={t('settings.appearance.zoomLevel.label')}>
+		<SettingRow stacked title={t('settings.appearance.zoomLevel.label')}>
 			<div className="grid gap-2 md:grid-cols-3">
 				{options.map((option) => (
 					<Option
@@ -243,7 +246,7 @@ function ZoomLevelSetting() {
 					/>
 				))}
 			</div>
-		</FieldBlock>
+		</SettingRow>
 	);
 }
 
@@ -269,7 +272,7 @@ export function AppearanceSettings() {
 	const selectedPreset = accentMode === 'custom' ? accent : null;
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-8">
 			<SettingsSectionCard
 				title={t('settings.appearance.cards.language.title')}
 			>
@@ -281,10 +284,10 @@ export function AppearanceSettings() {
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.appearance.cards.editor.title')}>
-				<div className="space-y-4">
+				<SettingsGroup>
 					<EditorTextSizeSetting />
 					<ZoomLevelSetting />
-				</div>
+				</SettingsGroup>
 			</SettingsSectionCard>
 
 			<SettingsSectionCard title={t('settings.appearance.cards.theme.title')}>
