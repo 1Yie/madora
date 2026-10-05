@@ -19,6 +19,7 @@ export default defineConfig([
 			'build/**',
 			'node_modules/**',
 			'src/components/ui/**/*.{ts,tsx}',
+			'src/__linttest__/**',
 			'eslint.config.ts',
 			'commitlint.config.js',
 		],
