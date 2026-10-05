@@ -653,6 +653,7 @@ const ja = {
 	explorerPanel: {
 		newDocument: '新しいドキュメント',
 		newFolder: '新しいフォルダー',
+		openFolder: 'フォルダーを開く',
 		rename: '名前を変更',
 		copy: 'コピー',
 		cut: '切り取り',

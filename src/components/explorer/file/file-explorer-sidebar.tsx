@@ -1275,7 +1275,6 @@ export function FileExplorerSidebar({
 		restoreDeletedNode: onRestoreDeletedNode,
 		sortEnabled,
 		toggleSort: onSortToggle,
-		openFolder: onOpenFolder,
 		refreshFolder: onRefresh,
 		pasteNode: onPasteNode,
 		importExternalFilesHandler: onImportExternalFiles,
@@ -2263,31 +2262,21 @@ export function FileExplorerSidebar({
 			>
 				<div className="border-b border-sidebar-border">
 					<div
-						className={`flex items-center justify-between gap-3 px-4
+						className={`flex items-center px-3
 							${explorerTopSectionHeightClassName}`}
 					>
-						<div className="min-w-0">
-							<Tooltip>
-								<TooltipTrigger
-									className="block truncate text-xs text-muted-foreground
-										text-left leading-normal"
-									render={<span />}
-								>
-									{root ? root.path : t('explorerPanel.startBrowsing')}
-								</TooltipTrigger>
-								{root && (
-									<TooltipContent side="bottom">{root.path}</TooltipContent>
-								)}
-							</Tooltip>
-						</div>
-						<Button
-							loading={busy}
-							onClick={onOpenFolder}
-							size="sm"
-							variant="outline"
-						>
-							<Folder className="size-4" />
-						</Button>
+						<Tooltip>
+							<TooltipTrigger
+								className="block min-w-0 truncate text-left text-xs
+									text-muted-foreground"
+								render={<span />}
+							>
+								{root ? root.path : t('explorerPanel.startBrowsing')}
+							</TooltipTrigger>
+							{root && (
+								<TooltipContent side="bottom">{root.path}</TooltipContent>
+							)}
+						</Tooltip>
 					</div>
 					<div
 						className="flex items-center justify-center gap-1 border-t
@@ -2436,7 +2425,7 @@ export function FileExplorerSidebar({
 									size="icon-sm"
 									variant="ghost"
 								>
-									<RefreshCcw className="size-3.5" />
+									<RefreshCcw className="size-4" />
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">

@@ -1,8 +1,15 @@
+import { Folder } from '@keyline-icons/react';
 import { useCallback, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { WorkspaceProvider, useWorkspace } from '@/context/workspace-provider';
 import { FileExplorerSidebar } from '@/components/explorer/file/file-explorer-sidebar';
+import { Button } from '@/components/ui/button';
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { FilePreview } from '@/components/explorer/file/file-preview';
 import { TabBar } from '@/components/explorer/workspace/tab-bar';
 import appIcon from '@/assets/icon.png';
@@ -32,6 +39,9 @@ export function WorkspaceBrowser(props: WorkspaceBrowserProps) {
 }
 
 function SidebarBrand() {
+	const { t } = useTranslation();
+	const { openFolder, sidebarBusy } = useWorkspace();
+
 	return (
 		<div
 			data-tauri-drag-region
@@ -46,6 +56,25 @@ function SidebarBrand() {
 				src={appIcon}
 			/>
 			<span className="pointer-events-none text-sm font-semibold">Madora</span>
+			<Tooltip>
+				{/* A wrapper keeps the tooltip alive while the button is disabled. */}
+				<TooltipTrigger className="ml-auto" render={<span />}>
+					<Button
+						aria-label={t('explorerPanel.openFolder')}
+						className="text-muted-foreground hover:bg-sidebar-accent
+							hover:text-sidebar-accent-foreground"
+						loading={sidebarBusy}
+						onClick={() => void openFolder()}
+						size="icon-sm"
+						variant="ghost"
+					>
+						<Folder className="size-4" />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent side="bottom">
+					{t('explorerPanel.openFolder')}
+				</TooltipContent>
+			</Tooltip>
 		</div>
 	);
 }

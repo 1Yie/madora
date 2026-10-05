@@ -618,6 +618,7 @@ const zhCN = {
 	explorerPanel: {
 		newDocument: '新建文档',
 		newFolder: '新建文件夹',
+		openFolder: '打开文件夹',
 		rename: '重命名',
 		copy: '复制',
 		cut: '剪切',

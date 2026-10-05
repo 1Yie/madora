@@ -1,4 +1,4 @@
-export const explorerTopSectionHeightClassName = 'h-14';
+export const explorerTopSectionHeightClassName = 'h-9';
 
 export const explorerBottomSectionHeightClassName = 'min-h-9';
 

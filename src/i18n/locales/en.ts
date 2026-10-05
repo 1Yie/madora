@@ -664,6 +664,7 @@ const en = {
 	explorerPanel: {
 		newDocument: 'New Document',
 		newFolder: 'New Folder',
+		openFolder: 'Open Folder',
 		rename: 'Rename',
 		copy: 'Copy',
 		cut: 'Cut',

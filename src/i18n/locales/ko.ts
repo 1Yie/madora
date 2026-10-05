@@ -653,6 +653,7 @@ const ko = {
 	explorerPanel: {
 		newDocument: '새 문서',
 		newFolder: '새 폴더',
+		openFolder: '폴더 열기',
 		rename: '이름 바꾸기',
 		copy: '복사',
 		cut: '잘라내기',
