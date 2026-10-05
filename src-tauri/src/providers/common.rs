@@ -261,6 +261,49 @@ fn parse_sse_event(raw_event: &str) -> Option<SseEvent> {
     })
 }
 
+/// Append one stream chunk to `buffer`.
+///
+/// A chunk may end in the middle of a multi-byte sequence. Incomplete trailing
+/// bytes stay in `pending_bytes` until a later chunk finishes the character,
+/// so a split character is never decoded as replacement text.
+fn append_stream_chunk(
+    buffer: &mut String,
+    pending_bytes: &mut Vec<u8>,
+    chunk: &[u8],
+) -> Result<(), String> {
+    pending_bytes.extend_from_slice(chunk);
+
+    match std::str::from_utf8(pending_bytes) {
+        Ok(text) => {
+            buffer.push_str(text);
+            pending_bytes.clear();
+        }
+        Err(error) if error.error_len().is_none() => {
+            let valid_up_to = error.valid_up_to();
+            if valid_up_to > 0 {
+                let valid_text = std::str::from_utf8(&pending_bytes[..valid_up_to]).map_err(
+                    |parse_error| {
+                        i18n::tf(
+                            "ai.parse_stream_failed",
+                            &[("error", &parse_error.to_string())],
+                        )
+                    },
+                )?;
+                buffer.push_str(valid_text);
+                pending_bytes.drain(..valid_up_to);
+            }
+        }
+        Err(error) => {
+            return Err(i18n::tf(
+                "ai.parse_stream_failed",
+                &[("error", &error.to_string())],
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn stream_sse_response(
     response: Response,
     mut on_event: impl FnMut(SseEvent) -> Result<(), String>,
@@ -277,38 +320,7 @@ pub async fn stream_sse_response(
                 &[("error", error_text.as_deref().unwrap_or_default())],
             )
         })?;
-        pending_bytes.extend_from_slice(&chunk);
-
-        loop {
-            match std::str::from_utf8(&pending_bytes) {
-                Ok(text) => {
-                    buffer.push_str(text);
-                    pending_bytes.clear();
-                    break;
-                }
-                Err(error) if error.error_len().is_none() => {
-                    let valid_up_to = error.valid_up_to();
-                    if valid_up_to > 0 {
-                        let valid_text = std::str::from_utf8(&pending_bytes[..valid_up_to])
-                            .map_err(|parse_error| {
-                                i18n::tf(
-                                    "ai.parse_stream_failed",
-                                    &[("error", &parse_error.to_string())],
-                                )
-                            })?;
-                        buffer.push_str(valid_text);
-                        pending_bytes.drain(..valid_up_to);
-                    }
-                    break;
-                }
-                Err(error) => {
-                    return Err(i18n::tf(
-                        "ai.parse_stream_failed",
-                        &[("error", &error.to_string())],
-                    ));
-                }
-            }
-        }
+        append_stream_chunk(&mut buffer, &mut pending_bytes, &chunk)?;
 
         while let Some(raw_event) = take_next_sse_block(&mut buffer) {
             if let Some(event) = parse_sse_event(&raw_event) {
@@ -788,5 +800,43 @@ mod tests {
     #[test]
     fn parse_sse_event_ignores_comment_only_payload() {
         assert_eq!(parse_sse_event(": keep-alive"), None);
+    }
+
+    // ─── append_stream_chunk ──────────────────────────────────────
+
+    #[test]
+    fn append_stream_chunk_appends_complete_utf8() {
+        let mut buffer = String::new();
+        let mut pending = Vec::new();
+
+        append_stream_chunk(&mut buffer, &mut pending, b"data: hi").unwrap();
+
+        assert_eq!(buffer, "data: hi");
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn append_stream_chunk_reassembles_split_multibyte_char() {
+        let mut buffer = String::new();
+        let mut pending = Vec::new();
+        let bytes = "你好".as_bytes();
+
+        // Split inside the first character's three bytes.
+        append_stream_chunk(&mut buffer, &mut pending, &bytes[..2]).unwrap();
+        assert_eq!(buffer, "");
+        assert_eq!(pending.len(), 2);
+
+        append_stream_chunk(&mut buffer, &mut pending, &bytes[2..]).unwrap();
+
+        assert_eq!(buffer, "你好");
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn append_stream_chunk_rejects_invalid_utf8() {
+        let mut buffer = String::new();
+        let mut pending = Vec::new();
+
+        assert!(append_stream_chunk(&mut buffer, &mut pending, &[0xFF, 0xFE, 0xFD]).is_err());
     }
 }
