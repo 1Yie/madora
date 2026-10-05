@@ -21,7 +21,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
 import { useWorkspace } from '@/context/workspace-provider';
-import { isMac } from '@/lib/platform';
+import { isMac, WINDOW_CONTROLS_WIDTH } from '@/lib/platform';
 import { isSameOrDescendantPath } from '@/lib/path-utils';
 
 export type TabEntry = {
@@ -238,7 +238,8 @@ export function TabBar() {
 					>
 						{!isScroll && !isMac && (
 							<div
-								className="float-right h-8 w-[116px]"
+								className="float-right h-8"
+								style={{ width: WINDOW_CONTROLS_WIDTH }}
 								data-tauri-drag-region
 							/>
 						)}
@@ -430,7 +431,11 @@ export function TabBar() {
 				{/* Reserved space for the frameless window controls (fixed top-right).
 					Wrap mode carves the corner inside the flow via the float instead. */}
 				{isScroll && !isMac && (
-					<div className="w-[116px] shrink-0" data-tauri-drag-region />
+					<div
+						className="shrink-0"
+						style={{ width: WINDOW_CONTROLS_WIDTH }}
+						data-tauri-drag-region
+					/>
 				)}
 			</div>
 
@@ -448,7 +453,7 @@ export function TabBar() {
 							duration-150 dark:from-white/12"
 						style={{
 							opacity: showRightShadow ? 1 : 0,
-							right: isMac ? 0 : 116,
+							right: isMac ? 0 : WINDOW_CONTROLS_WIDTH,
 						}}
 					/>
 				</>

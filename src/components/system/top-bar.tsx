@@ -23,7 +23,7 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { isMac } from '@/lib/platform';
+import { isMac, WINDOW_BUTTON_WIDTH } from '@/lib/platform';
 import {
 	clearStoredMarkdownDrafts,
 	hasUnsaved,
@@ -169,12 +169,14 @@ export default function Titlebar() {
 									type="button"
 									aria-label={t('topBar.controls.minimize')}
 									onClick={() => void minimizeWindow()}
-									className="flex h-full items-center px-3 text-muted-foreground
-										transition-colors hover:bg-muted/50 hover:text-foreground"
+									className="flex h-full items-center justify-center
+										text-muted-foreground transition-colors hover:bg-muted/50
+										hover:text-foreground"
+									style={{ width: WINDOW_BUTTON_WIDTH }}
 								/>
 							}
 						>
-							<Minus size={14} />
+							<Minus size={16} />
 						</TooltipTrigger>
 						<TooltipContent side="bottom">
 							{t('topBar.controls.minimize')}
@@ -187,12 +189,14 @@ export default function Titlebar() {
 									type="button"
 									aria-label={t('topBar.controls.maximize')}
 									onClick={() => void toggleMaximizeWindow()}
-									className="flex h-full items-center px-3 text-muted-foreground
-										transition-colors hover:bg-muted/50 hover:text-foreground"
+									className="flex h-full items-center justify-center
+										text-muted-foreground transition-colors hover:bg-muted/50
+										hover:text-foreground"
+									style={{ width: WINDOW_BUTTON_WIDTH }}
 								/>
 							}
 						>
-							<Square size={12} />
+							<Square size={14} />
 						</TooltipTrigger>
 						<TooltipContent side="bottom">
 							{t('topBar.controls.maximize')}
@@ -205,13 +209,14 @@ export default function Titlebar() {
 									type="button"
 									aria-label={t('topBar.controls.close')}
 									onClick={() => void requestClose()}
-									className="group flex h-full items-center px-3
+									className="group flex h-full items-center justify-center
 										text-muted-foreground transition-colors hover:bg-red-500/80
 										hover:text-white"
+									style={{ width: WINDOW_BUTTON_WIDTH }}
 								/>
 							}
 						>
-							<X size={14} />
+							<X size={20} />
 						</TooltipTrigger>
 						<TooltipContent side="bottom">
 							{t('topBar.controls.close')}
