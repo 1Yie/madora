@@ -17,6 +17,7 @@ import {
 	FolderOpen,
 	ListCollapse,
 	LoaderCircle,
+	RefreshCcw,
 	RotateCcw,
 	Scissors,
 	Bin2 as Trash2,
@@ -2435,7 +2436,7 @@ export function FileExplorerSidebar({
 									size="icon-sm"
 									variant="ghost"
 								>
-									<RotateCcw className="size-3.5" />
+									<RefreshCcw className="size-3.5" />
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent side="bottom">

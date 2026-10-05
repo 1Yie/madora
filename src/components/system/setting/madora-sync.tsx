@@ -5,8 +5,7 @@ import {
 	Copy,
 	LaptopSmartphone as MonitorSmartphone,
 	QrCode,
-	RefreshCw,
-	ShieldCheck,
+	RefreshCcw,
 	Smartphone,
 	Wifi,
 	WifiX as WifiOff,
@@ -62,7 +61,7 @@ function renderConnectionIcon(state: MadoraSyncConnectionState) {
 		case 'connecting':
 		case 'authenticating':
 		case 'syncing':
-			return <RefreshCw className="animate-spin" />;
+			return <RefreshCcw className="animate-spin" />;
 		default:
 			return <WifiOff />;
 	}
@@ -588,7 +587,7 @@ export function MadoraSyncSettings() {
 									onClick={handleIssuePairingCode}
 									variant="outline"
 								>
-									<ShieldCheck />
+									<RefreshCcw />
 									{t('settings.sync.madora.actions.refreshPairingQr')}
 								</Button>
 								<Button

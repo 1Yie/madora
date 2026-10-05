@@ -27,7 +27,7 @@ import {
 	KeyRound,
 	LoaderCircle,
 	Plus,
-	RefreshCw,
+	RefreshCcw,
 	Settings as Settings2,
 } from '@keyline-icons/react';
 import type { Icon } from '@/components/ui/icon';
@@ -1043,7 +1043,7 @@ export function GitPanel({
 								size="icon-xs"
 								variant="ghost"
 							>
-								<RefreshCw />
+								<RefreshCcw />
 							</Button>
 						</TooltipTrigger>
 						<TooltipContent side="top">{t('git.refresh')}</TooltipContent>
@@ -1103,7 +1103,7 @@ export function GitPanel({
 										onClick={() => void refreshStatus()}
 										variant="outline"
 									>
-										<RefreshCw />
+										<RefreshCcw />
 									</Button>
 								</TooltipTrigger>
 								<TooltipContent side="top">{t('git.refresh')}</TooltipContent>

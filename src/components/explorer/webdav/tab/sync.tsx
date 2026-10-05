@@ -1,4 +1,4 @@
-import { RefreshCw } from '@keyline-icons/react';
+import { RefreshCcw } from '@keyline-icons/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -112,7 +112,7 @@ export function WebDavTabSync({
 						loading={syncing}
 						disabled={!canSync || syncing}
 					>
-						<RefreshCw className="size-3.5" />
+						<RefreshCcw className="size-3.5" />
 						{syncing
 							? t('webdav.syncPanel.syncing')
 							: t('webdav.syncPanel.syncNow')}

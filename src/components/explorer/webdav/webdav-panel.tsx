@@ -3,7 +3,7 @@ import {
 	CloudOff,
 	Globe,
 	LoaderCircle as Loader2,
-	RefreshCw,
+	RefreshCcw,
 	Settings as Settings2,
 } from '@keyline-icons/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -52,7 +52,7 @@ export function WebDavPanel({
 			id: 'sync' as WebDavWorkbenchTab,
 			label: t('webdav.tab.sync'),
 			description: t('webdav.tab.syncDesc'),
-			icon: RefreshCw,
+			icon: RefreshCcw,
 		},
 	];
 
@@ -241,7 +241,7 @@ export function WebDavPanel({
 							{syncing ? (
 								<Loader2 className="size-3.5 animate-spin" />
 							) : (
-								<RefreshCw className="size-3.5" />
+								<RefreshCcw className="size-3.5" />
 							)}
 						</Button>
 					</TooltipTrigger>
