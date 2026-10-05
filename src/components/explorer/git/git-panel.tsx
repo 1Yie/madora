@@ -31,7 +31,14 @@ import {
 	Settings as Settings2,
 } from '@keyline-icons/react';
 import type { Icon } from '@/components/ui/icon';
-import { useCallback, useEffect, Fragment, useRef, useState } from 'react';
+import {
+	useCallback,
+	useEffect,
+	Fragment,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -85,6 +92,12 @@ type GitHistoryAction =
 	| null;
 
 const CREDENTIALS_DEBOUNCE_MS = 2000;
+
+/**
+ * Below this width a truncated label only shows an unreadable stub
+ * (~3 CJK chars), so the text is hidden entirely instead.
+ */
+const MIN_READABLE_TEXT_PX = 48;
 
 type GitSummaryPart = {
 	key: string;
@@ -248,6 +261,54 @@ function GitSummaryIcons({
 				);
 			})}
 		</span>
+	);
+}
+
+/**
+ * Branch + status labels for the bottom bar. The branch label always stays
+ * visible and truncates normally; the summary goes `invisible` when it is
+ * squeezed below a readable width, so it never renders a truncated stub.
+ * Kept `invisible` (not `hidden`) so the span stays measurable and the check
+ * can't oscillate. The tooltip still carries the full text.
+ */
+function StatusLabels({
+	branchLabel,
+	summary,
+}: {
+	branchLabel: string;
+	summary: string;
+}) {
+	const summaryRef = useRef<HTMLSpanElement>(null);
+	const [summaryCramped, setSummaryCramped] = useState(false);
+
+	useLayoutEffect(() => {
+		const el = summaryRef.current;
+		if (!el) return;
+
+		const check = () => {
+			setSummaryCramped(
+				el.scrollWidth > el.clientWidth && el.clientWidth < MIN_READABLE_TEXT_PX
+			);
+		};
+
+		check();
+		const observer = new ResizeObserver(check);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [summary]);
+
+	return (
+		<div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+			<span className="max-w-[45%] shrink truncate font-medium text-foreground">
+				{branchLabel}
+			</span>
+			<span
+				ref={summaryRef}
+				className={cn('min-w-0 flex-1 truncate', summaryCramped && 'invisible')}
+			>
+				{summary}
+			</span>
+		</div>
 	);
 }
 
@@ -795,71 +856,56 @@ export function GitPanel({
 						onOpenChange={handleBranchPopoverOpen}
 						open={branchPopoverOpen}
 					>
-						<Tooltip>
-							<TooltipTrigger
-								className="flex min-w-0 flex-1 items-center gap-2
-									overflow-hidden rounded-md px-2 py-1 text-left leading-4
-									text-muted-foreground outline-none hover:bg-sidebar-accent/60"
-								render={
-									<PopoverTrigger
-										aria-label={statusTooltip}
-										className="flex min-w-0 flex-1 items-center gap-2
-											overflow-hidden rounded-md px-2 py-1 text-left leading-4
-											text-muted-foreground outline-none
-											hover:bg-sidebar-accent/60"
-									>
-										{busy || actionBusy || branchActionBusy ? (
-											<LoaderCircle
-												className="size-3.5 shrink-0 animate-spin text-primary"
-											/>
-										) : (
-											<GitBranch className="size-3.5 shrink-0 text-primary" />
-										)}
-										<div
-											className="flex min-w-0 flex-1 items-center gap-2
-												overflow-hidden"
+						<div className="min-w-0 flex-1">
+							<Tooltip>
+								<TooltipTrigger
+									className="flex w-full min-w-0 items-center gap-2
+										overflow-hidden rounded-md px-2 py-1 text-left leading-4
+										text-muted-foreground outline-none
+										hover:bg-sidebar-accent/60"
+									render={
+										<PopoverTrigger
+											aria-label={statusTooltip}
+											className="flex w-full min-w-0 items-center gap-2
+												overflow-hidden rounded-md px-2 py-1 text-left leading-4
+												text-muted-foreground outline-none
+												hover:bg-sidebar-accent/60"
 										>
-											<span
-												className="max-w-[45%] shrink truncate font-medium
-													text-foreground"
-											>
-												{branchLabel}
-											</span>
-											<span className="min-w-0 flex-1 truncate">{summary}</span>
-										</div>
-									</PopoverTrigger>
-								}
-							>
-								{busy || actionBusy || branchActionBusy ? (
-									<LoaderCircle
-										className="size-3.5 shrink-0 animate-spin text-primary"
-									/>
-								) : (
-									<GitBranch className="size-3.5 shrink-0 text-primary" />
-								)}
-								<div
-									className="flex min-w-0 flex-1 items-center gap-2
-										overflow-hidden"
+											{busy || actionBusy || branchActionBusy ? (
+												<LoaderCircle
+													className="size-3.5 shrink-0 animate-spin
+														text-primary"
+												/>
+											) : (
+												<GitBranch className="size-3.5 shrink-0 text-primary" />
+											)}
+											<StatusLabels
+												branchLabel={branchLabel}
+												summary={summary}
+											/>
+										</PopoverTrigger>
+									}
 								>
-									<span
-										className="max-w-[45%] shrink truncate font-medium
-											text-foreground"
-									>
-										{branchLabel}
-									</span>
-									<span className="min-w-0 flex-1 truncate">{summary}</span>
-								</div>
-							</TooltipTrigger>
-							<TooltipContent side="top">
-								<div className="flex items-center gap-1.5 whitespace-nowrap">
-									<span className="shrink-0 font-medium text-foreground">
-										{branchLabel}
-									</span>
-									<span className="text-muted-foreground">·</span>
-									<GitSummaryIcons className="flex-nowrap" status={status} />
-								</div>
-							</TooltipContent>
-						</Tooltip>
+									{busy || actionBusy || branchActionBusy ? (
+										<LoaderCircle
+											className="size-3.5 shrink-0 animate-spin text-primary"
+										/>
+									) : (
+										<GitBranch className="size-3.5 shrink-0 text-primary" />
+									)}
+									<StatusLabels branchLabel={branchLabel} summary={summary} />
+								</TooltipTrigger>
+								<TooltipContent side="top">
+									<div className="flex items-center gap-1.5 whitespace-nowrap">
+										<span className="shrink-0 font-medium text-foreground">
+											{branchLabel}
+										</span>
+										<span className="text-muted-foreground">·</span>
+										<GitSummaryIcons className="flex-nowrap" status={status} />
+									</div>
+								</TooltipContent>
+							</Tooltip>
+						</div>
 						<PopoverPopup className="p-0 m-0">
 							<div className="flex max-h-80 flex-col gap-2">
 								<div
@@ -936,52 +982,43 @@ export function GitPanel({
 						</PopoverPopup>
 					</Popover>
 				) : (
-					<Tooltip>
-						<TooltipTrigger
-							className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden
-								rounded-md px-2 py-1 text-left leading-4 text-muted-foreground
-								outline-none"
-							render={
-								<button
-									aria-label={statusTooltip}
-									className="flex min-w-0 flex-1 items-center gap-2
-										overflow-hidden rounded-md px-2 py-1 text-left leading-4
-										text-muted-foreground outline-none
-										hover:bg-sidebar-accent/60"
-									type="button"
-								/>
-							}
-						>
-							{busy || actionBusy ? (
-								<LoaderCircle
-									className="size-3.5 shrink-0 animate-spin text-primary"
-								/>
-							) : (
-								<GitBranch className="size-3.5 shrink-0 text-primary" />
-							)}
-							<div
-								className="flex min-w-0 flex-1 items-center gap-2
-									overflow-hidden"
+					<div className="min-w-0 flex-1">
+						<Tooltip>
+							<TooltipTrigger
+								className="flex w-full min-w-0 items-center gap-2
+									overflow-hidden rounded-md px-2 py-1 text-left leading-4
+									text-muted-foreground outline-none"
+								render={
+									<button
+										aria-label={statusTooltip}
+										className="flex w-full min-w-0 items-center gap-2
+											overflow-hidden rounded-md px-2 py-1 text-left leading-4
+											text-muted-foreground outline-none
+											hover:bg-sidebar-accent/60"
+										type="button"
+									/>
+								}
 							>
-								<span
-									className="max-w-[45%] shrink truncate font-medium
-										text-foreground"
-								>
-									{branchLabel}
-								</span>
-								<span className="min-w-0 flex-1 truncate">{summary}</span>
-							</div>
-						</TooltipTrigger>
-						<TooltipContent side="top">
-							<div className="flex items-center gap-1.5 whitespace-nowrap">
-								<span className="shrink-0 font-medium text-foreground">
-									{branchLabel}
-								</span>
-								<span className="text-muted-foreground">·</span>
-								<GitSummaryIcons className="flex-nowrap" status={status} />
-							</div>
-						</TooltipContent>
-					</Tooltip>
+								{busy || actionBusy ? (
+									<LoaderCircle
+										className="size-3.5 shrink-0 animate-spin text-primary"
+									/>
+								) : (
+									<GitBranch className="size-3.5 shrink-0 text-primary" />
+								)}
+								<StatusLabels branchLabel={branchLabel} summary={summary} />
+							</TooltipTrigger>
+							<TooltipContent side="top">
+								<div className="flex items-center gap-1.5 whitespace-nowrap">
+									<span className="shrink-0 font-medium text-foreground">
+										{branchLabel}
+									</span>
+									<span className="text-muted-foreground">·</span>
+									<GitSummaryIcons className="flex-nowrap" status={status} />
+								</div>
+							</TooltipContent>
+						</Tooltip>
+					</div>
 				)}
 				<div
 					className="flex shrink-0 items-center gap-1.5 text-muted-foreground"
