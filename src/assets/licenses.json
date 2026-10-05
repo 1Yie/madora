@@ -20,11 +20,6 @@
 		"url": "https://code.haverbeke.berlin/codemirror/view"
 	},
 	{
-		"license": "OFL-1.1",
-		"name": "@fontsource-variable/geist",
-		"url": "https://github.com/fontsource/font-files"
-	},
-	{
 		"license": "MIT",
 		"name": "@lobehub/icons",
 		"url": "https://github.com/lobehub/lobe-icons"
@@ -348,5 +343,15 @@
 		"license": "MIT",
 		"name": "zustand",
 		"url": "https://github.com/pmndrs/zustand"
+	},
+	{
+		"license": "OFL-1.1",
+		"name": "JetBrains Mono (Nerd Font)",
+		"url": "https://www.jetbrains.com/lp/mono/"
+	},
+	{
+		"license": "MiSans License Agreement",
+		"name": "MiSans",
+		"url": "https://hyperos.mi.com/font"
 	}
 ]

@@ -400,7 +400,7 @@ function createEditorTheme(dark: boolean, fontSize: number = 14) {
 			},
 			'.cm-scroller': {
 				fontFamily:
-					'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+					'"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 				lineHeight: '1.7',
 				boxSizing: 'border-box',
 				paddingBlock: '2px',
@@ -460,7 +460,7 @@ function createEditorTheme(dark: boolean, fontSize: number = 14) {
 				borderRadius: '3px',
 				color: 'white',
 				fontFamily:
-					'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+					'"MiSans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 				fontSize: '10px',
 				fontWeight: '600',
 				left: '-1px',
