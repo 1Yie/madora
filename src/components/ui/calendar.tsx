@@ -1,10 +1,10 @@
 'use client';
 
 import {
-	CaretLeft as ChevronLeftIcon,
-	CaretRight as ChevronRightIcon,
-	CaretUpDown as ChevronsUpDownIcon,
-} from '@phosphor-icons/react';
+	ChevronLeft as ChevronLeftIcon,
+	ChevronRight as ChevronRightIcon,
+	ChevronsUpDown as ChevronsUpDownIcon,
+} from '@keyline-icons/react';
 import type * as React from 'react';
 import { DayPicker } from 'react-day-picker';
 import { cn } from '@/lib/utils';

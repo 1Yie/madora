@@ -1,9 +1,9 @@
 import {
 	Cloud,
-	CircleNotch as Loader2,
-	FloppyDisk as Save,
-	Trash as Trash2,
-} from '@phosphor-icons/react';
+	LoaderCircle as Loader2,
+	Save,
+	Bin2 as Trash2,
+} from '@keyline-icons/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

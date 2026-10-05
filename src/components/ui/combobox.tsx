@@ -2,9 +2,9 @@
 
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import {
-	CaretUpDown as ChevronsUpDownIcon,
+	ChevronsUpDown as ChevronsUpDownIcon,
 	X as XIcon,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';

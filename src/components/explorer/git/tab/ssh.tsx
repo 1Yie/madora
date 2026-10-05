@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { FolderLock as FolderKey } from '@phosphor-icons/react';
+import { Key } from '@keyline-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -68,7 +68,7 @@ export function GitTabSsh({
 								onClick={onPickKeyFile}
 								variant="outline"
 							>
-								<FolderKey />
+								<Key />
 								{t('git.selectFile')}
 							</Button>
 						</div>

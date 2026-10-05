@@ -1,4 +1,4 @@
-import { Cloud, GitBranch } from '@phosphor-icons/react';
+import { Cloud, GitBranch } from '@keyline-icons/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MadoraSyncSettings } from '@/components/system/setting/madora-sync';

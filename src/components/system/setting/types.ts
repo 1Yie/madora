@@ -3,8 +3,8 @@ import {
 	Cloud,
 	Keyboard,
 	Palette,
-	GearSix as Settings2,
-} from '@phosphor-icons/react';
+	Settings as Settings2,
+} from '@keyline-icons/react';
 
 export type SettingsSectionId = 'appearance' | 'editor' | 'sync' | 'about';
 

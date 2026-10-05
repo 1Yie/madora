@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
-import { CaretRight as ChevronRightIcon } from '@phosphor-icons/react';
+import { ChevronRight as ChevronRightIcon } from '@keyline-icons/react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 

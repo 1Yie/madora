@@ -3,10 +3,10 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
 import {
-	CaretLeft as ChevronLeftIcon,
-	CaretRight as ChevronRightIcon,
-	DotsThree as MoreHorizontalIcon,
-} from '@phosphor-icons/react';
+	ChevronLeft as ChevronLeftIcon,
+	ChevronRight as ChevronRightIcon,
+	MoreHorizontal as MoreHorizontalIcon,
+} from '@keyline-icons/react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 import { type Button, buttonVariants } from '@/components/ui/button';

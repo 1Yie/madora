@@ -1,11 +1,11 @@
 import { useTranslation } from 'react-i18next';
 import {
 	Clock as ClockIcon,
-	ArrowBendDownLeft as CornerDownLeft,
-	DotsThree as Ellipsis,
-	ArrowCounterClockwise as RotateCcw,
+	CornerDownLeft,
+	MoreHorizontal as Ellipsis,
+	RotateCcw,
 	User as UserIcon,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from '@/components/ui/menu';

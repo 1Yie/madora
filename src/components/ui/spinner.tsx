@@ -1,4 +1,4 @@
-import { CircleNotch as Loader2Icon } from '@phosphor-icons/react';
+import { LoaderCircle as Loader2Icon } from '@keyline-icons/react';
 import type React from 'react';
 import { cn } from '@/lib/utils';
 

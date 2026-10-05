@@ -1,9 +1,6 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
 import { gitStageFile } from '@/invoke/git';
-import {
-	Check,
-	ArrowsLeftRight as ChevronsLeftRight,
-} from '@phosphor-icons/react';
+import { Check, ChevronsLeftRight } from '@keyline-icons/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 

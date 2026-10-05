@@ -3,7 +3,7 @@ import {
 	ArrowLeft,
 	ArrowRight,
 	Check as CheckIcon,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 

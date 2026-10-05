@@ -1,10 +1,10 @@
 import {
-	EyeSlash as EyeOff,
+	EyeOff,
 	FileImage,
 	FileX,
 	FolderOpen,
 	Info,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -177,7 +177,7 @@ function renderPreviewBody(
 	return (
 		<div className="flex h-full flex-col">
 			<Alert className="rounded-none border-x-0 border-t-0" variant="warning">
-				<Info />
+				<Info className="size-4" />
 				<AlertTitle>{t('filePreview.conflictNoMarkersTitle')}</AlertTitle>
 				<AlertDescription>
 					{t('filePreview.conflictNoMarkersDescription')}

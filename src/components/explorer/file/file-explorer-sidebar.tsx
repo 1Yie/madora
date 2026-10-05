@@ -1,27 +1,27 @@
 import {
-	ArrowsDownUp as ArrowUpDown,
+	ArrowUpDown,
 	Bookmark,
-	BookmarkSimple as BookmarkX,
-	CaretRight as ChevronRight,
-	ClipboardText as Clipboard,
-	CloudSlash as CloudOff,
+	Bookmark as BookmarkX,
+	ChevronRight,
+	Clipboard,
+	CloudOff,
 	Copy,
 	FileImage,
-	FileMd,
-	PencilLine as FilePenLine,
 	FileText,
+	PenLine,
+	File,
 	FileArrowUp as FileUp,
 	FilePlus,
 	Folder,
 	FolderPlus,
 	FolderOpen,
-	ListBullets as ListCollapse,
-	CircleNotch as LoaderCircle,
-	ArrowCounterClockwise as RotateCcw,
+	ListCollapse,
+	LoaderCircle,
+	RotateCcw,
 	Scissors,
-	Trash as Trash2,
+	Bin2 as Trash2,
 	X,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 import {
 	type FormEvent,
 	type ReactNode,
@@ -518,7 +518,7 @@ function ContextMenuContent({
 							</MenuItem>
 						) : null}
 						<MenuItem onClick={() => onAction('rename')}>
-							<FilePenLine />
+							<PenLine />
 							{t('explorerPanel.rename')}
 						</MenuItem>
 						<MenuItem onClick={() => onAction('copy')}>
@@ -1180,8 +1180,8 @@ const FileTreeNode = memo(function FileTreeNode({
 		node.fileKind === 'image'
 			? FileImage
 			: node.fileKind === 'markdown'
-				? FileMd
-				: FileText;
+				? FileText
+				: File;
 
 	return (
 		<div

@@ -21,6 +21,11 @@
 	},
 	{
 		"license": "MIT",
+		"name": "@keyline-icons/react",
+		"url": "https://github.com/keyline-icons/keyline-icons"
+	},
+	{
+		"license": "MIT",
 		"name": "@lobehub/icons",
 		"url": "https://github.com/lobehub/lobe-icons"
 	},

@@ -1,11 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 
-import {
-	ArrowFatLinesDown as ArrowDownToLine,
-	ArrowFatLineUp as ArrowUpFromLine,
-	GearSix as Settings2,
-} from '@phosphor-icons/react';
+import { Download, Upload, Settings as Settings2 } from '@keyline-icons/react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,7 +68,7 @@ export function GitTabRemote({
 							onClick={onPull}
 							variant="outline"
 						>
-							<ArrowDownToLine />
+							<Download />
 							{t('git.pullAction')}
 						</Button>
 						<Button
@@ -81,7 +77,7 @@ export function GitTabRemote({
 							onClick={onPush}
 							variant="outline"
 						>
-							<ArrowUpFromLine />
+							<Upload />
 							{t('git.pushAction')}
 						</Button>
 					</div>

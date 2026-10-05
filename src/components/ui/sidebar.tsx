@@ -3,7 +3,7 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
-import { SidebarSimple as PanelLeftIcon } from '@phosphor-icons/react';
+import { PanelLeft as PanelLeftIcon } from '@keyline-icons/react';
 import * as React from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';

@@ -19,18 +19,18 @@ import {
 	gitUnstageFile,
 } from '@/invoke/git';
 import {
-	ArrowFatLinesDown as ArrowDownToLine,
-	ArrowFatLineUp as ArrowUpFromLine,
+	Download,
+	Upload,
 	Check,
 	GitBranch,
-	ClockCounterClockwise as History,
-	Key as KeyRound,
-	CircleNotch as LoaderCircle,
+	History,
+	KeyRound,
+	LoaderCircle,
 	Plus,
-	ArrowsClockwise as RefreshCw,
-	GearSix as Settings2,
-	type Icon,
-} from '@phosphor-icons/react';
+	RefreshCw,
+	Settings as Settings2,
+} from '@keyline-icons/react';
+import type { Icon } from '@/components/ui/icon';
 import { useCallback, useEffect, Fragment, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -154,7 +154,7 @@ function getSummaryParts(
 
 	if (status.branch?.ahead) {
 		parts.push({
-			icon: ArrowUpFromLine,
+			icon: Upload,
 			key: 'ahead',
 			text: t('git.status.ahead', { count: status.branch.ahead }),
 		});
@@ -162,7 +162,7 @@ function getSummaryParts(
 
 	if (status.branch?.behind) {
 		parts.push({
-			icon: ArrowDownToLine,
+			icon: Download,
 			key: 'behind',
 			text: t('git.status.behind', { count: status.branch.behind }),
 		});
@@ -1011,7 +1011,7 @@ export function GitPanel({
 										size="icon-xs"
 										variant="ghost"
 									>
-										<ArrowDownToLine />
+										<Download />
 									</Button>
 								</TooltipTrigger>
 								<TooltipContent side="top">{t('git.fetch')}</TooltipContent>
@@ -1114,7 +1114,7 @@ export function GitPanel({
 								onClick={() => void pull()}
 								variant="outline"
 							>
-								<ArrowDownToLine />
+								<Download />
 								{t('git.pull')}
 							</Button>
 							<Button
@@ -1123,7 +1123,7 @@ export function GitPanel({
 								onClick={() => void push()}
 								variant="outline"
 							>
-								<ArrowUpFromLine />
+								<Upload />
 								{t('git.push')}
 							</Button>
 						</div>

@@ -1,5 +1,5 @@
 'use client';
-import { ArrowLeft } from '@phosphor-icons/react';
+import { ArrowLeft } from '@keyline-icons/react';
 import {
 	type ComponentType,
 	type ReactNode,

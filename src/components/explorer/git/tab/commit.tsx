@@ -1,11 +1,11 @@
 // import { Warning as AlertTriangle, Check, Minus, Plus, ArrowsClockwise as RefreshCw } from '@phosphor-icons/react';
 import {
-	Warning as AlertTriangle,
+	TriangleAlert as AlertTriangle,
 	Check,
 	Info,
 	Minus,
 	Plus,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';

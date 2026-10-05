@@ -1,14 +1,14 @@
 import {
-	Sparkle as Sparkles,
+	Sparkles,
 	Check,
-	PencilSimple as Edit,
+	Pen as Edit,
 	X,
-	Key as KeyRound,
-	Robot as Bot,
+	KeyRound,
+	Bot,
 	Globe,
-	LockSimple as Lock,
-	HardDrives as Server,
-} from '@phosphor-icons/react';
+	Lock,
+	Server,
+} from '@keyline-icons/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {

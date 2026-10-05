@@ -4,7 +4,7 @@ import {
 	toggleMaximizeWindow,
 } from '@/invoke/window';
 import { hideWindow, quitApp } from '@/invoke/system';
-import { X, Square, Minus } from '@phosphor-icons/react';
+import { X, Square, Minus } from '@keyline-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';

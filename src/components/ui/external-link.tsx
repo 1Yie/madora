@@ -1,5 +1,5 @@
 import { openUrl } from '@/invoke/opener';
-import { ArrowSquareOut as ExternalLink } from '@phosphor-icons/react';
+import { SquareArrowOutUpRight as ExternalLink } from '@keyline-icons/react';
 import type React from 'react';
 import i18n from '@/i18n';
 

@@ -1,16 +1,16 @@
 import {
-	SealCheck as BadgeCheck,
+	BadgeCheck,
 	Check,
-	CircleNotch as LoaderCircle,
+	LoaderCircle,
 	Copy,
-	DeviceMobile as MonitorSmartphone,
+	LaptopSmartphone as MonitorSmartphone,
 	QrCode,
-	ArrowsClockwise as RefreshCw,
+	RefreshCw,
 	ShieldCheck,
-	DeviceMobile as Smartphone,
-	WifiHigh as Wifi,
-	WifiSlash as WifiOff,
-} from '@phosphor-icons/react';
+	Smartphone,
+	Wifi,
+	WifiX as WifiOff,
+} from '@keyline-icons/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {

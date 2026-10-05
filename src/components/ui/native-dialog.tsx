@@ -1,6 +1,6 @@
 'use client';
 
-import { X as XIcon } from '@phosphor-icons/react';
+import { X as XIcon } from '@keyline-icons/react';
 import { useCallback, useEffect, useRef, type HTMLAttributes } from 'react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';

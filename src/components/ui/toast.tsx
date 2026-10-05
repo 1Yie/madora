@@ -2,12 +2,12 @@
 
 import { Toast } from '@base-ui/react/toast';
 import {
-	WarningCircle as CircleAlertIcon,
-	CheckCircle as CircleCheckIcon,
+	CircleAlert as CircleAlertIcon,
+	CircleCheck as CircleCheckIcon,
 	Info as InfoIcon,
-	CircleNotch as LoaderCircleIcon,
-	Warning as TriangleAlertIcon,
-} from '@phosphor-icons/react';
+	LoaderCircle as LoaderCircleIcon,
+	TriangleAlert as TriangleAlertIcon,
+} from '@keyline-icons/react';
 import { useRef, useState } from 'react';
 import type React from 'react';
 import { cn } from '@/lib/utils';

@@ -1,7 +1,7 @@
 'use client';
 
 import { Accordion as AccordionPrimitive } from '@base-ui/react/accordion';
-import { CaretDown as ChevronDownIcon } from '@phosphor-icons/react';
+import { ChevronDown as ChevronDownIcon } from '@keyline-icons/react';
 import type React from 'react';
 import { cn } from '@/lib/utils';
 

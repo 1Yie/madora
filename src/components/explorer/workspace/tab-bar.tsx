@@ -1,14 +1,14 @@
 import {
-	type Icon,
-	CaretLeft as ChevronLeft,
-	CaretRight as ChevronRight,
+	ChevronLeft,
+	ChevronRight,
 	FileImage,
-	FileMd,
 	FileText,
-	Crosshair as Focus,
-	XSquare as SquareX,
+	File,
+	Target as Focus,
+	SquareX,
 	X,
-} from '@phosphor-icons/react';
+} from '@keyline-icons/react';
+import type { Icon } from '@/components/ui/icon';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -248,8 +248,8 @@ export function TabBar() {
 								tab.node.fileKind === 'image'
 									? FileImage
 									: tab.node.fileKind === 'markdown'
-										? FileMd
-										: FileText;
+										? FileText
+										: File;
 							const fileName =
 								tab.node.name ||
 								(tab.node.path.replace(/\\/g, '/').split('/').pop() ?? '');
@@ -476,7 +476,7 @@ export function TabBar() {
 					{draggedTab.node.fileKind === 'image' ? (
 						<FileImage className="size-3.5 shrink-0" />
 					) : (
-						<FileText className="size-3.5 shrink-0" />
+						<File className="size-3.5 shrink-0" />
 					)}
 					<span className="max-w-32 truncate">
 						{draggedTab.node.name ||

@@ -5,10 +5,10 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
 import {
-	CaretDown as ChevronDownIcon,
-	CaretUpDown as ChevronsUpDownIcon,
-	CaretUp as ChevronUpIcon,
-} from '@phosphor-icons/react';
+	ChevronDown as ChevronDownIcon,
+	ChevronsUpDown as ChevronsUpDownIcon,
+	ChevronUp as ChevronUpIcon,
+} from '@keyline-icons/react';
 import type * as React from 'react';
 import { cn } from '@/lib/utils';
 

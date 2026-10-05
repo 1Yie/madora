@@ -1,11 +1,11 @@
 import {
 	Cloud,
-	CloudSlash as CloudOff,
+	CloudOff,
 	Globe,
-	CircleNotch as Loader2,
-	ArrowsClockwise as RefreshCw,
-	GearSix as Settings2,
-} from '@phosphor-icons/react';
+	LoaderCircle as Loader2,
+	RefreshCw,
+	Settings as Settings2,
+} from '@keyline-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 import {
 	webdavDeleteConfig,
