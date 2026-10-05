@@ -154,6 +154,27 @@ fn decode_text_bytes(bytes: &[u8], detected: &DetectedTextEncoding) -> String {
     text.into_owned()
 }
 
+/// Encode text as UTF-16 with the given byte order.
+///
+/// `encoding_rs` follows the WHATWG Encoding Standard, which defines no
+/// UTF-16 *encoder*: `Encoding::encode` for UTF-16LE/BE emits UTF-8 bytes.
+/// Writing those behind a UTF-16 BOM produces a file no reader can decode,
+/// so UTF-16 is encoded directly from the code units instead.
+fn encode_utf16(content: &str, big_endian: bool) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(content.len() * 2);
+
+    for unit in content.encode_utf16() {
+        let pair = if big_endian {
+            unit.to_be_bytes()
+        } else {
+            unit.to_le_bytes()
+        };
+        bytes.extend_from_slice(&pair);
+    }
+
+    bytes
+}
+
 fn encode_text_content(
     content: &str,
     detected: Option<&DetectedTextEncoding>,
@@ -162,15 +183,23 @@ fn encode_text_content(
         return Ok(content.as_bytes().to_vec());
     };
 
-    let (encoded, _, had_errors) = detected.encoding.encode(content);
+    let encoded: std::borrow::Cow<'_, [u8]> = if detected.encoding == UTF_16LE
+        || detected.encoding == UTF_16BE
+    {
+        std::borrow::Cow::Owned(encode_utf16(content, detected.encoding == UTF_16BE))
+    } else {
+        let (encoded, _, had_errors) = detected.encoding.encode(content);
 
-    if had_errors {
-        let enc_name = detected.encoding.name().to_string();
-        return Err(i18n::tf(
-            "explorer.cannot_save_encoding",
-            &[("encoding", &enc_name)],
-        ));
-    }
+        if had_errors {
+            let enc_name = detected.encoding.name().to_string();
+            return Err(i18n::tf(
+                "explorer.cannot_save_encoding",
+                &[("encoding", &enc_name)],
+            ));
+        }
+
+        encoded
+    };
 
     let mut bytes = Vec::new();
 
@@ -861,6 +890,48 @@ mod tests {
         let detected = detect_text_encoding(bytes);
         assert!(!detected.has_bom);
         assert_eq!(detected.encoding, UTF_8);
+    }
+
+    // ─── encode_text_content ─────────────────────────────────────────
+
+    #[test]
+    fn encode_text_content_utf16le_round_trips() {
+        let detected = DetectedTextEncoding {
+            encoding: UTF_16LE,
+            has_bom: true,
+        };
+
+        let bytes = encode_text_content("你好 hi", Some(&detected)).unwrap();
+
+        assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
+        assert_eq!(decode_text_bytes(&bytes, &detected), "你好 hi");
+    }
+
+    #[test]
+    fn encode_text_content_utf16be_round_trips() {
+        let detected = DetectedTextEncoding {
+            encoding: UTF_16BE,
+            has_bom: true,
+        };
+
+        let bytes = encode_text_content("你好 hi", Some(&detected)).unwrap();
+
+        assert_eq!(&bytes[..2], &[0xFE, 0xFF]);
+        assert_eq!(decode_text_bytes(&bytes, &detected), "你好 hi");
+    }
+
+    #[test]
+    fn encode_text_content_utf16le_writes_code_units_not_utf8() {
+        let detected = DetectedTextEncoding {
+            encoding: UTF_16LE,
+            has_bom: false,
+        };
+
+        let bytes = encode_text_content("hi", Some(&detected)).unwrap();
+
+        // encoding_rs has no UTF-16 encoder and would emit the UTF-8 bytes
+        // [104, 105] here, corrupting the file behind its BOM.
+        assert_eq!(bytes, vec![b'h', 0x00, b'i', 0x00]);
     }
 
     // ─── decode_text_bytes ───────────────────────────────────────────
