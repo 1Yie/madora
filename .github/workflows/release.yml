@@ -2,8 +2,6 @@ name: Release CI
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -58,12 +56,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - macos-latest
-          - ubuntu-22.04
-          - windows-latest
+        include:
+          - label: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+          # macos-13 was retired; macos-15-intel is the current Intel image.
+          - label: macOS Intel
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - label: Linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - label: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
 
-    runs-on: ${{ matrix.platform }}
+    name: Build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -77,10 +86,10 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
       - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -93,7 +102,7 @@ jobs:
             patchelf
 
       - name: Install OpenSSL (Windows)
-        if: matrix.platform == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $vcpkg = if (Test-Path 'C:\vcpkg\vcpkg.exe') { 'C:\vcpkg\vcpkg.exe' } else { 'vcpkg' }
@@ -116,13 +125,13 @@ jobs:
         run: bun run build
 
       - name: Create .env file (Unix)
-        if: matrix.platform != 'windows-latest'
+        if: runner.os != 'Windows'
         run: printf '%s' "$ENV_FILE_CONTENT" > .env
         env:
           ENV_FILE_CONTENT: ${{ secrets.ENV_FILE }}
 
       - name: Create .env file (Windows)
-        if: matrix.platform == 'windows-latest'
+        if: runner.os == 'Windows'
         run: |
           $env:ENV_FILE_CONTENT | Out-File -FilePath .env -Encoding utf8 -NoNewline
         shell: pwsh
@@ -140,6 +149,7 @@ jobs:
           releaseBody: ${{ format('See {0}/blob/main/CHANGELOG.md for the full changelog.', format('{0}/{1}', github.server_url, github.repository)) }}
           releaseDraft: true
           prerelease: false
+          args: --target ${{ matrix.target }}
 
       # ----------------------------------------------------------------
       # Portable Linux tarball (.tar.gz)
@@ -151,7 +161,7 @@ jobs:
       #     Arch, openSUSE Leap 15.5, etc.) can run it.
       # ----------------------------------------------------------------
       - name: Build portable Linux tarball
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           set -eu
           VERSION=$(jq -r .version src-tauri/tauri.conf.json)
@@ -161,7 +171,7 @@ jobs:
           tar -czf "madora-${VERSION}-linux-x86_64.tar.gz" -C extract .
 
       - name: Upload portable Linux tarball to release
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
