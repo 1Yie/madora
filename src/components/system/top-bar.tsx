@@ -170,8 +170,7 @@ export default function Titlebar() {
 									aria-label={t('topBar.controls.minimize')}
 									onClick={() => void minimizeWindow()}
 									className="flex h-full items-center px-3 text-muted-foreground
-										transition-colors hover:bg-accent
-										hover:text-accent-foreground"
+										transition-colors hover:bg-muted/50 hover:text-foreground"
 								/>
 							}
 						>
@@ -189,8 +188,7 @@ export default function Titlebar() {
 									aria-label={t('topBar.controls.maximize')}
 									onClick={() => void toggleMaximizeWindow()}
 									className="flex h-full items-center px-3 text-muted-foreground
-										transition-colors hover:bg-accent
-										hover:text-accent-foreground"
+										transition-colors hover:bg-muted/50 hover:text-foreground"
 								/>
 							}
 						>
