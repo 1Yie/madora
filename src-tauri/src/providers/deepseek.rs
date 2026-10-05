@@ -8,8 +8,8 @@ use crate::{
     prompt::PromptManager,
     providers::{
         common::{
-            join_url, resolve_api_key, resolve_model, stream_sse_response, take_text_completion,
-            TextCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
+            join_url, resolve_api_key, resolve_model, stream_sse_response, summarize_error_body,
+            take_text_completion, TextCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
         },
         CompletionProvider,
     },
@@ -87,7 +87,7 @@ impl CompletionProvider for DeepSeekProvider {
                 &[
                     ("provider", "DeepSeek"),
                     ("status", &status_str),
-                    ("body", &body),
+                    ("body", &summarize_error_body(&body)),
                 ],
             ));
         }
@@ -169,7 +169,7 @@ impl CompletionProvider for DeepSeekProvider {
                 &[
                     ("provider", "DeepSeek"),
                     ("status", &status_str),
-                    ("body", &body),
+                    ("body", &summarize_error_body(&body)),
                 ],
             ));
         }

@@ -10,8 +10,8 @@ use crate::{
     providers::{
         common::{
             build_prompt_context, join_url, resolve_api_key, stream_sse_response,
-            take_chat_completion, ChatCompletionMessage, ChatCompletionResponse,
-            MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
+            summarize_error_body, take_chat_completion, ChatCompletionMessage,
+            ChatCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
         },
         default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
     },
@@ -127,7 +127,7 @@ pub(crate) async fn request_openai_compatible_fim(
             &[
                 ("provider", provider.display_name()),
                 ("status", &status_str),
-                ("body", &body),
+                ("body", &summarize_error_body(&body)),
             ],
         ));
     }
@@ -209,7 +209,7 @@ pub(crate) async fn request_openai_compatible_fim_stream(
             &[
                 ("provider", provider.display_name()),
                 ("status", &status_str),
-                ("body", &body),
+                ("body", &summarize_error_body(&body)),
             ],
         ));
     }

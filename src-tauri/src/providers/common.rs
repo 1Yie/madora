@@ -13,6 +13,34 @@ pub const MAX_CHAT_PREFIX_CHARS: usize = 4_000;
 pub const MAX_CHAT_SUFFIX_CHARS: usize = 1_500;
 pub const STOP_SEQUENCES: &[&str] = &["\n\n\n", "\n# ", "\n## "];
 
+/// Extracts a readable message from a provider error body.
+///
+/// Provider error payloads are usually JSON like
+/// `{"error": {"message": "..."}}` (OpenAI/Anthropic/Google). Pull out
+/// `error.message` (or a top-level `message` / string `error`) instead of
+/// dumping the raw JSON into the toast. Non-JSON bodies fall back to the
+/// truncated raw text so HTML error pages can't flood the UI.
+pub(crate) fn summarize_error_body(body: &str) -> String {
+    const MAX_LEN: usize = 300;
+
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(body) {
+        for path in ["/error/message", "/message", "/error"] {
+            if let Some(msg) = value.pointer(path).and_then(|v| v.as_str()) {
+                return msg.to_string();
+            }
+        }
+    }
+
+    let trimmed = body.trim();
+    if trimmed.chars().count() > MAX_LEN {
+        let mut s: String = trimmed.chars().take(MAX_LEN).collect();
+        s.push('…');
+        s
+    } else {
+        trimmed.to_string()
+    }
+}
+
 #[derive(Deserialize)]
 pub struct TextCompletionChoice {
     pub text: Option<String>,
@@ -330,6 +358,57 @@ mod tests {
     #[test]
     fn take_last_chars_exact_length() {
         assert_eq!(take_last_chars("hello", 5), "hello");
+    }
+
+    // ─── summarize_error_body ────────────────────────────────────────
+
+    #[test]
+    fn summarize_error_body_openai_error_message() {
+        let body = r#"{"error": {"message": "Incorrect API key provided.", "type": "invalid_request_error", "code": "invalid_api_key"}}"#;
+        assert_eq!(summarize_error_body(body), "Incorrect API key provided.");
+    }
+
+    #[test]
+    fn summarize_error_body_anthropic_style() {
+        let body = r#"{"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}}"#;
+        assert_eq!(summarize_error_body(body), "invalid x-api-key");
+    }
+
+    #[test]
+    fn summarize_error_body_google_style() {
+        let body = r#"{"error": {"code": 401, "message": "API key not valid.", "status": "UNAUTHENTICATED"}}"#;
+        assert_eq!(summarize_error_body(body), "API key not valid.");
+    }
+
+    #[test]
+    fn summarize_error_body_top_level_message() {
+        let body = r#"{"message": "model not found"}"#;
+        assert_eq!(summarize_error_body(body), "model not found");
+    }
+
+    #[test]
+    fn summarize_error_body_string_error() {
+        let body = r#"{"error": "rate limited"}"#;
+        assert_eq!(summarize_error_body(body), "rate limited");
+    }
+
+    #[test]
+    fn summarize_error_body_plain_text_passthrough() {
+        assert_eq!(summarize_error_body("  Bad Gateway  "), "Bad Gateway");
+    }
+
+    #[test]
+    fn summarize_error_body_truncates_long_body() {
+        let body = "x".repeat(500);
+        let out = summarize_error_body(&body);
+        assert_eq!(out.chars().count(), 301);
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn summarize_error_body_json_without_message_falls_back() {
+        let body = r#"{"status": 500}"#;
+        assert_eq!(summarize_error_body(body), body);
     }
 
     #[test]

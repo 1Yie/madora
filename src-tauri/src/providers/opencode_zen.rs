@@ -11,7 +11,7 @@ use crate::{
         anthropic::{request_anthropic_compatible_fim, request_anthropic_compatible_fim_stream},
         common::{
             build_prompt_context, join_url, resolve_api_key, stream_sse_response,
-            MAX_COMPLETION_TOKENS,
+            summarize_error_body, MAX_COMPLETION_TOKENS,
         },
         default_api_url, default_model,
         google::{request_google_compatible_fim, request_google_compatible_fim_stream},
@@ -252,7 +252,7 @@ async fn request_openai_responses_fim(
             &[
                 ("provider", provider.display_name()),
                 ("status", &status_str),
-                ("body", &body),
+                ("body", &summarize_error_body(&body)),
             ],
         ));
     }
@@ -331,7 +331,7 @@ async fn request_openai_responses_fim_stream(
             &[
                 ("provider", provider.display_name()),
                 ("status", &status_str),
-                ("body", &body),
+                ("body", &summarize_error_body(&body)),
             ],
         ));
     }
