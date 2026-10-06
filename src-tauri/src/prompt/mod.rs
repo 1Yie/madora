@@ -31,11 +31,23 @@ impl PromptProfile {
             Self::OpenAi => "openai",
         }
     }
+
+    const ALL: [Self; 8] = [
+        Self::Anthropic,
+        Self::Custom,
+        Self::DeepSeek,
+        Self::Google,
+        Self::Kimi,
+        Self::MiMo,
+        Self::MiniMax,
+        Self::OpenAi,
+    ];
 }
 
 #[derive(Clone)]
 pub struct PromptManager {
     user_root: Option<PathBuf>,
+    revision: std::sync::OnceLock<u64>,
 }
 
 #[derive(Serialize)]
@@ -56,6 +68,7 @@ impl PromptManager {
     pub fn new() -> Self {
         Self {
             user_root: resolve_user_prompt_root(),
+            revision: std::sync::OnceLock::new(),
         }
     }
 
@@ -64,16 +77,11 @@ impl PromptManager {
         profile: PromptProfile,
         name: &str,
         context: &T,
-    ) -> String {
-        self.render_template(profile, name, context)
-    }
+    ) -> Result<String, String> {
+        if !is_safe_template_name(name) {
+            return Err(format!("invalid prompt template name '{name}'"));
+        }
 
-    fn render_template<T: Serialize>(
-        &self,
-        profile: PromptProfile,
-        name: &str,
-        context: &T,
-    ) -> String {
         let template = self
             .load_prompt(profile, name)
             .or_else(|| {
@@ -83,9 +91,22 @@ impl PromptManager {
                     self.load_prompt(PromptProfile::Custom, name)
                 }
             })
-            .unwrap_or_default();
+            .ok_or_else(|| {
+                format!(
+                    "prompt template '{name}' for profile '{}' was not found",
+                    profile.as_key()
+                )
+            })?;
 
         render_template(&template, context)
+    }
+
+    /// Stable fingerprint of the effective prompt templates, used to keep the
+    /// completion cache from serving results rendered from older templates.
+    pub fn revision(&self) -> u64 {
+        *self
+            .revision
+            .get_or_init(|| compute_template_revision(self))
     }
 
     fn load_prompt(&self, profile: PromptProfile, name: &str) -> Option<String> {
@@ -196,19 +217,66 @@ fn resolve_platform_prompt_root() -> Option<PathBuf> {
     )
 }
 
-fn render_template<T: Serialize>(template: &str, context: &T) -> String {
+fn render_template<T: Serialize>(template: &str, context: &T) -> Result<String, String> {
     let values = serde_json::to_value(context)
-        .ok()
-        .and_then(flatten_template_values)
-        .unwrap_or_default();
+        .map_err(|error| format!("failed to serialize prompt context: {error}"))
+        .and_then(|value| {
+            flatten_template_values(value)
+                .ok_or_else(|| "prompt context must serialize to an object".to_string())
+        })?;
 
-    let mut rendered = template.to_string();
+    // Single left-to-right pass: substituted values are never rescanned, so a
+    // document containing `{{suffix}}` cannot trigger another substitution.
+    let mut rendered = String::with_capacity(template.len());
+    let mut rest = template;
 
-    for (key, value) in values {
-        rendered = rendered.replace(&format!("{{{{{key}}}}}"), &value);
+    while let Some(start) = rest.find("{{") {
+        rendered.push_str(&rest[..start]);
+        let after = &rest[start + 2..];
+
+        if let Some(end) = after.find("}}") {
+            let name = after[..end].trim();
+
+            match values.get(name) {
+                Some(value) => rendered.push_str(value),
+                None => {
+                    rendered.push_str("{{");
+                    rendered.push_str(&after[..end]);
+                    rendered.push_str("}}");
+                }
+            }
+
+            rest = &after[end + 2..];
+        } else {
+            rendered.push_str("{{");
+            rest = after;
+        }
     }
 
-    rendered
+    rendered.push_str(rest);
+    Ok(rendered)
+}
+
+fn is_safe_template_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || value == '_' || value == '-')
+}
+
+fn compute_template_revision(manager: &PromptManager) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+
+    for profile in PromptProfile::ALL {
+        for name in ["fim_system", "fim_user"] {
+            name.hash(&mut hasher);
+            manager.load_prompt(profile, name).hash(&mut hasher);
+        }
+    }
+
+    hasher.finish()
 }
 
 fn flatten_template_values(value: serde_json::Value) -> Option<HashMap<String, String>> {
@@ -405,5 +473,66 @@ mod tests {
             prompt_profile_for_google_compatible(AiProvider::OpenCodeZen, "gemini-3.1-pro"),
             PromptProfile::Google
         );
+    }
+
+    // ─── render_template ─────────────────────────────────────────
+
+    fn context(prefix: &str, suffix: &str) -> crate::prompt::PromptContext {
+        crate::prompt::PromptContext {
+            prefix: prefix.to_string(),
+            suffix: suffix.to_string(),
+            suffix_hint: String::new(),
+            title: "Doc".to_string(),
+        }
+    }
+
+    #[test]
+    fn renders_variables_in_a_single_pass() {
+        // The substituted value itself contains `{{suffix}}` and must not be
+        // substituted again.
+        let rendered =
+            super::render_template("[{{prefix}}][{{suffix}}]", &context("{{suffix}}", "TAIL"))
+                .unwrap();
+
+        assert_eq!(rendered, "[{{suffix}}][TAIL]");
+    }
+
+    #[test]
+    fn keeps_unknown_placeholders_verbatim() {
+        let rendered =
+            super::render_template("{{prefix}} {{unknown}} {{suffix}}", &context("A", "B"))
+                .unwrap();
+
+        assert_eq!(rendered, "A {{unknown}} B");
+    }
+
+    #[test]
+    fn rendering_is_deterministic_and_does_not_depend_on_map_order() {
+        let template = "{{prefix}}|{{title}}|{{suffix}}";
+        let first = super::render_template(template, &context("p", "s")).unwrap();
+
+        for _ in 0..16 {
+            assert_eq!(
+                super::render_template(template, &context("p", "s")).unwrap(),
+                first
+            );
+        }
+    }
+
+    #[test]
+    fn missing_template_returns_an_error() {
+        let manager = super::PromptManager::new();
+        let result =
+            manager.render_prompt(PromptProfile::OpenAi, "does_not_exist", &context("p", "s"));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_unsafe_template_names() {
+        assert!(!super::is_safe_template_name("../secret"));
+        assert!(!super::is_safe_template_name("a/b"));
+        assert!(super::is_safe_template_name("fim_system"));
+        assert!(super::is_safe_template_name("fim-user"));
     }
 }
