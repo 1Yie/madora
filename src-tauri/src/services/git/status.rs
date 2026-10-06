@@ -190,7 +190,13 @@ pub(crate) fn clear_resolved_conflicts(repo: &Repository) -> GitResult<Vec<Strin
     }
 
     if removed_any {
-        index.write()?;
+        // Dropping phantom entries is housekeeping. When the index cannot be
+        // written (another git process holds `index.lock`, read-only checkout)
+        // the list of unresolved conflicts computed above is still correct, so
+        // a failed write must not fail the status query itself.
+        if let Err(error) = index.write() {
+            eprintln!("could not persist the cleaned conflict entries: {error}");
+        }
     }
 
     unresolved.sort();

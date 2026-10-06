@@ -151,16 +151,30 @@ fn fast_forward(
         refname,
         fetch_commit.id()
     );
-    let mut reference = match repo.find_reference(&refname) {
-        Ok(reference) => reference,
-        Err(_) => repo.reference(&refname, fetch_commit.id(), true, &message)?,
-    };
 
-    reference.set_target(fetch_commit.id(), &message)?;
-    repo.set_head(&refname)?;
+    // Check the target tree out *before* moving any reference. A safe checkout
+    // refuses to overwrite local modifications, and because the branch has not
+    // moved yet a refusal leaves the repository exactly as it was.
+    let target = repo.find_object(fetch_commit.id(), None)?;
     let mut checkout = git2::build::CheckoutBuilder::new();
-    checkout.force();
-    repo.checkout_head(Some(&mut checkout))?;
+    checkout.safe();
+    repo.checkout_tree(&target, Some(&mut checkout))
+        .map_err(|error| match error.code() {
+            git2::ErrorCode::Conflict => {
+                GitServiceError::message(i18n::t("git.pull_local_changes"))
+            }
+            _ => GitServiceError::from(error),
+        })?;
+
+    match repo.find_reference(&refname) {
+        Ok(mut reference) => {
+            reference.set_target(fetch_commit.id(), &message)?;
+        }
+        Err(_) => {
+            repo.reference(&refname, fetch_commit.id(), true, &message)?;
+        }
+    }
+    repo.set_head(&refname)?;
     Ok(())
 }
 
@@ -215,4 +229,128 @@ fn normal_merge(
         conflicts: Vec::new(),
         message: i18n::t("git.pull_merge_success"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    fn init_repo(path: &Path) -> Repository {
+        let repo = Repository::init(path).unwrap();
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test User").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+        let _ = config.set_bool("core.autocrlf", false);
+        repo
+    }
+
+    fn commit_file(repo: &Repository, name: &str, content: &str, message: &str) -> git2::Oid {
+        std::fs::write(repo.workdir().unwrap().join(name), content).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(name)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = repo.signature().unwrap();
+        let parents: Vec<git2::Commit<'_>> = match repo.head() {
+            Ok(head) => vec![head.peel_to_commit().unwrap()],
+            Err(_) => Vec::new(),
+        };
+        let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &parent_refs,
+        )
+        .unwrap()
+    }
+
+    /// A repository one commit behind `origin/<branch>`, with `notes.md`
+    /// tracked at the old commit.
+    fn behind_remote(dir: &Path) -> (Repository, git2::Oid, String) {
+        let repo = init_repo(dir);
+        let old = commit_file(&repo, "notes.md", "base\n", "base");
+        let branch = repository::head_branch_name(&repo).unwrap();
+        let new = commit_file(&repo, "notes.md", "from remote\n", "remote change");
+
+        repo.reference(
+            &format!("refs/remotes/origin/{branch}"),
+            new,
+            true,
+            "test remote",
+        )
+        .unwrap();
+        repo.reset(
+            &repo.find_object(old, None).unwrap(),
+            git2::ResetType::Hard,
+            None,
+        )
+        .unwrap();
+
+        (repo, old, branch)
+    }
+
+    fn annotated<'a>(repo: &'a Repository, branch: &str) -> git2::AnnotatedCommit<'a> {
+        let reference = repo
+            .find_reference(&format!("refs/remotes/origin/{branch}"))
+            .unwrap();
+        repo.reference_to_annotated_commit(&reference).unwrap()
+    }
+
+    #[test]
+    fn fast_forward_keeps_uncommitted_local_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, old, branch) = behind_remote(dir.path());
+        std::fs::write(dir.path().join("notes.md"), "my unsaved work\n").unwrap();
+
+        let result = fast_forward(&repo, &annotated(&repo, &branch), &branch);
+
+        assert!(result.is_err(), "a dirty tree must block the fast-forward");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("notes.md")).unwrap(),
+            "my unsaved work\n",
+            "local edits must survive"
+        );
+        assert_eq!(
+            repo.head().unwrap().peel_to_commit().unwrap().id(),
+            old,
+            "the branch must not move when the checkout was refused"
+        );
+    }
+
+    #[test]
+    fn fast_forward_updates_a_clean_tree() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, _old, branch) = behind_remote(dir.path());
+        let target = annotated(&repo, &branch).id();
+
+        fast_forward(&repo, &annotated(&repo, &branch), &branch).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("notes.md")).unwrap(),
+            "from remote\n"
+        );
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), target);
+    }
+
+    #[test]
+    fn fast_forward_allows_unrelated_local_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let (repo, _old, branch) = behind_remote(dir.path());
+        std::fs::write(dir.path().join("scratch.md"), "untracked\n").unwrap();
+
+        fast_forward(&repo, &annotated(&repo, &branch), &branch).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("scratch.md")).unwrap(),
+            "untracked\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("notes.md")).unwrap(),
+            "from remote\n"
+        );
+    }
 }
