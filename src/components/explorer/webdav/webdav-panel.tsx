@@ -69,7 +69,9 @@ export function WebDavPanel({
 		webdavGetConfig()
 			.then((cfg) => {
 				setConfig(cfg);
-				setPassword(cfg.password ?? '');
+				// The plaintext password is never returned; leave the field blank and
+				// let a stored password be reused unless the user types a new one.
+				setPassword('');
 			})
 			.catch(() => {
 				/* no config yet */

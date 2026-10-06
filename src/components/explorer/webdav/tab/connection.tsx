@@ -70,7 +70,7 @@ export function WebDavTabConnection({
 					<FieldBlock label={t('webdav.connection.password')}>
 						<Input
 							type="password"
-							placeholder="••••••••"
+							placeholder={config?.has_password ? '••••••••' : ''}
 							value={password}
 							onChange={(e) => onPasswordChange(e.target.value)}
 						/>

@@ -11,8 +11,8 @@ export interface WebDavConfig {
 	remote_subdir: string | null;
 	local_subdir: string | null;
 	last_sync_at: string | null;
-	/** Password is loaded from keychain on read, never persisted to JSON. */
-	password: string | null;
+	/** Whether a password is stored in the OS keychain; the value itself is never returned. */
+	has_password: boolean;
 }
 
 export interface WebDavConnectionTest {
