@@ -35,9 +35,36 @@ pub struct WebDavConfig {
     /// Password (in-memory only — never serialized, stored in OS keychain).
     #[serde(skip)]
     pub password: Option<String>,
+    /// Whether a password is stored in the OS keychain. Computed on read; never persisted.
+    #[serde(default)]
+    pub has_password: bool,
     /// Snapshot of file mtimes after last successful sync (relative path → ISO-8601 mtime).
     #[serde(default)]
     pub sync_files: std::collections::HashMap<String, String>,
+    /// Baseline per synced file: local content hash/mtime + remote etag/mtime.
+    /// Newer than `sync_files`; `#[serde(default)]` keeps older persisted configs loadable.
+    #[serde(default)]
+    pub sync_baselines: std::collections::HashMap<String, SyncBaselineEntry>,
+}
+
+/// Baseline recorded for a single file after a successful sync.
+///
+/// Used to decide whether each side changed since the last sync. All fields are
+/// optional so partially-known baselines (and older configs) still deserialize.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct SyncBaselineEntry {
+    /// Local mtime (ISO-8601) at last successful sync.
+    #[serde(default)]
+    pub local_mtime: Option<String>,
+    /// FNV-1a hash (hex) of the local file content at last successful sync.
+    #[serde(default)]
+    pub local_hash: Option<String>,
+    /// Remote ETag at last successful sync.
+    #[serde(default)]
+    pub remote_etag: Option<String>,
+    /// Remote last-modified (ISO-8601) at last successful sync, used when no ETag exists.
+    #[serde(default)]
+    pub remote_mtime: Option<String>,
 }
 
 /// Result of a test-connection operation.

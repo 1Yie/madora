@@ -5,7 +5,9 @@ use crate::models::webdav::{
     WebDavConfig, WebDavConnectionTest, WebDavSyncFileEntry, WebDavSyncResult,
     WebDavSyncStatusResult,
 };
-use crate::services::webdav::{SyncOrchestrator, WebDavClient, WebDavStore};
+use crate::services::webdav::{
+    baselines_to_mtime_map, build_http_client, SyncOrchestrator, WebDavClient, WebDavStore,
+};
 
 // ── Keyring helpers (sync/blocking) ────────────────────────────
 
@@ -38,6 +40,13 @@ fn load_password_sync() -> Result<Option<String>, String> {
             &[("error", &e.to_string())],
         )),
     }
+}
+
+/// Run the blocking keyring read off the async runtime.
+async fn load_password() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(load_password_sync)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn store_password_sync(password: String) -> Result<(), String> {
@@ -75,9 +84,10 @@ fn delete_password_sync() -> Result<(), String> {
 #[tauri::command]
 pub async fn webdav_get_config(store: State<'_, WebDavStore>) -> Result<WebDavConfig, String> {
     let mut config = store.get_config()?;
-    if let Ok(Some(password)) = load_password_sync() {
-        config.password = Some(password);
-    }
+    // Never return the plaintext password to the webview; only whether one is stored.
+    let has_password = load_password().await?.is_some();
+    config.password = None;
+    config.has_password = has_password;
     Ok(config)
 }
 
@@ -94,6 +104,7 @@ pub async fn webdav_save_config(
     }
     let mut clean = config;
     clean.password = None;
+    clean.has_password = false;
     store.set_config(clean)
 }
 
@@ -113,49 +124,48 @@ pub async fn webdav_test_connection(
     password: Option<String>,
 ) -> Result<WebDavConnectionTest, String> {
     let stored = store.get_config()?;
-    let pw = password.or_else(|| load_password_sync().ok().flatten());
+    let pw = match password {
+        Some(pw) => Some(pw),
+        None => load_password().await?,
+    };
     let config = WebDavConfig {
         url: url.or(stored.url),
         username: username.or(stored.username),
         password: pw.or(stored.password),
         ..Default::default()
     };
-    let client = reqwest::Client::new();
+    let client = build_http_client(30)?;
     let webdav = WebDavClient::new(client);
     Ok(webdav.test_connection(&config).await)
 }
 
-/// Perform a full sync, then save a snapshot of synced file mtimes.
+/// Perform a full sync, then persist the updated per-file baseline.
 #[tauri::command]
 pub async fn webdav_sync(
     store: State<'_, WebDavStore>,
     workspace_root: String,
 ) -> Result<WebDavSyncResult, String> {
     let config = store.get_config()?;
-    let password = load_password_sync()?.unwrap_or_default();
-    let auth_config = WebDavConfig {
-        password: Some(password),
-        ..config
-    };
+    let password = load_password().await?;
+    let auth_config = WebDavConfig { password, ..config };
 
-    let client = reqwest::Client::new();
+    let client = build_http_client(300)?;
     let orchestrator = SyncOrchestrator::new(client);
 
-    let result = orchestrator
+    let outcome = orchestrator
         .sync(&auth_config, std::path::Path::new(&workspace_root))
         .await?;
 
-    // Snapshot current file states as the new baseline
-    let snapshot =
-        orchestrator.snapshot_local_files(std::path::Path::new(&workspace_root), &auth_config);
-
     let now = chrono::Utc::now().to_rfc3339();
     let mut updated_config = store.get_config()?;
-    updated_config.sync_files = snapshot;
+    // Only successfully synced (or confirmed identical) files advance the baseline;
+    // failed/skipped files keep their previous entry.
+    updated_config.sync_files = baselines_to_mtime_map(&outcome.baselines);
+    updated_config.sync_baselines = outcome.baselines;
     updated_config.last_sync_at = Some(now);
     store.set_config(updated_config)?;
 
-    Ok(result)
+    Ok(outcome.result)
 }
 
 /// Get sync status for all tracked files (file tree decoration).
@@ -165,7 +175,7 @@ pub async fn webdav_get_status(
     workspace_root: String,
 ) -> Result<WebDavSyncStatusResult, String> {
     let config = store.get_config()?;
-    let client = reqwest::Client::new();
+    let client = build_http_client(60)?;
     let orchestrator = SyncOrchestrator::new(client);
 
     let raw = orchestrator.compute_sync_status(std::path::Path::new(&workspace_root), &config);
