@@ -165,7 +165,8 @@ jobs:
         run: |
           set -eu
           VERSION=$(jq -r .version src-tauri/tauri.conf.json)
-          DEB=$(find src-tauri/target/release/bundle/deb -name '*.deb' | head -1)
+          DEB=$(find "src-tauri/target/${{ matrix.target }}/release/bundle/deb" -name '*.deb' | head -1)
+          [ -n "$DEB" ] || { echo "No .deb found" >&2; exit 1; }
           mkdir -p extract
           dpkg-deb -x "$DEB" extract
           tar -czf "madora-${VERSION}-linux-x86_64.tar.gz" -C extract .
