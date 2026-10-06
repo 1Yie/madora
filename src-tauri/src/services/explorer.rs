@@ -5,11 +5,15 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use chardetng::EncodingDetector;
 
 use crate::i18n;
+use crate::services::paths;
 use encoding_rs::{Encoding, UTF_16BE, UTF_16LE, UTF_8};
 
 use crate::models::explorer::{ExplorerFileKind, ExplorerNode, ExplorerNodeKind, FilePreview};
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 512 * 1024;
+/// Images are inlined as base64 data URLs, so an unbounded file would be
+/// held in memory twice and then shipped across the IPC bridge.
+const MAX_IMAGE_PREVIEW_BYTES: u64 = 25 * 1024 * 1024;
 
 struct DetectedTextEncoding {
     encoding: &'static Encoding,
@@ -183,23 +187,22 @@ fn encode_text_content(
         return Ok(content.as_bytes().to_vec());
     };
 
-    let encoded: std::borrow::Cow<'_, [u8]> = if detected.encoding == UTF_16LE
-        || detected.encoding == UTF_16BE
-    {
-        std::borrow::Cow::Owned(encode_utf16(content, detected.encoding == UTF_16BE))
-    } else {
-        let (encoded, _, had_errors) = detected.encoding.encode(content);
+    let encoded: std::borrow::Cow<'_, [u8]> =
+        if detected.encoding == UTF_16LE || detected.encoding == UTF_16BE {
+            std::borrow::Cow::Owned(encode_utf16(content, detected.encoding == UTF_16BE))
+        } else {
+            let (encoded, _, had_errors) = detected.encoding.encode(content);
 
-        if had_errors {
-            let enc_name = detected.encoding.name().to_string();
-            return Err(i18n::tf(
-                "explorer.cannot_save_encoding",
-                &[("encoding", &enc_name)],
-            ));
-        }
+            if had_errors {
+                let enc_name = detected.encoding.name().to_string();
+                return Err(i18n::tf(
+                    "explorer.cannot_save_encoding",
+                    &[("encoding", &enc_name)],
+                ));
+            }
 
-        encoded
-    };
+            encoded
+        };
 
     let mut bytes = Vec::new();
 
@@ -213,8 +216,23 @@ fn encode_text_content(
     Ok(bytes)
 }
 
+/// Reads at most one byte more than the preview limit, so opening a huge file
+/// never loads it whole.
+fn read_prefix(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .map_err(|error| error.to_string())?
+        .take(MAX_TEXT_PREVIEW_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+
+    Ok(bytes)
+}
+
 fn read_text_preview(path: &Path) -> Result<(String, bool, String), String> {
-    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    let bytes = read_prefix(path)?;
     let detected = detect_text_encoding(&bytes);
     let truncated = bytes.len() > MAX_TEXT_PREVIEW_BYTES;
     let preview_bytes = if truncated {
@@ -231,30 +249,33 @@ fn read_text_preview(path: &Path) -> Result<(String, bool, String), String> {
 }
 
 pub fn write_workspace_file(file_path: &Path, content: &str) -> Result<(), String> {
-    // A file larger than the preview limit is only ever read as a prefix, so
-    // writing the shorter text back would silently destroy the remainder.
-    // Callers must not save a document they could not read in full.
-    if let Ok(metadata) = fs::metadata(file_path) {
-        let existing_len = metadata.len();
+    let existing = fs::metadata(file_path).ok().filter(fs::Metadata::is_file);
 
-        if metadata.is_file()
-            && existing_len > MAX_TEXT_PREVIEW_BYTES as u64
-            && (content.len() as u64) < existing_len
-        {
-            return Err(i18n::t("explorer.refuse_truncated_write"));
-        }
+    // A file larger than the preview limit is only ever read as a prefix (and
+    // shown read-only), so any write would silently destroy the remainder.
+    // Callers must not save a document they could not read in full.
+    if existing
+        .as_ref()
+        .is_some_and(|metadata| metadata.len() > MAX_TEXT_PREVIEW_BYTES as u64)
+    {
+        return Err(i18n::t("explorer.refuse_truncated_write"));
     }
 
-    let detected = if file_path.exists() {
-        let bytes = fs::read(file_path).map_err(|error| error.to_string())?;
-        Some(detect_text_encoding(&bytes))
+    let detected = if existing.is_some() {
+        Some(detect_text_encoding(&read_prefix(file_path)?))
     } else {
         None
     };
 
     let encoded = encode_text_content(content, detected.as_ref())?;
 
-    fs::write(file_path, encoded).map_err(|error| error.to_string())
+    paths::atomic_write(file_path, &encoded).map_err(|error| error.to_string())
+}
+
+/// A single path component supplied by the user: no separators, and not a
+/// reference to the current or parent directory.
+fn is_plain_entry_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
 }
 
 fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
@@ -266,6 +287,9 @@ fn normalize_markdown_file_name(file_name: &str) -> Result<String, String> {
 
     if trimmed_file_name.contains('/') || trimmed_file_name.contains('\\') {
         return Err(i18n::t("explorer.file_name_no_separator"));
+    }
+    if !is_plain_entry_name(trimmed_file_name) {
+        return Err(i18n::t("explorer.invalid_name"));
     }
     if trimmed_file_name.to_ascii_lowercase().ends_with(".md")
         || trimmed_file_name.to_ascii_lowercase().ends_with(".mdx")
@@ -286,6 +310,9 @@ fn normalize_directory_name(directory_name: &str) -> Result<String, String> {
     if trimmed_directory_name.contains('/') || trimmed_directory_name.contains('\\') {
         return Err(i18n::t("explorer.dir_name_no_separator"));
     }
+    if !is_plain_entry_name(trimmed_directory_name) {
+        return Err(i18n::t("explorer.invalid_name"));
+    }
 
     Ok(trimmed_directory_name.to_string())
 }
@@ -300,6 +327,8 @@ fn resolve_create_directory(root: &Path, selected_path: Option<&Path>) -> Result
         None => root.to_path_buf(),
     };
 
+    let candidate_directory = paths::ensure_within(root, &candidate_directory)?;
+
     if !candidate_directory.is_dir() {
         return Err(i18n::t("explorer.target_dir_not_exist"));
     }
@@ -313,6 +342,8 @@ pub fn read_directory_children(
     show_hidden_files: bool,
     sort: bool,
 ) -> Result<Vec<ExplorerNode>, String> {
+    paths::ensure_within(root, directory)?;
+
     let entries = read_directory_entries(directory, show_hidden_files, sort)?;
     let mut children = Vec::new();
 
@@ -380,6 +411,19 @@ pub fn read_workspace_file(file_path: &Path) -> Result<FilePreview, String> {
 
     match file_kind {
         ExplorerFileKind::Image => {
+            if metadata.len() > MAX_IMAGE_PREVIEW_BYTES {
+                return Err(i18n::tf(
+                    "explorer.file_too_large",
+                    &[
+                        ("size", &(metadata.len() / (1024 * 1024)).to_string()),
+                        (
+                            "limit",
+                            &(MAX_IMAGE_PREVIEW_BYTES / (1024 * 1024)).to_string(),
+                        ),
+                    ],
+                ));
+            }
+
             let bytes = fs::read(file_path).map_err(|error| error.to_string())?;
 
             Ok(FilePreview {
@@ -466,12 +510,51 @@ fn ensure_existing_path(path: &Path) -> Result<(), String> {
     ))
 }
 
-pub(crate) fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
-    if path == root_path || path.starts_with(root_path) {
-        return Ok(());
+/// Decides whether the webview may read or write `path` through the file
+/// commands, and returns the resolved path to use for the actual I/O.
+///
+/// Inside the workspace root any file is allowed, except version-control and
+/// SSH internals (a rewritten `.git/config` or hook is code execution).
+/// Outside it, only existing Markdown/text files may be written and only
+/// Markdown, text and images may be read; that is what a link the user chose
+/// to follow from a document needs, and nothing more.
+pub fn authorize_file_access(
+    root_path: Option<&Path>,
+    path: &Path,
+    write: bool,
+) -> Result<PathBuf, String> {
+    let resolved = paths::resolve_lenient(path)?;
+
+    if let Some(canonical_root) = root_path.and_then(|root| root.canonicalize().ok()) {
+        if let Ok(relative) = resolved.strip_prefix(&canonical_root) {
+            return if paths::is_protected_path(relative) {
+                Err(i18n::t("explorer.outside_workspace"))
+            } else {
+                Ok(resolved)
+            };
+        }
     }
 
-    Err(i18n::t("explorer.outside_workspace"))
+    let allowed = match classify_file_kind(&resolved) {
+        Some(ExplorerFileKind::Markdown | ExplorerFileKind::Text) => !write || resolved.is_file(),
+        Some(ExplorerFileKind::Image) => !write,
+        None => false,
+    };
+
+    if allowed {
+        Ok(resolved)
+    } else if write {
+        Err(i18n::t("explorer.unsupported_write_type"))
+    } else {
+        Err(i18n::t("explorer.outside_workspace"))
+    }
+}
+
+/// Fails unless `path` resolves (symlinks and `..` included) to the workspace
+/// root or something inside it. Paths that do not exist yet are judged by
+/// their nearest existing ancestor.
+pub(crate) fn ensure_within_root(root_path: &Path, path: &Path) -> Result<(), String> {
+    paths::ensure_within(root_path, path).map(|_| ())
 }
 
 fn ensure_parent_exists(path: &Path) -> Result<(), String> {
@@ -540,6 +623,17 @@ fn copy_workspace_node_recursive(
 
         for entry in fs::read_dir(source_path).map_err(|error| error.to_string())? {
             let entry = entry.map_err(|error| error.to_string())?;
+
+            // Links nested inside a copied folder are skipped: following them
+            // could loop forever or pull in files from outside the workspace.
+            if entry
+                .file_type()
+                .map_err(|error| error.to_string())?
+                .is_symlink()
+            {
+                continue;
+            }
+
             let child_source_path = entry.path();
             let child_destination_path = destination_path.join(entry.file_name());
 
@@ -559,8 +653,8 @@ pub fn rename_workspace_node(
     target_path: &Path,
     new_name: &str,
 ) -> Result<(), String> {
-    ensure_within_root(root_path, target_path)?;
-    ensure_existing_path(target_path)?;
+    let target = paths::ensure_entry_within(root_path, target_path)?;
+    ensure_existing_path(&target)?;
 
     let trimmed_name = new_name.trim();
 
@@ -572,34 +666,57 @@ pub fn rename_workspace_node(
         return Err(i18n::t("explorer.name_no_separator"));
     }
 
-    let Some(parent) = target_path.parent() else {
+    if !is_plain_entry_name(trimmed_name) {
+        return Err(i18n::t("explorer.invalid_name"));
+    }
+
+    if target == paths::canonical_root_of(root_path)? {
+        return Err(i18n::t("explorer.cannot_rename_root"));
+    }
+
+    let Some(parent) = target.parent() else {
         return Err(i18n::t("explorer.cannot_rename_root"));
     };
 
     let next_path = parent.join(trimmed_name);
 
-    if next_path == target_path {
+    if next_path == target {
         return Ok(());
     }
 
     ensure_target_available(&next_path)?;
-    fs::rename(target_path, next_path).map_err(|error| error.to_string())
+    fs::rename(target, next_path).map_err(|error| error.to_string())
 }
 
 pub fn delete_workspace_node(root_path: &Path, target_path: &Path) -> Result<(), String> {
-    ensure_within_root(root_path, target_path)?;
-    ensure_existing_path(target_path)?;
+    let target = paths::ensure_entry_within(root_path, target_path)?;
 
-    if target_path == root_path {
+    if target == paths::canonical_root_of(root_path)? {
         return Err(i18n::t("explorer.cannot_delete_root"));
     }
 
-    let metadata = fs::metadata(target_path).map_err(|error| error.to_string())?;
+    // `symlink_metadata` so a link is removed as a link and its target, which
+    // may live outside the workspace, is never touched.
+    let metadata = fs::symlink_metadata(&target).map_err(|_| {
+        i18n::tf(
+            "explorer.path_not_exist",
+            &[("path", &target.display().to_string())],
+        )
+    })?;
 
     if metadata.is_dir() {
-        fs::remove_dir_all(target_path).map_err(|error| error.to_string())
+        fs::remove_dir_all(&target).map_err(|error| error.to_string())
     } else {
-        fs::remove_file(target_path).map_err(|error| error.to_string())
+        fs::remove_file(&target)
+            .or_else(|error| {
+                // A directory symlink is removed with `remove_dir` on Windows.
+                if metadata.file_type().is_symlink() {
+                    fs::remove_dir(&target)
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -608,50 +725,51 @@ pub fn move_workspace_node(
     source_path: &Path,
     destination_directory: &Path,
 ) -> Result<(), String> {
-    ensure_within_root(root_path, source_path)?;
-    ensure_within_root(root_path, destination_directory)?;
-    ensure_existing_path(source_path)?;
-    ensure_existing_path(destination_directory)?;
+    let source = paths::ensure_entry_within(root_path, source_path)?;
+    let destination_directory = paths::ensure_within(root_path, destination_directory)?;
+    ensure_existing_path(&source)?;
+    ensure_existing_path(&destination_directory)?;
 
     if !destination_directory.is_dir() {
         return Err(i18n::t("explorer.paste_target_must_be_dir"));
     }
 
-    if source_path == root_path {
+    if source == paths::canonical_root_of(root_path)? {
         return Err(i18n::t("explorer.cannot_move_root"));
     }
 
-    if destination_directory == source_path {
+    if destination_directory == source {
         return Err(i18n::t("explorer.cannot_move_to_self"));
     }
 
-    if source_path.starts_with(destination_directory) {
-        let source_parent = source_path.parent();
-
-        if source_parent.is_some_and(|parent| parent == destination_directory) {
-            return Ok(());
-        }
+    if source
+        .parent()
+        .is_some_and(|parent| parent == destination_directory)
+    {
+        return Ok(());
     }
 
-    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+    let source_is_dir = fs::symlink_metadata(&source)
+        .map_err(|error| error.to_string())?
+        .is_dir();
 
-    if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
+    if source_is_dir && destination_directory.starts_with(&source) {
         return Err(i18n::t("explorer.cannot_move_to_child"));
     }
 
-    let file_name = source_path
+    let file_name = source
         .file_name()
         .ok_or_else(|| i18n::t("explorer.cannot_determine_source_name"))?;
     let destination_path = destination_directory.join(file_name);
 
-    if destination_path == source_path {
+    if destination_path == source {
         return Ok(());
     }
 
     ensure_parent_exists(&destination_path)?;
     ensure_target_available(&destination_path)?;
 
-    fs::rename(source_path, destination_path).map_err(|error| error.to_string())
+    fs::rename(source, destination_path).map_err(|error| error.to_string())
 }
 
 /// Allowed extensions for external file import (markdown & images only).
@@ -686,7 +804,7 @@ pub fn import_external_file(
         ));
     }
 
-    ensure_within_root(root_path, destination_directory)?;
+    let destination_directory = paths::ensure_within(root_path, destination_directory)?;
 
     if !destination_directory.is_dir() {
         return Err(i18n::t("explorer.target_dir_not_exist"));
@@ -712,26 +830,26 @@ pub fn copy_workspace_node(
     source_path: &Path,
     destination_directory: &Path,
 ) -> Result<(), String> {
-    ensure_within_root(root_path, source_path)?;
-    ensure_within_root(root_path, destination_directory)?;
-    ensure_existing_path(source_path)?;
-    ensure_existing_path(destination_directory)?;
+    let source = paths::ensure_within(root_path, source_path)?;
+    let destination_directory = paths::ensure_within(root_path, destination_directory)?;
+    ensure_existing_path(&source)?;
+    ensure_existing_path(&destination_directory)?;
 
     if !destination_directory.is_dir() {
         return Err(i18n::t("explorer.paste_target_must_be_dir"));
     }
 
-    if source_path == root_path {
+    if source == paths::canonical_root_of(root_path)? {
         return Err(i18n::t("explorer.cannot_copy_root"));
     }
 
-    let source_metadata = fs::metadata(source_path).map_err(|error| error.to_string())?;
+    let source_metadata = fs::metadata(&source).map_err(|error| error.to_string())?;
 
-    if source_metadata.is_dir() && destination_directory.starts_with(source_path) {
+    if source_metadata.is_dir() && destination_directory.starts_with(&source) {
         return Err(i18n::t("explorer.cannot_copy_to_child"));
     }
 
-    let file_name = source_path
+    let file_name = source
         .file_name()
         .ok_or_else(|| i18n::t("explorer.cannot_determine_source_name"))?;
     let destination_path = destination_directory.join(file_name);
@@ -739,7 +857,7 @@ pub fn copy_workspace_node(
     ensure_parent_exists(&destination_path)?;
     let resolved_path = resolve_available_path(&destination_path);
 
-    copy_workspace_node_recursive(source_path, &resolved_path)
+    copy_workspace_node_recursive(&source, &resolved_path)
 }
 
 #[cfg(test)]
@@ -1236,5 +1354,258 @@ mod tests {
             image_mime_type(Path::new("Makefile")),
             "application/octet-stream"
         );
+    }
+
+    // ─── path containment ────────────────────────────────────────────
+
+    fn workspace_with_outside() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("ws");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        (dir, root, outside)
+    }
+
+    #[test]
+    fn ensure_within_root_rejects_dot_dot_escapes() {
+        let (_guard, root, _outside) = workspace_with_outside();
+
+        assert!(ensure_within_root(&root, &root.join("sub/../../outside")).is_err());
+        assert!(ensure_within_root(&root, &root.join("sub/../sub")).is_ok());
+    }
+
+    #[test]
+    fn delete_refuses_the_workspace_root_however_it_is_spelled() {
+        let (_guard, root, _outside) = workspace_with_outside();
+
+        for spelling in [root.clone(), root.join("."), root.join("sub/..")] {
+            let result = delete_workspace_node(&root, &spelling);
+
+            assert!(result.is_err(), "{spelling:?} must not be deletable");
+            assert!(root.join("sub").exists(), "workspace contents must survive");
+        }
+    }
+
+    #[test]
+    fn delete_refuses_paths_that_escape_through_dot_dot() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("keep.md"), b"x").unwrap();
+
+        let result = delete_workspace_node(&root, &root.join("sub/../../outside/keep.md"));
+
+        assert!(result.is_err());
+        assert!(outside.join("keep.md").exists());
+    }
+
+    #[test]
+    fn rename_and_move_and_copy_refuse_escapes() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(root.join("a.md"), b"x").unwrap();
+        std::fs::write(outside.join("b.md"), b"y").unwrap();
+        let sneaky = root.join("sub/../../outside/b.md");
+
+        assert!(rename_workspace_node(&root, &sneaky, "c.md").is_err());
+        assert!(move_workspace_node(&root, &root.join("a.md"), &root.join("../outside")).is_err());
+        assert!(move_workspace_node(&root, &sneaky, &root.join("sub")).is_err());
+        assert!(copy_workspace_node(&root, &sneaky, &root.join("sub")).is_err());
+        assert!(copy_workspace_node(&root, &root.join("a.md"), &root.join("../outside")).is_err());
+        assert!(outside.join("b.md").exists());
+        assert!(!outside.join("a.md").exists());
+    }
+
+    #[test]
+    fn rename_rejects_dot_dot_as_a_new_name() {
+        let (_guard, root, _outside) = workspace_with_outside();
+        std::fs::write(root.join("a.md"), b"x").unwrap();
+
+        assert!(rename_workspace_node(&root, &root.join("a.md"), "..").is_err());
+        assert!(rename_workspace_node(&root, &root.join("a.md"), ".").is_err());
+    }
+
+    #[test]
+    fn create_commands_refuse_a_selected_path_outside_the_root() {
+        let (_guard, root, outside) = workspace_with_outside();
+
+        assert!(create_markdown_file(&root, Some(&outside), "evil").is_err());
+        assert!(create_workspace_directory(&root, Some(&outside), "evil").is_err());
+        assert!(
+            create_markdown_file(&root, Some(&root.join("sub/../../outside")), "evil").is_err()
+        );
+        assert!(!outside.join("evil.md").exists());
+        assert!(!outside.join("evil").exists());
+    }
+
+    #[test]
+    fn create_commands_work_inside_the_root() {
+        let (_guard, root, _outside) = workspace_with_outside();
+
+        create_markdown_file(&root, Some(&root.join("sub")), "note").unwrap();
+        create_workspace_directory(&root, None, "dir").unwrap();
+
+        assert!(root.join("sub/note.md").exists());
+        assert!(root.join("dir").is_dir());
+    }
+
+    #[test]
+    fn create_rejects_dot_names() {
+        assert!(normalize_markdown_file_name("..").is_err());
+        assert!(normalize_directory_name("..").is_err());
+        assert!(normalize_directory_name(".").is_err());
+    }
+
+    #[test]
+    fn read_directory_children_refuses_directories_outside_the_root() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("x.md"), b"x").unwrap();
+
+        assert!(read_directory_children(&root, &outside, false, true).is_err());
+        assert!(read_directory_children(&root, &root.join("sub"), false, true).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_inside_the_workspace_cannot_reach_outside() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("secret.md"), b"s").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+
+        assert!(
+            copy_workspace_node(&root, &root.join("link/secret.md"), &root.join("sub")).is_err()
+        );
+        assert!(delete_workspace_node(&root, &root.join("link/secret.md")).is_err());
+        assert!(outside.join("secret.md").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn deleting_a_symlink_removes_the_link_not_its_target() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("keep.md"), b"s").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+
+        delete_workspace_node(&root, &root.join("link")).unwrap();
+
+        assert!(std::fs::symlink_metadata(root.join("link")).is_err());
+        assert!(outside.join("keep.md").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copying_a_directory_skips_nested_symlinks() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("secret.md"), b"s").unwrap();
+        std::fs::create_dir_all(root.join("src")).unwrap();
+        std::fs::write(root.join("src/a.md"), b"a").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("src/link")).unwrap();
+        // A link back to the parent would recurse forever if followed.
+        std::os::unix::fs::symlink(root.join("src"), root.join("src/loop")).unwrap();
+
+        copy_workspace_node(&root, &root.join("src"), &root.join("sub")).unwrap();
+
+        assert!(root.join("sub/src/a.md").exists());
+        assert!(!root.join("sub/src/link").exists());
+        assert!(!root.join("sub/src/loop").exists());
+    }
+
+    // ─── authorize_file_access ───────────────────────────────────────
+
+    #[test]
+    fn file_access_inside_the_root_allows_any_extension_except_protected_dirs() {
+        let (_guard, root, _outside) = workspace_with_outside();
+        std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+
+        assert!(authorize_file_access(Some(&root), &root.join("sub/new.json"), true).is_ok());
+        assert!(
+            authorize_file_access(Some(&root), &root.join(".git/hooks/pre-commit"), true).is_err()
+        );
+        assert!(authorize_file_access(Some(&root), &root.join(".git/config"), false).is_err());
+    }
+
+    #[test]
+    fn file_access_outside_the_root_is_limited_to_documents() {
+        let (_guard, root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("note.md"), b"n").unwrap();
+        std::fs::write(outside.join("pic.png"), b"p").unwrap();
+        std::fs::write(outside.join("id_rsa"), b"k").unwrap();
+        std::fs::write(outside.join("config.json"), b"{}").unwrap();
+
+        assert!(authorize_file_access(Some(&root), &outside.join("note.md"), false).is_ok());
+        assert!(authorize_file_access(Some(&root), &outside.join("pic.png"), false).is_ok());
+        assert!(authorize_file_access(Some(&root), &outside.join("id_rsa"), false).is_err());
+        assert!(authorize_file_access(Some(&root), &outside.join("config.json"), false).is_err());
+
+        // Existing documents may be saved; nothing else may be written.
+        assert!(authorize_file_access(Some(&root), &outside.join("note.md"), true).is_ok());
+        assert!(authorize_file_access(Some(&root), &outside.join("pic.png"), true).is_err());
+        assert!(authorize_file_access(Some(&root), &outside.join("new.md"), true).is_err());
+        assert!(authorize_file_access(Some(&root), &outside.join("id_rsa"), true).is_err());
+    }
+
+    #[test]
+    fn file_access_without_a_workspace_is_document_only() {
+        let (_guard, _root, outside) = workspace_with_outside();
+        std::fs::write(outside.join("note.md"), b"n").unwrap();
+
+        assert!(authorize_file_access(None, &outside.join("note.md"), false).is_ok());
+        assert!(authorize_file_access(None, &outside.join("other"), false).is_err());
+    }
+
+    // ─── write_workspace_file / read prefix ──────────────────────────
+
+    #[test]
+    fn write_workspace_file_refuses_any_write_to_an_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.md");
+        let full = "x".repeat(MAX_TEXT_PREVIEW_BYTES + 1024);
+        std::fs::write(&path, &full).unwrap();
+
+        // Even content as long as the original would destroy what the
+        // editor never showed.
+        let longer = "y".repeat(full.len() + 10);
+        assert!(write_workspace_file(&path, &longer).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), full);
+    }
+
+    #[test]
+    fn write_workspace_file_leaves_no_temp_files_and_keeps_utf16() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("w.md");
+        std::fs::write(&path, [0xFF, 0xFE, b'h', 0x00]).unwrap();
+
+        write_workspace_file(&path, "hi").unwrap();
+
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            vec![0xFF, 0xFE, b'h', 0x00, b'i', 0x00]
+        );
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name())
+            .collect();
+        assert_eq!(names.len(), 1, "unexpected files: {names:?}");
+    }
+
+    #[test]
+    fn read_text_preview_reads_only_the_preview_window_of_a_huge_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.txt");
+        std::fs::write(&path, "a".repeat(MAX_TEXT_PREVIEW_BYTES * 3)).unwrap();
+
+        let (content, truncated, _) = read_text_preview(&path).unwrap();
+
+        assert!(truncated);
+        assert_eq!(content.len(), MAX_TEXT_PREVIEW_BYTES);
+    }
+
+    #[test]
+    fn oversized_images_are_refused_instead_of_inlined() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.png");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_IMAGE_PREVIEW_BYTES + 1).unwrap();
+
+        assert!(read_workspace_file(&path).is_err());
     }
 }
