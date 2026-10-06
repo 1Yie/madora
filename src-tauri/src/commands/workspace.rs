@@ -16,8 +16,15 @@ pub async fn set_workspace_root(
     protocol_state: State<'_, MadoraProtocolState>,
     root_path: Option<String>,
 ) -> Result<(), String> {
-    // Sync the workspace root into the protocol handler state
-    protocol_state.set_workspace_root(root_path.as_ref().map(std::path::PathBuf::from));
+    // The root is established by the native folder picker (or restored from
+    // the persisted state at startup). The webview may only confirm it for
+    // persistence or clear it, never point it at a different directory.
+    if let Some(path) = root_path.as_ref() {
+        protocol_state.authorize_root(std::path::Path::new(path))?;
+    } else {
+        protocol_state.set_workspace_root(None);
+    }
+
     store.set_root_path(root_path)
 }
 
@@ -79,21 +86,4 @@ pub async fn set_open_tab_paths(
 #[tauri::command]
 pub async fn clear_workspace_state(store: State<'_, WorkspaceStore>) -> Result<(), String> {
     store.clear()
-}
-
-/// Resolve a markdown image source to an absolute filesystem path.
-///
-/// The frontend should call `convertFileSrc()` on the returned path
-/// to obtain a Tauri asset protocol URL.
-#[tauri::command]
-pub async fn resolve_image_src(
-    src: String,
-    file_path: String,
-    root_path: Option<String>,
-) -> Result<String, String> {
-    Ok(crate::services::workspace::resolve_image_src(
-        &src,
-        &file_path,
-        root_path.as_deref(),
-    ))
 }

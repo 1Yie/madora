@@ -52,12 +52,6 @@ fn pin_linux_rendering_env() {
 }
 
 fn main() {
-    dotenv::dotenv().ok();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let _ = dotenv::from_path(dir.join(".env"));
-        }
-    }
     #[cfg(target_os = "linux")]
     pin_linux_rendering_env();
     madora_lib::run()

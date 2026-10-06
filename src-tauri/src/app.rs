@@ -2,8 +2,7 @@ use std::env;
 
 use crate::{
     commands::{
-        ai, explorer, git, madora_sync, project, secure_storage, system, utility, webdav,
-        workspace,
+        ai, explorer, git, madora_sync, secure_storage, system, utility, webdav, workspace,
     },
     protocol::MadoraProtocolState,
     services::{
@@ -127,7 +126,6 @@ pub fn run() {
     builder
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
-            utility::greet,
             utility::path_exists,
             utility::absolute_path_exists,
             crate::commands::theme::get_system_theme,
@@ -154,7 +152,6 @@ pub fn run() {
             workspace::set_zoom_level,
             workspace::set_open_tab_paths,
             workspace::clear_workspace_state,
-            workspace::resolve_image_src,
             git::git_status,
             git::git_init,
             git::git_set_remote,
@@ -180,8 +177,6 @@ pub fn run() {
             secure_storage::has_ai_api_key,
             secure_storage::store_ai_api_key,
             secure_storage::delete_ai_api_key,
-            project::read_file_content,
-            project::scan_project,
             system::show_window,
             system::hide_window,
             system::quit_app,

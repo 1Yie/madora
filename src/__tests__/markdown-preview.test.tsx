@@ -6,6 +6,7 @@ vi.mock('@/invoke/opener', () => ({
 }));
 
 import { MarkdownPreview } from '@/components/explorer/markdown/markdown-preview';
+import { fromMadoraUrl, toMadoraUrl } from '@/lib/madora-url';
 
 afterEach(() => {
 	cleanup();
@@ -197,5 +198,53 @@ describe('MarkdownPreview', () => {
 
 		expect(document.querySelector('table')).toBeNull();
 		expect(document.body.textContent).toContain('name: x');
+	});
+});
+
+describe('madora:// URLs', () => {
+	it('percent-encodes each path segment', () => {
+		expect(toMadoraUrl('/home/u/my docs/a#b?c%d.png')).toBe(
+			'madora://localhost/home/u/my%20docs/a%23b%3Fc%25d.png'
+		);
+		expect(toMadoraUrl('/home/u/测试.png')).toBe(
+			`madora://localhost/home/u/${encodeURIComponent('测试.png')}`
+		);
+	});
+
+	it('keeps plain ASCII paths readable', () => {
+		expect(toMadoraUrl('/home/u/project/img/a-b_c.png')).toBe(
+			'madora://localhost/home/u/project/img/a-b_c.png'
+		);
+	});
+
+	it('gives a Windows drive path a leading slash and keeps the colon', () => {
+		expect(toMadoraUrl('C:\\Users\\me\\a b.png')).toBe(
+			'madora://localhost/C:/Users/me/a%20b.png'
+		);
+	});
+
+	it('round-trips unusual paths', () => {
+		for (const path of [
+			'/home/u/my docs/a#b?c%d.png',
+			'/home/u/测试/图 1.png',
+			'C:/Users/me/a b.png',
+		]) {
+			expect(fromMadoraUrl(toMadoraUrl(path))).toBe(path);
+		}
+	});
+
+	it('encodes file names with spaces and non-ASCII characters in images', () => {
+		render(
+			<MarkdownPreview
+				content="![图](./my%20docs/%E6%B5%8B%E8%AF%95.png)"
+				filePath="/home/u/project/post.md"
+				rootPath="/home/u/project"
+			/>
+		);
+
+		expect(screen.getByAltText('图')).toHaveAttribute(
+			'src',
+			`madora://localhost/home/u/project/my%20docs/${encodeURIComponent('测试.png')}`
+		);
 	});
 });

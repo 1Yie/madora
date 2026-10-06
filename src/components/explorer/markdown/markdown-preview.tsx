@@ -11,6 +11,7 @@ import { absolutePathExists } from '@/invoke/system';
 import { showErrorToast } from '@/components/ui/toast';
 
 import { cn } from '@/lib/utils';
+import { fromMadoraUrl, toMadoraUrl } from '@/lib/madora-url';
 import {
 	Dialog,
 	DialogPopup,
@@ -141,7 +142,7 @@ function resolveToMadoraUrl(
 		absolutePath = normaliseFilePath(`${basePath}/${decoded}`);
 	}
 
-	return `madora://localhost${absolutePath}`;
+	return toMadoraUrl(absolutePath);
 }
 
 // ─── Standalone image component with `madora://` resolution ──────────────
@@ -224,7 +225,7 @@ function MarkdownLink({
 		if (resolved.startsWith('madora://localhost')) {
 			event.preventDefault();
 
-			const absolutePath = resolved.slice('madora://localhost'.length);
+			const absolutePath = fromMadoraUrl(resolved);
 
 			const isMarkdown = /\.(md|markdown|mdx)$/i.test(absolutePath);
 

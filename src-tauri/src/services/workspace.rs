@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use base64::Engine;
-
 use crate::models::workspace::WorkspaceState;
 
 const STATE_FILE_NAME: &str = "workspace_state.json";
@@ -37,8 +35,17 @@ impl WorkspaceStore {
         }
 
         match std::fs::read_to_string(&path) {
-            Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
-            Err(_) => WorkspaceState::default(),
+            Ok(json) => match serde_json::from_str(&json) {
+                Ok(state) => state,
+                Err(error) => {
+                    eprintln!("workspace state is unreadable ({error}); starting fresh");
+                    WorkspaceState::default()
+                }
+            },
+            Err(error) => {
+                eprintln!("workspace state could not be read ({error}); starting fresh");
+                WorkspaceState::default()
+            }
         }
     }
 
@@ -49,11 +56,22 @@ impl WorkspaceStore {
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            if let Err(error) = std::fs::create_dir_all(parent) {
+                eprintln!("could not create {}: {error}", parent.display());
+                return;
+            }
         }
 
-        if let Ok(json) = serde_json::to_string_pretty(state) {
-            let _ = std::fs::write(&path, json);
+        // A failed write only loses UI state, so it is logged rather than
+        // surfaced; the write itself is atomic so a crash cannot leave a
+        // half-written file that fails to parse on the next start.
+        match serde_json::to_string_pretty(state) {
+            Ok(json) => {
+                if let Err(error) = crate::services::paths::atomic_write(&path, json.as_bytes()) {
+                    eprintln!("could not save workspace state: {error}");
+                }
+            }
+            Err(error) => eprintln!("could not serialize workspace state: {error}"),
         }
     }
 
@@ -194,115 +212,6 @@ impl WorkspaceStore {
     }
 }
 
-/// MIME type map for common image extensions.
-fn mime_for_extension(ext: &str) -> &str {
-    match ext.to_lowercase().as_str() {
-        "jpg" | "jpeg" => "image/jpeg",
-        "png" => "image/png",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "bmp" => "image/bmp",
-        "ico" => "image/x-icon",
-        "avif" => "image/avif",
-        _ => "application/octet-stream",
-    }
-}
-
-/// Resolve a markdown image source to a data URL.
-///
-/// - URLs and existing data URIs are returned as-is.
-/// - Absolute paths (`/...`) are resolved relative to the workspace root.
-/// - Relative paths are resolved relative to the markdown file's directory.
-///
-/// The resolved image file is read and returned as a base64-encoded data URL
-/// so the frontend can display it directly without going through Tauri's asset
-/// protocol (which only serves bundled assets).
-pub fn resolve_image_src(src: &str, file_path: &str, root_path: Option<&str>) -> String {
-    // Leave URLs and data URIs untouched
-    if src.starts_with("http://")
-        || src.starts_with("https://")
-        || src.starts_with("data:")
-        || src.starts_with("asset://")
-    {
-        return src.to_string();
-    }
-
-    // Resolve to absolute filesystem path
-    let abs = if src.starts_with('/') {
-        if let Some(root) = root_path {
-            let trimmed = root.trim_end_matches('/');
-            normalize_path(&format!("{}{}", trimmed, src))
-        } else {
-            return src.to_string();
-        }
-    } else {
-        // Relative path — resolve relative to the markdown file's directory
-        if let Some(parent) = std::path::Path::new(file_path).parent() {
-            let parent_str = parent.to_string_lossy();
-            let base = parent_str.trim_end_matches('/');
-            normalize_path(&format!("{}/{}", base, src))
-        } else {
-            return src.to_string();
-        }
-    };
-
-    // Try to read the file and return a data URL
-    match std::fs::read(&abs) {
-        Ok(bytes) => {
-            let ext = std::path::Path::new(&abs)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            let mime = mime_for_extension(ext);
-            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            format!("data:{};base64,{}", mime, b64)
-        }
-        Err(_) => {
-            // File not found — return the path for the frontend to handle
-            abs
-        }
-    }
-}
-
-/// Normalize a path (no `..` or `.` segments, forward slashes).
-fn normalize_path(path: &str) -> String {
-    let mut segments: Vec<&str> = Vec::new();
-
-    for segment in path.split('/') {
-        match segment {
-            "" | "." => continue,
-            ".." => {
-                segments.pop();
-            }
-            _ => segments.push(segment),
-        }
-    }
-
-    if segments.is_empty() {
-        return String::new();
-    }
-
-    // Detect Windows drive path: the first segment looks like "C:"
-    let is_drive_path = segments[0].len() == 2
-        && segments[0].as_bytes()[0].is_ascii_alphabetic()
-        && segments[0].as_bytes()[1] == b':';
-
-    if is_drive_path {
-        // Windows drive letter is already in segments[0]
-        if segments.len() == 1 {
-            return format!("{}/", segments[0]);
-        }
-        return format!("{}/{}", segments[0], segments[1..].join("/"));
-    }
-
-    if path.starts_with('/') {
-        format!("/{}", segments.join("/"))
-    } else {
-        segments.join("/")
-    }
-}
-
 impl Default for WorkspaceState {
     fn default() -> Self {
         Self {
@@ -315,108 +224,5 @@ impl Default for WorkspaceState {
             tab_bar_mode: Some("scroll".to_string()),
             zoom_level: Some(1.0),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── resolve_image_src ───────────────────────────────────
-
-    #[test]
-    fn resolve_url_unchanged() {
-        let result = resolve_image_src("https://example.com/img.png", "/doc.md", None);
-        assert_eq!(result, "https://example.com/img.png");
-    }
-
-    #[test]
-    fn resolve_data_uri_unchanged() {
-        let result = resolve_image_src("data:image/png;base64,abc", "/doc.md", None);
-        assert_eq!(result, "data:image/png;base64,abc");
-    }
-
-    #[test]
-    fn resolve_absolute_with_root_file_not_found_returns_path() {
-        // When the file doesn't exist, it returns the absolute path (fallback)
-        let result = resolve_image_src("/assets/img.png", "/workspace/doc.md", Some("/workspace"));
-        assert_eq!(result, "/workspace/assets/img.png");
-    }
-
-    #[test]
-    fn resolve_relative_file_not_found_returns_path() {
-        let result = resolve_image_src("img.png", "/workspace/docs/doc.md", Some("/workspace"));
-        assert_eq!(result, "/workspace/docs/img.png");
-    }
-
-    #[test]
-    fn resolve_relative_parent_file_not_found_returns_path() {
-        let result = resolve_image_src(
-            "../images/img.png",
-            "/workspace/docs/doc.md",
-            Some("/workspace"),
-        );
-        assert_eq!(result, "/workspace/images/img.png");
-    }
-
-    #[test]
-    fn resolve_relative_same_dir_file_not_found_returns_path() {
-        let result = resolve_image_src("./img.png", "/workspace/doc.md", Some("/workspace"));
-        assert_eq!(result, "/workspace/img.png");
-    }
-
-    #[test]
-    fn resolve_relative_to_data_url() {
-        // Create a temporary PNG file
-        let dir = std::env::temp_dir().join("madora-img-test");
-        let _ = std::fs::create_dir_all(&dir);
-        let img_path = dir.join("test.png");
-        // Minimal valid PNG (1x1 pixel)
-        let png_bytes: Vec<u8> = vec![
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
-            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
-            0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08,
-            0xD7, 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x27, 0x34, 0x27,
-            0x19, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-        ];
-        std::fs::write(&img_path, &png_bytes).unwrap();
-
-        let md_path = dir.join("doc.md").to_string_lossy().to_string();
-
-        let result = resolve_image_src("test.png", &md_path, None);
-
-        let expected_b64 = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
-        assert_eq!(result, format!("data:image/png;base64,{}", expected_b64));
-
-        // Cleanup
-        let _ = std::fs::remove_file(&img_path);
-        let _ = std::fs::remove_dir(&dir);
-    }
-
-    // ── normalize_path ──────────────────────────────────────
-
-    #[test]
-    fn normalize_simple() {
-        assert_eq!(normalize_path("/a/b/c"), "/a/b/c");
-    }
-
-    #[test]
-    fn normalize_with_dotdot() {
-        assert_eq!(normalize_path("/a/b/../c"), "/a/c");
-    }
-
-    #[test]
-    fn normalize_with_dot() {
-        assert_eq!(normalize_path("/a/b/./c"), "/a/b/c");
-    }
-
-    #[test]
-    fn normalize_relative() {
-        assert_eq!(normalize_path("a/b/c"), "a/b/c");
-    }
-
-    #[test]
-    fn normalize_windows_drive() {
-        assert_eq!(normalize_path("C:/a/b/c"), "C:/a/b/c");
     }
 }

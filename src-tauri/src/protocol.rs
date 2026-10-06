@@ -27,7 +27,10 @@
 //!   it returns `404 Not Found`.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
+use crate::i18n;
+use crate::services::paths;
 
 use tauri::{
     http::{header, Request, Response, StatusCode},
@@ -55,16 +58,69 @@ impl MadoraProtocolState {
         }
     }
 
+    fn lock_root(&self) -> MutexGuard<'_, Option<PathBuf>> {
+        // The guarded value is a plain `Option`, so a panic elsewhere cannot
+        // leave it half-written; keep serving instead of cascading the panic.
+        self.workspace_root
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Set or clear the workspace root.
     pub fn set_workspace_root(&self, root: Option<PathBuf>) {
-        *self.workspace_root.lock().unwrap() = root;
+        *self.lock_root() = root;
     }
 
     /// Get a clone of the current workspace root.
-    #[allow(dead_code)]
     pub fn get_workspace_root(&self) -> Option<PathBuf> {
-        self.workspace_root.lock().unwrap().clone()
+        self.lock_root().clone()
     }
+
+    /// Checks that `claimed` (a root path sent by the webview) is the
+    /// workspace the backend itself recorded, and returns it.
+    ///
+    /// Commands must not take the webview's word for what the workspace is:
+    /// the root is established by the native folder picker (or restored from
+    /// the persisted state), never by an arbitrary `invoke` argument.
+    pub fn authorize_root(&self, claimed: &Path) -> Result<PathBuf, String> {
+        let Some(current) = self.get_workspace_root() else {
+            return Err(i18n::t("explorer.no_workspace"));
+        };
+
+        if claimed == current || same_directory(claimed, &current) {
+            Ok(claimed.to_path_buf())
+        } else {
+            Err(i18n::t("explorer.workspace_mismatch"))
+        }
+    }
+}
+
+fn same_directory(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Turns the path component of a `madora://` URI into a filesystem path:
+/// percent-decodes it and drops the slash that precedes a Windows drive
+/// letter (`/C:/Users/x` → `C:/Users/x`).
+fn request_path_to_fs_path(raw_path: &str) -> Option<PathBuf> {
+    let decoded = urlencoding::decode(raw_path).ok()?;
+
+    if decoded.contains('\0') {
+        return None;
+    }
+
+    let bytes = decoded.as_bytes();
+    let drive_prefixed =
+        bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b':';
+
+    Some(PathBuf::from(if drive_prefixed {
+        &decoded[1..]
+    } else {
+        &decoded[..]
+    }))
 }
 
 // ─── Protocol Handler ────────────────────────────────────────────────────
@@ -94,14 +150,14 @@ pub fn handle_madora_protocol<R: Runtime>(
         return error_response(StatusCode::BAD_REQUEST, "Empty path in request");
     }
 
-    // ── 2. Create PathBuf from the URI path directly ───────
-    // On Unix, paths starting with / are absolute.
-    // On Windows, paths like /C:/Users/... are handled correctly by PathBuf.
-    let requested = PathBuf::from(raw_path);
+    // ── 2. Create PathBuf from the (percent-decoded) URI path ──
+    let Some(requested) = request_path_to_fs_path(raw_path) else {
+        return error_response(StatusCode::BAD_REQUEST, "Malformed path in request");
+    };
 
     // ── 3. SECURITY: Get the workspace root for validation ─
     let state = app_handle.state::<MadoraProtocolState>();
-    let workspace_root = match state.workspace_root.lock().unwrap().clone() {
+    let workspace_root = match state.get_workspace_root() {
         Some(root) => root,
         None => {
             return error_response(
@@ -142,6 +198,13 @@ pub fn handle_madora_protocol<R: Runtime>(
         return error_response(StatusCode::FORBIDDEN, "Cannot read a directory.");
     }
 
+    if canonical
+        .strip_prefix(&canonical_root)
+        .is_ok_and(paths::is_protected_path)
+    {
+        return error_response(StatusCode::FORBIDDEN, "Access denied.");
+    }
+
     // ── 7. Read the file ────────────────────────────────────
     let data = match std::fs::read(&canonical) {
         Ok(d) => d,
@@ -167,8 +230,14 @@ fn build_response(status: StatusCode, content_type: &str, body: Vec<u8>) -> Resp
     Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, content_type)
-        .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+        // A file opened directly (e.g. an .html link) must not run script or
+        // reach the network; inline styles stay allowed for SVG and the like.
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; img-src data: 'self'; media-src 'self'; \
+             style-src 'unsafe-inline'; sandbox",
+        )
         .header(header::CACHE_CONTROL, "private, max-age=60")
         .body(body)
         .unwrap_or_else(|_| {
@@ -319,6 +388,63 @@ mod tests {
             mime_for_path(Path::new("Makefile")),
             "application/octet-stream"
         );
+    }
+
+    // ── request_path_to_fs_path / is_protected_path ─────────
+
+    #[test]
+    fn request_path_is_percent_decoded() {
+        assert_eq!(
+            request_path_to_fs_path("/home/u/my%20docs/%E6%B5%8B%E8%AF%95.png"),
+            Some(PathBuf::from("/home/u/my docs/测试.png"))
+        );
+    }
+
+    #[test]
+    fn request_path_drops_the_slash_before_a_drive_letter() {
+        assert_eq!(
+            request_path_to_fs_path("/C:/Users/me/a.png"),
+            Some(PathBuf::from("C:/Users/me/a.png"))
+        );
+        assert_eq!(
+            request_path_to_fs_path("/c%3A/Users/a.png"),
+            Some(PathBuf::from("c:/Users/a.png"))
+        );
+        assert_eq!(
+            request_path_to_fs_path("/cache/a.png"),
+            Some(PathBuf::from("/cache/a.png"))
+        );
+    }
+
+    #[test]
+    fn request_path_rejects_nul_bytes() {
+        assert_eq!(request_path_to_fs_path("/a%00b"), None);
+    }
+
+    // ── authorize_root ──────────────────────────────────────
+
+    #[test]
+    fn authorize_root_requires_an_open_workspace() {
+        let state = MadoraProtocolState::new();
+
+        assert!(state.authorize_root(Path::new("/tmp")).is_err());
+    }
+
+    #[test]
+    fn authorize_root_accepts_only_the_recorded_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("ws");
+        let other = dir.path().join("other");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        let state = MadoraProtocolState::new();
+        state.set_workspace_root(Some(root.clone()));
+
+        assert_eq!(state.authorize_root(&root).unwrap(), root);
+        assert!(state.authorize_root(&other).is_err());
+        assert!(state.authorize_root(dir.path()).is_err());
+        // A different spelling of the same directory is still that directory.
+        assert!(state.authorize_root(&root.join("../ws")).is_ok());
     }
 
     // ── MadoraProtocolState ─────────────────────────────────
