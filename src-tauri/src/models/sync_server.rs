@@ -39,9 +39,17 @@ pub struct FileReadMessage {
 
 /// Write content back to a file (mobile edit synced to desktop).
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileWriteMessage {
     pub path: String,
     pub content: String,
+    /// Optional optimistic-concurrency guard: SHA-256 hex of the content the
+    /// client last read. When present the write is rejected with
+    /// `code = "conflict"` if the file on disk no longer matches. Old clients
+    /// omit it (and are accepted unchanged, with the documented overwrite
+    /// risk).
+    #[serde(default, alias = "expected_hash")]
+    pub expected_hash: Option<String>,
 }
 
 /// Request an AI completion from the desktop's configured provider.
@@ -135,6 +143,10 @@ pub struct FileReadResultMessage {
     /// Base64 data URL for image files.
     pub image_data_url: Option<String>,
     pub truncated: bool,
+    /// SHA-256 hex of `content`, when the file has text content. Optional so
+    /// pre-existing clients keep working.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,6 +156,9 @@ pub struct FileWriteResultMessage {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Machine-readable failure reason, e.g. `conflict`. Optional.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
