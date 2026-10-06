@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::models::madora_sync::{
-    MadoraSyncAiCompletionConfig, MadoraSyncConfig, MadoraSyncPairDeviceInput,
+    MadoraSyncAiCompletionConfig, MadoraSyncConfigView, MadoraSyncPairDeviceInput,
     MadoraSyncPairDeviceResult, MadoraSyncPairingCode, MadoraSyncPairingQr,
     MadoraSyncSettingsInput,
 };
@@ -13,24 +13,26 @@ use crate::services::sync_server;
 #[tauri::command]
 pub async fn madora_sync_get_config(
     store: State<'_, MadoraSyncStore>,
-) -> Result<MadoraSyncConfig, String> {
-    store.get_config()
+) -> Result<MadoraSyncConfigView, String> {
+    store.get_config().map(|config| config.to_view())
 }
 
 #[tauri::command]
 pub async fn madora_sync_save_settings(
     store: State<'_, MadoraSyncStore>,
     settings: MadoraSyncSettingsInput,
-) -> Result<MadoraSyncConfig, String> {
-    store.save_settings(settings)
+) -> Result<MadoraSyncConfigView, String> {
+    store.save_settings(settings).map(|config| config.to_view())
 }
 
 #[tauri::command]
 pub async fn madora_sync_save_ai_completion_config(
     store: State<'_, MadoraSyncStore>,
     config: MadoraSyncAiCompletionConfig,
-) -> Result<MadoraSyncConfig, String> {
-    store.save_ai_completion_config(config)
+) -> Result<MadoraSyncConfigView, String> {
+    store
+        .save_ai_completion_config(config)
+        .map(|config| config.to_view())
 }
 
 #[tauri::command]
@@ -50,16 +52,20 @@ pub async fn madora_sync_get_pairing_qr(
 #[tauri::command]
 pub async fn madora_sync_clear_pairing_code(
     store: State<'_, MadoraSyncStore>,
-) -> Result<MadoraSyncConfig, String> {
-    store.clear_pairing_code()
+) -> Result<MadoraSyncConfigView, String> {
+    store
+        .clear_pairing_code()
+        .map(|config| config.to_view())
 }
 
 #[tauri::command]
 pub async fn madora_sync_remove_paired_device(
     store: State<'_, MadoraSyncStore>,
     device_id: String,
-) -> Result<MadoraSyncConfig, String> {
-    store.remove_paired_device(&device_id)
+) -> Result<MadoraSyncConfigView, String> {
+    store
+        .remove_paired_device(&device_id)
+        .map(|config| config.to_view())
 }
 
 #[tauri::command]
@@ -67,7 +73,11 @@ pub async fn madora_sync_pair_device(
     store: State<'_, MadoraSyncStore>,
     request: MadoraSyncPairDeviceInput,
 ) -> Result<MadoraSyncPairDeviceResult, String> {
-    store.pair_device(request)
+    let outcome = store.pair_device(request)?;
+    Ok(MadoraSyncPairDeviceResult {
+        device: outcome.device.to_view(),
+        paired_at: outcome.paired_at,
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -94,7 +104,8 @@ pub async fn madora_sync_server_status(
 
 /// Restart the WebSocket sync server (e.g. after changing the port or
 /// toggling `enabled`). Stops any existing listener, then spawns a new one
-/// if the config allows it.
+/// and waits for its bind result so a failed port bind is reported to the UI
+/// instead of silently appearing started.
 #[tauri::command]
 pub async fn madora_sync_restart_server<R: tauri::Runtime>(
     app_handle: tauri::AppHandle<R>,
@@ -102,7 +113,7 @@ pub async fn madora_sync_restart_server<R: tauri::Runtime>(
     sync_server::stop();
     // Give the accept loop a moment to observe the shutdown flag.
     tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-    sync_server::spawn(app_handle);
+    sync_server::spawn_checked(app_handle).await?;
     Ok(true)
 }
 

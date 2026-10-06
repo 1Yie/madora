@@ -52,6 +52,8 @@ chrono = "0.4"
 chardetng = "0.1"
 encoding_rs = "0.8"
 getrandom = "0.2"
+sha2 = "0.10"
+subtle = "2"
 keyring = "4"
 keyring-core = "1"
 resvg = { version = "0.45.1", default-features = false }

@@ -31,7 +31,6 @@ export interface MadoraSyncConfig {
 	lastSyncAt: string | null;
 	lastError: string | null;
 	activePairingId: string | null;
-	activePairingToken: string | null;
 	activePairingCode: string | null;
 	pairingCodeExpiresAt: string | null;
 	pairedDevices: MadoraSyncPairedDevice[];
