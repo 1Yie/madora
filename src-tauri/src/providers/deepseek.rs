@@ -8,8 +8,10 @@ use crate::{
     prompt::PromptManager,
     providers::{
         common::{
-            join_url, resolve_api_key, resolve_model, stream_sse_response, summarize_error_body,
-            take_text_completion, TextCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
+            detect_error_payload, join_url, parse_success_json, read_error_body, resolve_api_key,
+            resolve_model, send_with_status_retries, stream_sse_response, summarize_error_body,
+            take_text_completion, TextCompletionResponse, MAX_COMPLETION_TOKENS,
+            NON_STREAM_REQUEST_TIMEOUT, STOP_SEQUENCES,
         },
         CompletionProvider,
     },
@@ -50,36 +52,35 @@ impl CompletionProvider for DeepSeekProvider {
             )
         };
 
-        let response = client
-            .post(join_url(&api_url, "/completions"))
-            .bearer_auth(api_key)
-            .json(&json!({
-                "model": model,
-                "prompt": request.prefix.as_str(),
-                "suffix": request.suffix.as_deref(),
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "frequency_penalty": 0.3,
-                "presence_penalty": 0.1,
-                "stop": stop,
-                "thinking": { "type": "disabled" },
-            }))
-            .send()
-            .await
-            .map_err(|error| {
-                let err = error.to_string();
-                i18n::tf(
-                    "ai.provider.request_failed",
-                    &[("provider", "DeepSeek"), ("error", &err)],
-                )
-            })?;
+        let response = send_with_status_retries(|| {
+            client
+                .post(join_url(&api_url, "/completions"))
+                .bearer_auth(api_key)
+                .timeout(NON_STREAM_REQUEST_TIMEOUT)
+                .json(&json!({
+                    "model": model,
+                    "prompt": request.prefix.as_str(),
+                    "suffix": request.suffix.as_deref(),
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "frequency_penalty": 0.3,
+                    "presence_penalty": 0.1,
+                    "stop": stop,
+                    "thinking": { "type": "disabled" },
+                }))
+        })
+        .await
+        .map_err(|error| {
+            let err = error.to_string();
+            i18n::tf(
+                "ai.provider.request_failed",
+                &[("provider", "DeepSeek"), ("error", &err)],
+            )
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
+            let body = read_error_body(response).await;
 
             let status_str = status.as_u16().to_string();
             return Err(i18n::tf(
@@ -92,16 +93,7 @@ impl CompletionProvider for DeepSeekProvider {
             ));
         }
 
-        let payload = response
-            .json::<TextCompletionResponse>()
-            .await
-            .map_err(|error| {
-                let err = error.to_string();
-                i18n::tf(
-                    "ai.provider.parse_response_failed",
-                    &[("provider", "DeepSeek"), ("error", &err)],
-                )
-            })?;
+        let payload = parse_success_json::<TextCompletionResponse>("DeepSeek", response).await?;
 
         Ok(take_text_completion(payload))
     }
@@ -131,37 +123,35 @@ impl CompletionProvider for DeepSeekProvider {
             )
         };
 
-        let response = client
-            .post(join_url(&api_url, "/completions"))
-            .bearer_auth(api_key)
-            .json(&json!({
-                "model": model,
-                "prompt": request.prefix.as_str(),
-                "suffix": request.suffix.as_deref(),
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "frequency_penalty": 0.3,
-                "presence_penalty": 0.1,
-                "stop": stop,
-                "thinking": { "type": "disabled" },
-                "stream": true,
-            }))
-            .send()
-            .await
-            .map_err(|error| {
-                let err = error.to_string();
-                i18n::tf(
-                    "ai.provider.request_stream_failed",
-                    &[("provider", "DeepSeek"), ("error", &err)],
-                )
-            })?;
+        let response = send_with_status_retries(|| {
+            client
+                .post(join_url(&api_url, "/completions"))
+                .bearer_auth(api_key)
+                .json(&json!({
+                    "model": model,
+                    "prompt": request.prefix.as_str(),
+                    "suffix": request.suffix.as_deref(),
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "frequency_penalty": 0.3,
+                    "presence_penalty": 0.1,
+                    "stop": stop,
+                    "thinking": { "type": "disabled" },
+                    "stream": true,
+                }))
+        })
+        .await
+        .map_err(|error| {
+            let err = error.to_string();
+            i18n::tf(
+                "ai.provider.request_stream_failed",
+                &[("provider", "DeepSeek"), ("error", &err)],
+            )
+        })?;
 
         if !response.status().is_success() {
             let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
+            let body = read_error_body(response).await;
 
             let status_str = status.as_u16().to_string();
             return Err(i18n::tf(
@@ -178,6 +168,17 @@ impl CompletionProvider for DeepSeekProvider {
         stream_sse_response(response, |event| {
             if event.data == "[DONE]" {
                 return Ok(());
+            }
+
+            if let Some(message) = detect_error_payload(&event.data) {
+                return Err(i18n::tf(
+                    "ai.provider.stream_api_error",
+                    &[
+                        ("provider", "DeepSeek"),
+                        ("status", "200"),
+                        ("body", &message),
+                    ],
+                ));
             }
 
             let payload =

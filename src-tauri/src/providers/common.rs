@@ -1,6 +1,8 @@
+use std::time::Duration;
+
 use futures_util::StreamExt;
-use reqwest::Response;
-use serde::Deserialize;
+use reqwest::{Response, Url};
+use serde::{de::DeserializeOwned, Deserialize};
 
 use crate::{
     i18n,
@@ -12,6 +14,19 @@ pub const MAX_COMPLETION_TOKENS: usize = 512;
 pub const MAX_CHAT_PREFIX_CHARS: usize = 4_000;
 pub const MAX_CHAT_SUFFIX_CHARS: usize = 1_500;
 pub const STOP_SEQUENCES: &[&str] = &["\n\n\n", "\n# ", "\n## "];
+
+/// Upper bound for a non-streaming provider response body (4 MiB).
+pub const MAX_RESPONSE_BODY_BYTES: usize = 4 * 1024 * 1024;
+/// Upper bound for the buffered SSE payload while waiting for a `\n\n` separator (1 MiB).
+pub const MAX_SSE_BUFFER_BYTES: usize = 1024 * 1024;
+/// Total timeout used for the non-streaming request path only. Streaming uses
+/// the client-level connect/read timeouts instead of a wall-clock cap.
+pub const NON_STREAM_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
+const MAX_SEND_RETRIES: usize = 2;
+const RETRY_AFTER_CAP: Duration = Duration::from_secs(5);
+const RETRY_BACKOFFS: [Duration; MAX_SEND_RETRIES] =
+    [Duration::from_millis(250), Duration::from_secs(1)];
 
 /// Extracts a readable message from a provider error body.
 ///
@@ -39,6 +54,136 @@ pub(crate) fn summarize_error_body(body: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+/// Recognizes a provider error payload smuggled inside an otherwise successful
+/// (HTTP 200) response or SSE event, and returns the upstream message.
+///
+/// Handles Anthropic stream errors (`{"type":"error","error":{...}}`),
+/// OpenAI/DeepSeek/Google errors (`{"error":{"message":"..."}}` or a string
+/// `error`). Returns `None` for ordinary payloads so callers can keep parsing.
+pub fn detect_error_payload(data: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(data).ok()?;
+
+    if value.get("type").and_then(|v| v.as_str()) == Some("error") {
+        return Some(summarize_error_body(data));
+    }
+
+    let error = value.get("error").filter(|value| !value.is_null())?;
+
+    error
+        .get("message")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+        .or_else(|| error.as_str().map(str::to_string))
+        .or_else(|| Some(summarize_error_body(data)))
+}
+
+pub fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    matches!(status.as_u16(), 429 | 502 | 503 | 504)
+}
+
+/// Parses a `Retry-After` header in its integer-seconds form.
+pub fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let value = headers
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim();
+    let seconds = value.parse::<u64>().ok()?;
+    Some(Duration::from_secs(seconds))
+}
+
+/// Exponential backoff for the given zero-based retry attempt, honoring a
+/// server-provided `Retry-After` (capped at 5 seconds) when present.
+pub fn retry_backoff(attempt: usize, retry_after: Option<Duration>) -> Duration {
+    let base = RETRY_BACKOFFS
+        .get(attempt)
+        .copied()
+        .unwrap_or_else(|| *RETRY_BACKOFFS.last().expect("backoff table is non-empty"));
+
+    match retry_after {
+        Some(retry_after) => retry_after.min(RETRY_AFTER_CAP).max(base),
+        None => base,
+    }
+}
+
+/// Sends a request, retrying rate-limit and transient gateway failures up to
+/// twice with backoff. The request is rebuilt on every attempt so no body is
+/// consumed twice. Callers only retry before any chunk reaches the frontend,
+/// and dropping the surrounding future cancels a pending backoff.
+pub async fn send_with_status_retries<F>(mut build: F) -> Result<Response, reqwest::Error>
+where
+    F: FnMut() -> reqwest::RequestBuilder,
+{
+    let mut attempt = 0;
+
+    loop {
+        let response = build().send().await?;
+
+        if attempt >= MAX_SEND_RETRIES || !is_retryable_status(response.status()) {
+            return Ok(response);
+        }
+
+        let retry_after = parse_retry_after(response.headers());
+        tokio::time::sleep(retry_backoff(attempt, retry_after)).await;
+        attempt += 1;
+    }
+}
+
+/// Reads a (non-streaming) response body with a hard size cap.
+pub async fn read_response_text_limited(response: Response) -> Result<String, String> {
+    let mut stream = response.bytes_stream();
+    let mut buffer: Vec<u8> = Vec::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(|error| i18n::tf("ai.read_stream_failed", &[("error", &error.to_string())]))?;
+
+        if buffer.len() + chunk.len() > MAX_RESPONSE_BODY_BYTES {
+            return Err(i18n::t("ai.read_error_details_failed").to_string());
+        }
+
+        buffer.extend_from_slice(&chunk);
+    }
+
+    String::from_utf8(buffer)
+        .map_err(|error| i18n::tf("ai.parse_stream_failed", &[("error", &error.to_string())]))
+}
+
+/// Reads an error response body, falling back to a localized placeholder when
+/// the body cannot be read within the size cap.
+pub async fn read_error_body(response: Response) -> String {
+    read_response_text_limited(response)
+        .await
+        .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed").to_string())
+}
+
+/// Parses a successful non-streaming JSON body, surfacing an embedded error
+/// payload (HTTP 200 with `{"error": ...}`) as a real error.
+pub async fn parse_success_json<T: DeserializeOwned>(
+    provider: &str,
+    response: Response,
+) -> Result<T, String> {
+    let body = read_response_text_limited(response).await?;
+
+    if let Some(message) = detect_error_payload(&body) {
+        return Err(i18n::tf(
+            "ai.provider.api_error",
+            &[
+                ("provider", provider),
+                ("status", "200"),
+                ("body", &message),
+            ],
+        ));
+    }
+
+    serde_json::from_str(&body).map_err(|error| {
+        i18n::tf(
+            "ai.provider.parse_response_failed",
+            &[("provider", provider), ("error", &error.to_string())],
+        )
+    })
 }
 
 #[derive(Deserialize)]
@@ -104,16 +249,68 @@ pub fn resolve_api_url(
     let api_url = trim_trailing_slash(api_url).to_string();
 
     // Auto-prepend https:// (or http:// when use_ssl is false) if no scheme present
-    if !api_url.starts_with("http://") && !api_url.starts_with("https://") {
+    let api_url = if !api_url.starts_with("http://") && !api_url.starts_with("https://") {
         let scheme = if config.use_ssl {
             "https://"
         } else {
             "http://"
         };
-        return Ok(format!("{scheme}{api_url}"));
-    }
+        format!("{scheme}{api_url}")
+    } else {
+        api_url
+    };
+
+    validate_api_url(&api_url)?;
 
     Ok(api_url)
+}
+
+/// Rejects plaintext `http://` endpoints unless the host is loopback, a private
+/// network address, or a `.local`/`.lan` name. This prevents an API key from
+/// being sent in clear text to an arbitrary remote host. HTTPS is unrestricted.
+pub fn validate_api_url(url: &str) -> Result<(), String> {
+    let parsed = Url::parse(url).map_err(|error| format!("invalid API URL: {error}"))?;
+
+    match parsed.scheme() {
+        "https" => Ok(()),
+        "http" => validate_insecure_host(&parsed),
+        scheme => Err(format!(
+            "unsupported API URL scheme '{scheme}'; use https://"
+        )),
+    }
+}
+
+fn validate_insecure_host(url: &Url) -> Result<(), String> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| "API URL is missing a host".to_string())?;
+
+    // `host_str` keeps the brackets around IPv6 literals; strip them so the
+    // address can be parsed (and use the unbracketed form for domain checks).
+    let host_for_ip = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+
+    let allowed = match host_for_ip.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(std::net::IpAddr::V6(ip)) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
+        Err(_) => {
+            let lower = host.to_ascii_lowercase();
+            lower == "localhost"
+                || lower.ends_with(".localhost")
+                || lower.ends_with(".local")
+                || lower.ends_with(".lan")
+        }
+    };
+
+    if allowed {
+        Ok(())
+    } else {
+        Err(format!(
+            "insecure http:// endpoint '{host}' is not allowed; use https:// or a loopback/private address"
+        ))
+    }
 }
 
 pub fn resolve_model<'a>(
@@ -261,6 +458,16 @@ fn parse_sse_event(raw_event: &str) -> Option<SseEvent> {
     })
 }
 
+/// Guards the SSE buffering path against a malicious or broken server that
+/// never emits an event separator, which would otherwise grow `buffer` forever.
+fn ensure_sse_buffer_size(buffer_len: usize) -> Result<(), String> {
+    if buffer_len > MAX_SSE_BUFFER_BYTES {
+        return Err(i18n::t("ai.read_error_details_failed").to_string());
+    }
+
+    Ok(())
+}
+
 /// Append one stream chunk to `buffer`.
 ///
 /// A chunk may end in the middle of a multi-byte sequence. Incomplete trailing
@@ -281,14 +488,13 @@ fn append_stream_chunk(
         Err(error) if error.error_len().is_none() => {
             let valid_up_to = error.valid_up_to();
             if valid_up_to > 0 {
-                let valid_text = std::str::from_utf8(&pending_bytes[..valid_up_to]).map_err(
-                    |parse_error| {
+                let valid_text =
+                    std::str::from_utf8(&pending_bytes[..valid_up_to]).map_err(|parse_error| {
                         i18n::tf(
                             "ai.parse_stream_failed",
                             &[("error", &parse_error.to_string())],
                         )
-                    },
-                )?;
+                    })?;
                 buffer.push_str(valid_text);
                 pending_bytes.drain(..valid_up_to);
             }
@@ -321,6 +527,7 @@ pub async fn stream_sse_response(
             )
         })?;
         append_stream_chunk(&mut buffer, &mut pending_bytes, &chunk)?;
+        ensure_sse_buffer_size(buffer.len())?;
 
         while let Some(raw_event) = take_next_sse_block(&mut buffer) {
             if let Some(event) = parse_sse_event(&raw_event) {
@@ -838,5 +1045,147 @@ mod tests {
         let mut pending = Vec::new();
 
         assert!(append_stream_chunk(&mut buffer, &mut pending, &[0xFF, 0xFE, 0xFD]).is_err());
+    }
+
+    // ─── detect_error_payload ────────────────────────────────────
+
+    #[test]
+    fn detect_error_payload_openai_style() {
+        let data = r#"{"error":{"message":"rate limited","type":"rate_limit_error"}}"#;
+        assert_eq!(detect_error_payload(data).as_deref(), Some("rate limited"));
+    }
+
+    #[test]
+    fn detect_error_payload_anthropic_stream_style() {
+        let data = r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#;
+        assert_eq!(detect_error_payload(data).as_deref(), Some("Overloaded"));
+    }
+
+    #[test]
+    fn detect_error_payload_string_error() {
+        assert_eq!(
+            detect_error_payload(r#"{"error":"quota exceeded"}"#).as_deref(),
+            Some("quota exceeded")
+        );
+    }
+
+    #[test]
+    fn detect_error_payload_ignores_normal_payloads() {
+        assert_eq!(
+            detect_error_payload(r#"{"choices":[{"delta":{"content":"hi"}}]}"#),
+            None
+        );
+        assert_eq!(detect_error_payload("[DONE]"), None);
+        assert_eq!(detect_error_payload(r#"{"error":null}"#), None);
+    }
+
+    // ─── retry helpers ───────────────────────────────────────────
+
+    #[test]
+    fn retry_backoff_uses_exponential_table() {
+        assert_eq!(retry_backoff(0, None), Duration::from_millis(250));
+        assert_eq!(retry_backoff(1, None), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn retry_backoff_honors_retry_after_and_caps_it() {
+        assert_eq!(
+            retry_backoff(0, Some(Duration::from_secs(2))),
+            Duration::from_secs(2)
+        );
+        assert_eq!(
+            retry_backoff(0, Some(Duration::from_secs(30))),
+            Duration::from_secs(5)
+        );
+    }
+
+    #[test]
+    fn parse_retry_after_reads_seconds() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, "3".parse().unwrap());
+        assert_eq!(parse_retry_after(&headers), Some(Duration::from_secs(3)));
+
+        let mut invalid = reqwest::header::HeaderMap::new();
+        invalid.insert(
+            reqwest::header::RETRY_AFTER,
+            "Wed, 21 Oct 2015 07:28:00 GMT".parse().unwrap(),
+        );
+        assert_eq!(parse_retry_after(&invalid), None);
+    }
+
+    #[test]
+    fn retryable_statuses_match_rate_limit_and_gateway_errors() {
+        for status in [429u16, 502, 503, 504] {
+            assert!(is_retryable_status(
+                reqwest::StatusCode::from_u16(status).unwrap()
+            ));
+        }
+        for status in [400u16, 401, 404, 500, 501] {
+            assert!(!is_retryable_status(
+                reqwest::StatusCode::from_u16(status).unwrap()
+            ));
+        }
+    }
+
+    // ─── ensure_sse_buffer_size ──────────────────────────────────
+
+    #[test]
+    fn sse_buffer_cap_rejects_oversized_payload() {
+        assert!(ensure_sse_buffer_size(MAX_SSE_BUFFER_BYTES).is_ok());
+        assert!(ensure_sse_buffer_size(MAX_SSE_BUFFER_BYTES + 1).is_err());
+    }
+
+    // ─── validate_api_url ────────────────────────────────────────
+
+    #[test]
+    fn validate_api_url_allows_https_anywhere() {
+        assert!(validate_api_url("https://api.example.com/v1").is_ok());
+        assert!(validate_api_url("https://evil.example.com").is_ok());
+    }
+
+    #[test]
+    fn validate_api_url_allows_loopback_and_private_http() {
+        for url in [
+            "http://localhost:8080/v1",
+            "http://127.0.0.1:1234",
+            "http://127.5.5.5",
+            "http://10.0.0.8",
+            "http://172.16.4.1",
+            "http://192.168.1.20",
+            "http://[::1]:8080",
+            "http://[fc00::1]:8080",
+            "http://box.local/v1",
+            "http://server.lan",
+        ] {
+            assert!(
+                validate_api_url(url).is_ok(),
+                "expected {url} to be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_api_url_rejects_public_http_and_spoofed_hosts() {
+        for url in [
+            "http://api.example.com",
+            "http://8.8.8.8",
+            "http://172.32.0.1",
+            "http://192.169.1.1",
+            "http://localhost.evil.com",
+            "http://127.0.0.1.evil.com",
+            "http://localhost@evil.com",
+            "http://10.0.0.1.evil.com",
+            "http://evil.com.local.evil.com",
+        ] {
+            assert!(
+                validate_api_url(url).is_err(),
+                "expected {url} to be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_api_url_rejects_non_http_schemes() {
+        assert!(validate_api_url("ftp://example.com").is_err());
     }
 }

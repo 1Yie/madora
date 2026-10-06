@@ -32,7 +32,7 @@ impl CompletionProvider for OpenCodeGoProvider {
                 request_anthropic_compatible_fim(client, prompt_manager, config, request).await
             }
             CustomProviderProtocol::Google => {
-                unreachable!("OpenCode Go does not route Google-compatible models")
+                Err("OpenCode Go does not route Google-compatible models".to_string())
             }
             CustomProviderProtocol::OpenAi => {
                 request_openai_compatible_fim(client, prompt_manager, config, request).await
@@ -60,7 +60,7 @@ impl CompletionProvider for OpenCodeGoProvider {
                 .await
             }
             CustomProviderProtocol::Google => {
-                unreachable!("OpenCode Go does not route Google-compatible models")
+                Err("OpenCode Go does not route Google-compatible models".to_string())
             }
             CustomProviderProtocol::OpenAi => {
                 request_openai_compatible_fim_stream(

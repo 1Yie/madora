@@ -9,9 +9,11 @@ use crate::{
     prompt::{prompt_profile_for_openai_compatible, PromptManager},
     providers::{
         common::{
-            build_prompt_context, join_url, resolve_api_key, stream_sse_response,
+            build_prompt_context, detect_error_payload, join_url, parse_success_json,
+            read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
             summarize_error_body, take_chat_completion, ChatCompletionMessage,
-            ChatCompletionResponse, MAX_COMPLETION_TOKENS, STOP_SEQUENCES,
+            ChatCompletionResponse, MAX_COMPLETION_TOKENS, NON_STREAM_REQUEST_TIMEOUT,
+            STOP_SEQUENCES,
         },
         default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
     },
@@ -77,8 +79,9 @@ pub(crate) async fn request_openai_compatible_fim(
     let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
     let prompt_profile = prompt_profile_for_openai_compatible(provider, model);
     let prompt_context = build_prompt_context(request);
-    let system_prompt = prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context);
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context);
+    let system_prompt =
+        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
+    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
     let has_suffix = request
         .suffix
@@ -100,26 +103,25 @@ pub(crate) async fn request_openai_compatible_fim(
         false,
     );
 
-    let response = client
-        .post(join_url(&api_url, "/v1/chat/completions"))
-        .bearer_auth(api_key)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|error| {
-            let err = error.to_string();
-            i18n::tf(
-                "ai.provider.request_failed",
-                &[("provider", provider.display_name()), ("error", &err)],
-            )
-        })?;
+    let response = send_with_status_retries(|| {
+        client
+            .post(join_url(&api_url, "/v1/chat/completions"))
+            .bearer_auth(api_key)
+            .timeout(NON_STREAM_REQUEST_TIMEOUT)
+            .json(&payload)
+    })
+    .await
+    .map_err(|error| {
+        let err = error.to_string();
+        i18n::tf(
+            "ai.provider.request_failed",
+            &[("provider", provider.display_name()), ("error", &err)],
+        )
+    })?;
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
+        let body = read_error_body(response).await;
 
         let status_str = status.as_u16().to_string();
         return Err(i18n::tf(
@@ -132,16 +134,8 @@ pub(crate) async fn request_openai_compatible_fim(
         ));
     }
 
-    let payload = response
-        .json::<ChatCompletionResponse>()
-        .await
-        .map_err(|error| {
-            let err = error.to_string();
-            i18n::tf(
-                "ai.provider.parse_response_failed",
-                &[("provider", provider.display_name()), ("error", &err)],
-            )
-        })?;
+    let payload =
+        parse_success_json::<ChatCompletionResponse>(provider.display_name(), response).await?;
 
     Ok(take_chat_completion(payload))
 }
@@ -159,8 +153,9 @@ pub(crate) async fn request_openai_compatible_fim_stream(
     let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
     let prompt_profile = prompt_profile_for_openai_compatible(provider, model);
     let prompt_context = build_prompt_context(request);
-    let system_prompt = prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context);
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context);
+    let system_prompt =
+        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
+    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
     let has_suffix = request
         .suffix
@@ -182,26 +177,24 @@ pub(crate) async fn request_openai_compatible_fim_stream(
         true,
     );
 
-    let response = client
-        .post(join_url(&api_url, "/v1/chat/completions"))
-        .bearer_auth(api_key)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|error| {
-            let err = error.to_string();
-            i18n::tf(
-                "ai.provider.request_stream_failed",
-                &[("provider", provider.display_name()), ("error", &err)],
-            )
-        })?;
+    let response = send_with_status_retries(|| {
+        client
+            .post(join_url(&api_url, "/v1/chat/completions"))
+            .bearer_auth(api_key)
+            .json(&payload)
+    })
+    .await
+    .map_err(|error| {
+        let err = error.to_string();
+        i18n::tf(
+            "ai.provider.request_stream_failed",
+            &[("provider", provider.display_name()), ("error", &err)],
+        )
+    })?;
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| i18n::t("ai.read_error_details_failed"));
+        let body = read_error_body(response).await;
 
         let status_str = status.as_u16().to_string();
         return Err(i18n::tf(
@@ -218,6 +211,17 @@ pub(crate) async fn request_openai_compatible_fim_stream(
     stream_sse_response(response, |event| {
         if event.data == "[DONE]" {
             return Ok(());
+        }
+
+        if let Some(message) = detect_error_payload(&event.data) {
+            return Err(i18n::tf(
+                "ai.provider.stream_api_error",
+                &[
+                    ("provider", provider.display_name()),
+                    ("status", "200"),
+                    ("body", &message),
+                ],
+            ));
         }
 
         let payload = serde_json::from_str::<StreamingChatCompletionResponse>(&event.data)

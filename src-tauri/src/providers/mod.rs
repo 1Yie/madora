@@ -22,10 +22,13 @@ use crate::{
     prompt::PromptManager,
 };
 
-pub use common::{resolve_api_url, resolve_model};
+pub use common::{
+    build_prompt_context, resolve_api_url, resolve_model, MAX_CHAT_PREFIX_CHARS,
+    MAX_CHAT_SUFFIX_CHARS,
+};
 
 const ANTHROPIC_DEFAULT_API_URL: &str = "https://api.anthropic.com";
-const ANTHROPIC_DEFAULT_MODEL: &str = "claude-3-5-sonnet-latest";
+const ANTHROPIC_DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const DEEPSEEK_DEFAULT_API_URL: &str = "https://api.deepseek.com";
 const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-pro";
 const GOOGLE_DEFAULT_API_URL: &str = "https://generativelanguage.googleapis.com";
@@ -45,7 +48,7 @@ const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
 const OPENCODE_GO_DEFAULT_API_URL: &str = "https://opencode.ai/zen/go";
 const OPENCODE_GO_DEFAULT_MODEL: &str = "deepseek-v4-pro";
 const OPENCODE_ZEN_DEFAULT_API_URL: &str = "https://opencode.ai/zen";
-const OPENCODE_ZEN_DEFAULT_MODEL: &str = "claude-sonnet-4.6";
+const OPENCODE_ZEN_DEFAULT_MODEL: &str = "claude-sonnet-4-6";
 const ZHIPU_DEFAULT_API_URL: &str = "https://open.bigmodel.cn/api/paas/v4";
 const ZHIPU_DEFAULT_MODEL: &str = "glm-5.2";
 const ZHIPU_CODING_DEFAULT_API_URL: &str = "https://open.bigmodel.cn/api/coding/paas/v4";
@@ -154,5 +157,57 @@ pub fn default_model(provider: AiProvider) -> Option<&'static str> {
         AiProvider::OpenCodeZen => Some(OPENCODE_ZEN_DEFAULT_MODEL),
         AiProvider::Zhipu => Some(ZHIPU_DEFAULT_MODEL),
         AiProvider::ZhipuCoding => Some(ZHIPU_CODING_DEFAULT_MODEL),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{default_model, AiProvider};
+
+    /// Every provider's built-in default model must exist in the shipped model
+    /// catalogue, otherwise the UI and the backend disagree about what will be
+    /// requested when the user has not picked a model.
+    #[test]
+    fn default_models_exist_in_the_catalogue() {
+        let catalogue: HashMap<String, Vec<serde_json::Value>> =
+            serde_json::from_str(include_str!("../../../src/assets/models.json"))
+                .expect("models.json should be valid JSON");
+
+        let providers = [
+            AiProvider::Anthropic,
+            AiProvider::DeepSeek,
+            AiProvider::Google,
+            AiProvider::Kimi,
+            AiProvider::MiniMax,
+            AiProvider::MiniMaxCoding,
+            AiProvider::MiMo,
+            AiProvider::MiMoCoding,
+            AiProvider::OpenAi,
+            AiProvider::OpenCodeGo,
+            AiProvider::OpenCodeZen,
+            AiProvider::Zhipu,
+            AiProvider::ZhipuCoding,
+        ];
+
+        for provider in providers {
+            let model = default_model(provider)
+                .unwrap_or_else(|| panic!("provider {provider:?} should declare a default model"));
+            let values = catalogue
+                .get(provider.as_key())
+                .unwrap_or_else(|| panic!("models.json is missing key {}", provider.as_key()));
+            let present = values
+                .iter()
+                .any(|entry| entry.get("value").and_then(|v| v.as_str()) == Some(model));
+
+            assert!(
+                present,
+                "default model '{model}' for {:?} is not in src/assets/models.json",
+                provider
+            );
+        }
+
+        assert!(default_model(AiProvider::Custom).is_none());
     }
 }
