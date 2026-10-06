@@ -15,7 +15,7 @@
 //! Traffic is still visible to anyone on the same LAN.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
@@ -39,6 +39,7 @@ use crate::protocol::MadoraProtocolState;
 use crate::services::ai::{self, AiCompletionService};
 use crate::services::explorer;
 use crate::services::madora_sync::{sha256_hex, MadoraSyncStore};
+use crate::services::paths;
 
 /// Handle to a running sync server. Dropping this does not stop the server —
 /// the server runs until the process exits or [`SyncServer::stop`] is called
@@ -273,14 +274,16 @@ async fn handle_connection<R: Runtime>(
             pairing_token: auth.pairing_token.clone(),
             pairing_code: auth.code.clone(),
         };
-        store.authenticate_device(request, peer.ip()).and_then(|outcome| {
-            let sync_config = store.get_config()?;
-            Ok((
-                outcome,
-                sync_config.device_name,
-                sync_config.share_ai_completions,
-            ))
-        })
+        store
+            .authenticate_device(request, peer.ip())
+            .and_then(|outcome| {
+                let sync_config = store.get_config()?;
+                Ok((
+                    outcome,
+                    sync_config.device_name,
+                    sync_config.share_ai_completions,
+                ))
+            })
     };
 
     match auth_result {
@@ -750,51 +753,23 @@ fn truncate_suffix(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
 }
 
-/// Canonicalize-based containment check (stronger than the lexical
-/// `starts_with` used by the explorer, because this path crosses the
-/// network boundary).
+/// Whether `path` stays inside the workspace and is not VCS/SSH internals.
 ///
-/// Existing paths are canonicalized (following symlinks) and must resolve
-/// inside the root. Non-existent paths (e.g. a file the mobile client is
-/// about to create) are resolved by canonicalizing their nearest existing
-/// ancestor; any `..` component is rejected outright.
+/// This path crosses the network boundary, so it uses the shared
+/// canonicalisation-based check (`services::paths`): symlinks are followed,
+/// `..` is resolved, and a not-yet-existing target is judged by its nearest
+/// existing ancestor.
 fn is_within_root(root: &Path, path: &Path) -> bool {
+    let Ok(resolved) = paths::ensure_within(root, path) else {
+        return false;
+    };
     let Ok(canonical_root) = root.canonicalize() else {
         return false;
     };
 
-    if path.exists() {
-        let Ok(canonical) = path.canonicalize() else {
-            return false;
-        };
-        return canonical == canonical_root || canonical.starts_with(&canonical_root);
-    }
-
-    // Non-existent target: reject any parent-directory traversal and descend
-    // to the nearest existing ancestor.
-    if path
-        .components()
-        .any(|component| matches!(component, Component::ParentDir))
-    {
-        return false;
-    }
-
-    let mut ancestor = path.to_path_buf();
-    while !ancestor.exists() {
-        if ancestor.file_name().is_none() {
-            // Reached a root with no existing ancestor.
-            return false;
-        }
-        if !ancestor.pop() {
-            return false;
-        }
-    }
-
-    let Ok(canonical_ancestor) = ancestor.canonicalize() else {
-        return false;
-    };
-
-    canonical_ancestor == canonical_root || canonical_ancestor.starts_with(&canonical_root)
+    resolved
+        .strip_prefix(&canonical_root)
+        .is_ok_and(|relative| !paths::is_protected_path(relative))
 }
 
 /// Load an API key from secure storage. Mirrors the logic in
@@ -890,7 +865,10 @@ mod tests {
             "192.168.0.1",
             "192.168.255.254",
         ] {
-            assert!(is_allowed_peer(peer.parse().unwrap()), "{peer} should be allowed");
+            assert!(
+                is_allowed_peer(peer.parse().unwrap()),
+                "{peer} should be allowed"
+            );
         }
     }
 
@@ -905,7 +883,10 @@ mod tests {
             "100.64.0.1",
             "0.0.0.0",
         ] {
-            assert!(!is_allowed_peer(peer.parse().unwrap()), "{peer} should be rejected");
+            assert!(
+                !is_allowed_peer(peer.parse().unwrap()),
+                "{peer} should be rejected"
+            );
         }
     }
 
@@ -959,10 +940,20 @@ mod tests {
     #[test]
     fn ai_bounds_are_character_based() {
         let prefix: String = "中".repeat(AI_PREFIX_MAX_CHARS + 500);
-        assert_eq!(truncate_prefix(&prefix, AI_PREFIX_MAX_CHARS).chars().count(), AI_PREFIX_MAX_CHARS);
+        assert_eq!(
+            truncate_prefix(&prefix, AI_PREFIX_MAX_CHARS)
+                .chars()
+                .count(),
+            AI_PREFIX_MAX_CHARS
+        );
 
         let suffix: String = "😀".repeat(AI_SUFFIX_MAX_CHARS + 10);
-        assert_eq!(truncate_suffix(&suffix, AI_SUFFIX_MAX_CHARS).chars().count(), AI_SUFFIX_MAX_CHARS);
+        assert_eq!(
+            truncate_suffix(&suffix, AI_SUFFIX_MAX_CHARS)
+                .chars()
+                .count(),
+            AI_SUFFIX_MAX_CHARS
+        );
     }
 
     #[test]

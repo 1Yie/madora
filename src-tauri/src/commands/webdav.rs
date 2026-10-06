@@ -5,6 +5,7 @@ use crate::models::webdav::{
     WebDavConfig, WebDavConnectionTest, WebDavSyncFileEntry, WebDavSyncResult,
     WebDavSyncStatusResult,
 };
+use crate::protocol::MadoraProtocolState;
 use crate::services::webdav::{
     baselines_to_mtime_map, build_http_client, SyncOrchestrator, WebDavClient, WebDavStore,
 };
@@ -143,8 +144,10 @@ pub async fn webdav_test_connection(
 #[tauri::command]
 pub async fn webdav_sync(
     store: State<'_, WebDavStore>,
+    protocol_state: State<'_, MadoraProtocolState>,
     workspace_root: String,
 ) -> Result<WebDavSyncResult, String> {
+    let workspace_root = protocol_state.authorize_root(std::path::Path::new(&workspace_root))?;
     let config = store.get_config()?;
     let password = load_password().await?;
     let auth_config = WebDavConfig { password, ..config };
@@ -152,9 +155,7 @@ pub async fn webdav_sync(
     let client = build_http_client(300)?;
     let orchestrator = SyncOrchestrator::new(client);
 
-    let outcome = orchestrator
-        .sync(&auth_config, std::path::Path::new(&workspace_root))
-        .await?;
+    let outcome = orchestrator.sync(&auth_config, &workspace_root).await?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut updated_config = store.get_config()?;
@@ -172,13 +173,15 @@ pub async fn webdav_sync(
 #[tauri::command]
 pub async fn webdav_get_status(
     store: State<'_, WebDavStore>,
+    protocol_state: State<'_, MadoraProtocolState>,
     workspace_root: String,
 ) -> Result<WebDavSyncStatusResult, String> {
+    let workspace_root = protocol_state.authorize_root(std::path::Path::new(&workspace_root))?;
     let config = store.get_config()?;
     let client = build_http_client(60)?;
     let orchestrator = SyncOrchestrator::new(client);
 
-    let raw = orchestrator.compute_sync_status(std::path::Path::new(&workspace_root), &config);
+    let raw = orchestrator.compute_sync_status(&workspace_root, &config);
 
     let files = raw
         .into_iter()
