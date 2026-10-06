@@ -327,7 +327,12 @@ fn resolve_create_directory(root: &Path, selected_path: Option<&Path>) -> Result
         None => root.to_path_buf(),
     };
 
-    let candidate_directory = paths::ensure_within(root, &candidate_directory)?;
+    // Validate against the resolved location, but hand back the directory in
+    // the caller's own spelling: the tree and tabs key nodes by the path they
+    // were opened with, and a symlinked workspace (or macOS's /var ->
+    // /private/var, Windows' \\?\ prefix) would otherwise report new nodes
+    // under a different path.
+    paths::ensure_within(root, &candidate_directory)?;
 
     if !candidate_directory.is_dir() {
         return Err(i18n::t("explorer.target_dir_not_exist"));
@@ -804,7 +809,7 @@ pub fn import_external_file(
         ));
     }
 
-    let destination_directory = paths::ensure_within(root_path, destination_directory)?;
+    paths::ensure_within(root_path, destination_directory)?;
 
     if !destination_directory.is_dir() {
         return Err(i18n::t("explorer.target_dir_not_exist"));
@@ -1607,5 +1612,86 @@ mod tests {
         file.set_len(MAX_IMAGE_PREVIEW_BYTES + 1).unwrap();
 
         assert!(read_workspace_file(&path).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn created_nodes_keep_the_callers_spelling_of_the_root() {
+        // A workspace opened through a symlink (or macOS's /var -> /private/var,
+        // Windows' \\?\ prefix) must not have its new nodes reported under a
+        // different spelling, or the tree and tab bookkeeping stops matching.
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        let linked = dir.path().join("linked");
+        std::fs::create_dir_all(real.join("sub")).unwrap();
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+
+        let file = create_markdown_file(&linked, Some(&linked.join("sub")), "note").unwrap();
+        let folder = create_workspace_directory(&linked, None, "dir").unwrap();
+
+        assert!(file.path.starts_with(linked.to_str().unwrap()), "{}", file.path);
+        assert_eq!(file.relative_path, "sub/note.md");
+        assert!(folder.path.starts_with(linked.to_str().unwrap()), "{}", folder.path);
+        assert_eq!(folder.relative_path, "dir");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn imported_nodes_keep_the_callers_spelling_of_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        let linked = dir.path().join("linked");
+        std::fs::create_dir_all(real.join("sub")).unwrap();
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+        let source = dir.path().join("pic.png");
+        std::fs::write(&source, b"png").unwrap();
+
+        let node = import_external_file(&linked, &linked.join("sub"), &source).unwrap();
+
+        assert!(node.path.starts_with(linked.to_str().unwrap()), "{}", node.path);
+        assert_eq!(node.relative_path, "sub/pic.png");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn move_copy_rename_work_when_the_workspace_is_opened_through_a_symlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        let linked = dir.path().join("linked");
+        std::fs::create_dir_all(real.join("a")).unwrap();
+        std::fs::create_dir_all(real.join("b")).unwrap();
+        std::fs::write(real.join("a/x.md"), b"x").unwrap();
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+
+        copy_workspace_node(&linked, &linked.join("a/x.md"), &linked.join("b")).unwrap();
+        rename_workspace_node(&linked, &linked.join("b/x.md"), "renamed.md").unwrap();
+        move_workspace_node(&linked, &linked.join("a/x.md"), &linked.join("b")).unwrap();
+
+        assert!(real.join("b/x.md").exists());
+        assert!(real.join("b/renamed.md").exists());
+        assert!(!real.join("a/x.md").exists());
+        // The root itself is still protected under its symlinked spelling.
+        assert!(delete_workspace_node(&linked, &linked).is_err());
+        assert!(real.join("b").exists());
+    }
+
+    #[test]
+    fn moving_a_folder_into_its_own_child_is_still_refused() {
+        let (_guard, root, _outside) = workspace_with_outside();
+        std::fs::create_dir_all(root.join("a/inner")).unwrap();
+
+        assert!(move_workspace_node(&root, &root.join("a"), &root.join("a/inner")).is_err());
+        assert!(copy_workspace_node(&root, &root.join("a"), &root.join("a/inner")).is_err());
+        assert!(root.join("a/inner").is_dir());
+    }
+
+    #[test]
+    fn moving_into_the_current_parent_is_a_no_op() {
+        let (_guard, root, _outside) = workspace_with_outside();
+        std::fs::write(root.join("sub/x.md"), b"x").unwrap();
+
+        move_workspace_node(&root, &root.join("sub/x.md"), &root.join("sub")).unwrap();
+
+        assert!(root.join("sub/x.md").exists());
     }
 }
