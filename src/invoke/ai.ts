@@ -33,7 +33,6 @@ export type AiCompletionRequest = {
 	suffix: string | null;
 	title: string | null;
 };
-
 /** Checks whether an API key is stored in the OS keyring. */
 export async function hasAiApiKey(opts: {
 	provider: AiProvider;
@@ -63,19 +62,29 @@ export async function deleteAiApiKey(opts: {
 export async function generateCompletionStream(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
+	requestId?: string;
 	channel: Channel<string>;
 }): Promise<void> {
 	return invoke('generate_completion_stream', {
 		config: opts.config,
 		request: opts.request,
+		requestId: opts.requestId ?? null,
 		channel: opts.channel,
 	});
+}
+
+/** Cancels an in-flight streaming completion. Errors are caller-handled. */
+export async function cancelCompletionStream(
+	requestId: string
+): Promise<void> {
+	return invoke('cancel_completion_stream', { requestId });
 }
 
 /** Streams an AI completion via a callback, hiding the Tauri Channel creation. */
 export async function streamCompletion(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
+	requestId?: string;
 	onChunk: (chunk: string) => void;
 }): Promise<void> {
 	const channel = new Channel<string>((chunk) => {
@@ -84,6 +93,7 @@ export async function streamCompletion(opts: {
 	return generateCompletionStream({
 		config: opts.config,
 		request: opts.request,
+		requestId: opts.requestId,
 		channel,
 	});
 }

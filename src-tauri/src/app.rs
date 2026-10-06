@@ -174,6 +174,7 @@ pub fn run() {
             git::git_load_credentials,
             ai::generate_completion,
             ai::generate_completion_stream,
+            ai::cancel_completion_stream,
             secure_storage::has_ai_api_key,
             secure_storage::store_ai_api_key,
             secure_storage::delete_ai_api_key,

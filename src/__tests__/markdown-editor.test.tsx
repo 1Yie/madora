@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 		provider: 'deepseek',
 		useSsl: true,
 	},
+	cancelCompletionStream: vi.fn(),
 	streamCompletion: vi.fn(),
 }));
 
@@ -24,6 +25,7 @@ vi.mock('@/context/ai-settings-provider', () => ({
 }));
 
 vi.mock('@/invoke/ai', () => ({
+	cancelCompletionStream: mocks.cancelCompletionStream,
 	streamCompletion: mocks.streamCompletion,
 }));
 
@@ -61,6 +63,8 @@ afterEach(() => {
 		useSsl: true,
 	});
 	mocks.streamCompletion.mockReset();
+	mocks.cancelCompletionStream.mockReset();
+	mocks.cancelCompletionStream.mockResolvedValue(undefined);
 	vi.clearAllMocks();
 });
 

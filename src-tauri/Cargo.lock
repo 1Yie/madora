@@ -3175,6 +3175,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "urlencoding",
  "windows-sys 0.59.0",
  "winreg 0.10.1",

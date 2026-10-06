@@ -21,7 +21,7 @@ import {
 	type TooltipView,
 	type ViewUpdate,
 } from '@codemirror/view';
-import { streamCompletion } from '@/invoke/ai';
+import { cancelCompletionStream, streamCompletion } from '@/invoke/ai';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
@@ -103,6 +103,9 @@ const AUTO_COMPLETION_DEBOUNCE_MS = 80;
 const AUTO_COMPLETION_COOLDOWN_MS = 250;
 const MAX_PREFIX_CHARS = 12_000;
 const MAX_SUFFIX_CHARS = 4_000;
+// Globally unique per backend request. A per-editor sequence would collide when
+// several editors are open, and the backend cancellation map is process-wide.
+let completionRequestIdCounter = 0;
 const DEFAULT_READY_MESSAGE = i18n.t('ai.ready');
 const COMPLETION_TOOLTIP_EDGE_MARGIN = 12;
 const COMPLETION_DEBUG = import.meta.env.DEV;
@@ -856,6 +859,7 @@ export function useEditor({
 	const pendingLocalValuesRef = useRef<string[]>([]);
 	const isSavingRef = useRef(false);
 	const pendingRequestRef = useRef<PendingCompletionRequest | null>(null);
+	const activeRequestIdRef = useRef<string | null>(null);
 	const requestSequenceRef = useRef(0);
 	const scheduledSnapshotRef = useRef<CompletionSnapshot | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
@@ -963,12 +967,20 @@ export function useEditor({
 		}, AUTO_COMPLETION_COOLDOWN_MS);
 	});
 
+	const cancelActiveCompletionRequest = useEffectEvent(() => {
+		const activeRequestId = activeRequestIdRef.current;
+		if (activeRequestId === null) return;
+		activeRequestIdRef.current = null;
+		void cancelCompletionStream(activeRequestId).catch(() => undefined);
+	});
+
 	const abortAllCompletion = useEffectEvent(() => {
 		const view = viewRef.current;
 		if (view && view.state.field(completionPreviewField)) {
 			syncPreview(null);
 		}
 		clearScheduledCompletion('cancel');
+		cancelActiveCompletionRequest();
 		streamingRafPendingRef.current = false;
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
@@ -1001,6 +1013,7 @@ export function useEditor({
 
 		if (hasPreview) syncPreview(null);
 		clearScheduledCompletion('cancel');
+		cancelActiveCompletionRequest();
 		streamingRafPendingRef.current = false;
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
@@ -1021,6 +1034,7 @@ export function useEditor({
 			return false;
 		}
 		clearScheduledCompletion('cancel');
+		cancelActiveCompletionRequest();
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
 		setCompletionStatus(
@@ -1041,6 +1055,7 @@ export function useEditor({
 			if (!pendingRequest) return false;
 			if (isSameCompletionSnapshot(pendingRequest, snapshot)) return false;
 
+			cancelActiveCompletionRequest();
 			requestSequenceRef.current += 1;
 			pendingRequestRef.current = null;
 			logCompletionDebug('request-supersede-active', {
@@ -1145,6 +1160,8 @@ export function useEditor({
 				docText,
 				requestSequence: requestId,
 			};
+			const backendRequestId = String(++completionRequestIdCounter);
+			activeRequestIdRef.current = backendRequestId;
 
 			clearScheduledCompletion('cancel');
 			scheduledSnapshotRef.current = null;
@@ -1170,6 +1187,7 @@ export function useEditor({
 						suffix: suffix.length > 0 ? suffix : null,
 						title: title ?? null,
 					},
+					requestId: backendRequestId,
 					onChunk: (chunk) => {
 						if (requestId !== requestSequenceRef.current) return;
 						if (chunk.length === 0) return;
@@ -1279,6 +1297,9 @@ export function useEditor({
 				});
 				setCompletionStatus({ message: errorMessage, tone: 'error' });
 			} finally {
+				if (activeRequestIdRef.current === backendRequestId) {
+					activeRequestIdRef.current = null;
+				}
 				const wasPending =
 					pendingRequestRef.current?.requestSequence === requestId;
 				if (wasPending) pendingRequestRef.current = null;
@@ -1391,6 +1412,7 @@ export function useEditor({
 		if (!viewRef.current) return;
 		streamingRafPendingRef.current = false;
 		clearScheduledCompletion();
+		cancelActiveCompletionRequest();
 		requestSequenceRef.current += 1;
 		pendingRequestRef.current = null;
 		clearCompletionPreview();
@@ -1629,6 +1651,7 @@ export function useEditor({
 		);
 
 		return () => {
+			cancelActiveCompletionRequest();
 			requestSequenceRef.current += 1;
 			pendingRequestRef.current = null;
 			if (autoCompletionTimerRef.current !== null)
