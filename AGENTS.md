@@ -24,23 +24,23 @@ Models (src-tauri/src/models/) — serde serialization types
 
 ## Key Directories
 
-| Path                       | Purpose                                                                                                     |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `src/`                     | React frontend source                                                                                       |
-| `src/components/ui/`       | ~55 shadcn-style UI primitives on `@base-ui/react` (Dialog, Sheet, Button, Select, Toast, ScrollArea, etc.) |
-| `src/components/system/`   | Desktop chrome: title bar, settings dialog, theme/AI-settings/prose-theme providers                         |
-| `src/components/explorer/` | Workspace browser, file tree sidebar, preview pane, markdown editor/preview, git panel                      |
-| `src/hooks/`               | Custom hooks: `use-editor` (CodeMirror + AI completion), `use-media-query`                                  |
-| `src/lib/`                 | Utilities: `cn()` (clsx+tailwind-merge), cross-platform path utils, unsaved registry, prose theme defaults  |
-| `src/__tests__/`           | Vitest test files                                                                                           |
-| `src-tauri/src/commands/`  | 8 Tauri command modules (ai, explorer, git, project, secure_storage, system, theme, utility)                |
-| `src-tauri/src/services/`  | 3 services: ai, explorer, project                                                                           |
-| `src-tauri/src/providers/` | Provider table (`mod.rs`) + one adapter per wire protocol + common request skeleton and SSE parser          |
-| `src-tauri/src/models/`    | Shared serde types for AI, explorer, git                                                                    |
-| `src-tauri/src/prompt/`    | Prompt template manager with per-provider FIM templates                                                     |
-| `src-tauri/prompts/`       | Compiled-in FIM prompt templates (`{provider}/fim_{system,user}.md`)                                        |
-| `src-tauri/gen/`           | Auto-generated Tauri v2 schemas                                                                             |
-| `src-tauri/tests/`         | Rust integration tests                                                                                      |
+| Path                       | Purpose                                                                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`                     | React frontend source                                                                                                                              |
+| `src/components/ui/`       | ~55 shadcn-style UI primitives on `@base-ui/react` (Dialog, Sheet, Button, Select, Toast, ScrollArea, etc.)                                        |
+| `src/components/system/`   | Desktop chrome: title bar, settings dialog, theme/AI-settings/prose-theme providers                                                                |
+| `src/components/explorer/` | Workspace browser, file tree sidebar, preview pane, markdown editor/preview, git panel                                                             |
+| `src/hooks/`               | Custom hooks: `use-editor` (CodeMirror + AI completion), `use-media-query`                                                                         |
+| `src/lib/`                 | Utilities: `cn()` (clsx+tailwind-merge), cross-platform path utils, unsaved registry, prose theme defaults                                         |
+| `src/__tests__/`           | Vitest test files                                                                                                                                  |
+| `src-tauri/src/commands/`  | Tauri command modules (ai, explorer, git, madora_sync, secure_storage, system, theme, utility, webdav, workspace) — thin wrappers over `services/` |
+| `src-tauri/src/services/`  | Business logic: ai, api_keys, explorer, git, madora_sync, paths, sync_server, webdav, workspace (+ `mutex` helper)                                 |
+| `src-tauri/src/providers/` | Provider table (`mod.rs`) + one adapter per wire protocol + common request skeleton and SSE parser                                                 |
+| `src-tauri/src/models/`    | Shared serde types for AI, explorer, git                                                                                                           |
+| `src-tauri/src/prompt/`    | Prompt template manager with per-provider FIM templates                                                                                            |
+| `src-tauri/prompts/`       | Compiled-in FIM prompt templates (`{provider}/fim_{system,user}.md`)                                                                               |
+| `src-tauri/gen/`           | Auto-generated Tauri v2 schemas                                                                                                                    |
+| `src-tauri/tests/`         | Rust integration tests                                                                                                                             |
 
 ## Development Commands
 
@@ -86,7 +86,7 @@ cargo test           # Rust tests (includes git integration tests)
 - **Request skeleton**: `providers/common.rs` owns connection resolution, prompt rendering, retries, status/error handling, the whole-request timeout and the SSE loop. A protocol only supplies its endpoint, auth header, payload and one event-to-text closure.
 - **Streaming**: Uses Tauri `Channel<String>`. Provider callbacks are `&mut dyn FnMut(String) -> Result<(), String>`. Common SSE parser in `providers/common.rs`.
 - **AI caching**: `AiCompletionService` holds `Mutex<HashMap<CompletionCacheKey, CachedCompletion>>`, 15s TTL, 128 max entries, with in-flight dedup via `Arc<InFlightCompletionRequest>`.
-- **Secure storage**: API keys via OS keyring (`keyring` crate, service name `"madora.ai"`), cached in `LazyLock<Mutex<HashMap>>`.
+- **Secure storage**: API keys via OS keyring (`keyring` crate, service name `"madora.ai"`) in `services/api_keys.rs`, which keeps an in-process `LazyLock<Mutex<HashMap>>` cache so completions do not hit the secret service per keystroke. Callers use `lookup_async`/`require_async`; the cache is only updated after the keyring accepted a write.
 - **Path safety**: All filesystem operations validate paths stay within workspace root via `ensure_within_root` + canonicalization.
 - **Encoding**: File reads use `chardetng` for detection + `encoding_rs` for decoding. BOM handling. UTF-8 canonical.
 - **Prompt system**: `PromptManager` resolves templates from XDG config dir with fallback to compiled-in defaults (`include_str!`). `{{variable}}` substitution via serde JSON flatten.
