@@ -325,21 +325,20 @@ pub fn resolve_api_url(
 /// network address, or a `.local`/`.lan` name. This prevents an API key from
 /// being sent in clear text to an arbitrary remote host. HTTPS is unrestricted.
 pub fn validate_api_url(url: &str) -> Result<(), String> {
-    let parsed = Url::parse(url).map_err(|error| format!("invalid API URL: {error}"))?;
+    let parsed = Url::parse(url)
+        .map_err(|error| i18n::tf("ai.invalid_api_url", &[("error", &error.to_string())]))?;
 
     match parsed.scheme() {
         "https" => Ok(()),
         "http" => validate_insecure_host(&parsed),
-        scheme => Err(format!(
-            "unsupported API URL scheme '{scheme}'; use https://"
-        )),
+        scheme => Err(i18n::tf("ai.unsupported_url_scheme", &[("scheme", scheme)])),
     }
 }
 
 fn validate_insecure_host(url: &Url) -> Result<(), String> {
     let host = url
         .host_str()
-        .ok_or_else(|| "API URL is missing a host".to_string())?;
+        .ok_or_else(|| i18n::t("ai.api_url_missing_host"))?;
 
     // `host_str` keeps the brackets around IPv6 literals; strip them so the
     // address can be parsed (and use the unbracketed form for domain checks).
@@ -363,9 +362,7 @@ fn validate_insecure_host(url: &Url) -> Result<(), String> {
     if allowed {
         Ok(())
     } else {
-        Err(format!(
-            "insecure http:// endpoint '{host}' is not allowed; use https:// or a loopback/private address"
-        ))
+        Err(i18n::tf("ai.insecure_api_url", &[("host", host)]))
     }
 }
 

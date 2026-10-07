@@ -1,6 +1,8 @@
 //! OpenCode Go fronts several vendors behind one endpoint, so the protocol
 //! depends on which model the request names.
 
+use crate::i18n;
+
 use super::Protocol;
 
 /// The protocol this model is served over.
@@ -15,8 +17,9 @@ pub(crate) fn protocol_for_model(model: &str) -> Result<Protocol, String> {
         return Ok(Protocol::AnthropicMessages);
     }
 
-    Err(format!(
-        "OpenCode Go model '{model}' is not currently supported in Madora."
+    Err(i18n::tf(
+        "ai.provider.unsupported_model",
+        &[("provider", "OpenCode Go"), ("model", model)],
     ))
 }
 

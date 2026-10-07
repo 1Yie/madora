@@ -395,7 +395,7 @@ async fn wait_for_in_flight_completion_request(
 }
 
 fn in_flight_timeout_error() -> String {
-    "completion request timed out while waiting for an in-flight result".to_string()
+    i18n::t("ai.completion_timeout")
 }
 
 fn get_cached_completion(

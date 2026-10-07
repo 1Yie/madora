@@ -6,6 +6,7 @@ use std::{
 
 use serde::Serialize;
 
+use crate::i18n;
 use crate::models::ai::AiProvider;
 
 const DEFAULT_PROMPTS_DIR: &str = "prompts";
@@ -108,7 +109,7 @@ impl PromptManager {
         context: &T,
     ) -> Result<String, String> {
         if !is_safe_template_name(name) {
-            return Err(format!("invalid prompt template name '{name}'"));
+            return Err(i18n::tf("ai.template_invalid_name", &[("name", name)]));
         }
 
         let template = self
@@ -121,9 +122,9 @@ impl PromptManager {
                 }
             })
             .ok_or_else(|| {
-                format!(
-                    "prompt template '{name}' for profile '{}' was not found",
-                    profile.as_key()
+                i18n::tf(
+                    "ai.template_not_found",
+                    &[("name", name), ("profile", profile.as_key())],
                 )
             })?;
 
@@ -177,8 +178,17 @@ pub fn prompt_profile_for_anthropic_compatible(provider: AiProvider, model: &str
         AiProvider::Custom => PromptProfile::Custom,
         AiProvider::MiniMax | AiProvider::MiniMaxCoding => PromptProfile::MiniMax,
         AiProvider::Anthropic => PromptProfile::Anthropic,
+        // Qwen is served over this protocol by the multiplexing providers and
+        // is tuned like Claude. The check lives here rather than in
+        // `prompt_profile_from_model` so that a qwen model reached over the
+        // OpenAI-chat protocol cannot pick up the Anthropic template.
+        _ if is_qwen(model) => PromptProfile::Anthropic,
         _ => prompt_profile_from_model(model).unwrap_or(PromptProfile::Anthropic),
     }
+}
+
+fn is_qwen(model: &str) -> bool {
+    model.trim().to_ascii_lowercase().starts_with("qwen")
 }
 
 pub fn prompt_profile_for_google_compatible(provider: AiProvider, model: &str) -> PromptProfile {
@@ -192,7 +202,7 @@ pub fn prompt_profile_for_google_compatible(provider: AiProvider, model: &str) -
 fn prompt_profile_from_model(model: &str) -> Option<PromptProfile> {
     let lower_model = model.trim().to_ascii_lowercase();
 
-    if lower_model.starts_with("claude-") || lower_model.starts_with("qwen") {
+    if lower_model.starts_with("claude-") {
         return Some(PromptProfile::Anthropic);
     }
 
@@ -256,10 +266,14 @@ fn resolve_platform_prompt_root() -> Option<PathBuf> {
 
 fn render_template<T: Serialize>(template: &str, context: &T) -> Result<String, String> {
     let values = serde_json::to_value(context)
-        .map_err(|error| format!("failed to serialize prompt context: {error}"))
+        .map_err(|error| {
+            i18n::tf(
+                "ai.template_context_invalid",
+                &[("error", &error.to_string())],
+            )
+        })
         .and_then(|value| {
-            flatten_template_values(value)
-                .ok_or_else(|| "prompt context must serialize to an object".to_string())
+            flatten_template_values(value).ok_or_else(|| i18n::t("ai.template_context_not_object"))
         })?;
 
     // Single left-to-right pass: substituted values are never rescanned, so a
@@ -510,6 +524,18 @@ mod tests {
         assert_eq!(
             prompt_profile_for_google_compatible(AiProvider::OpenCodeZen, "gemini-3.1-pro"),
             PromptProfile::Google
+        );
+    }
+
+    #[test]
+    fn qwen_only_selects_the_anthropic_profile_on_the_anthropic_protocol() {
+        assert_eq!(
+            prompt_profile_for_anthropic_compatible(AiProvider::OpenCodeGo, "qwen3.7-max"),
+            PromptProfile::Anthropic
+        );
+        assert_eq!(
+            prompt_profile_for_openai_compatible(AiProvider::OpenCodeZen, "qwen3.7-max"),
+            PromptProfile::OpenAi
         );
     }
 

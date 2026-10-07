@@ -3,6 +3,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
+    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_openai_compatible, PromptManager},
     providers::{
@@ -63,8 +64,9 @@ pub(crate) fn protocol_for_model(model: &str) -> Result<Protocol, String> {
         return Ok(Protocol::OpenAiChat);
     }
 
-    Err(format!(
-        "OpenCode Zen model '{model}' could not be routed to an API endpoint."
+    Err(i18n::tf(
+        "ai.provider.unsupported_model",
+        &[("provider", "OpenCode Zen"), ("model", model)],
     ))
 }
 
@@ -286,7 +288,7 @@ mod tests {
     #[test]
     fn rejects_unroutable_models() {
         let error = protocol_for_model("unknown-model").unwrap_err();
-        assert!(error.contains("could not be routed"), "{error}");
+        assert!(error.contains("unknown-model"), "{error}");
     }
 
     // ─── end to end against a scripted local server ─────────────────

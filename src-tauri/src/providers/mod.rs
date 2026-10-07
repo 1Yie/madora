@@ -379,7 +379,8 @@ mod tests {
         );
 
         for provider in all {
-            let row = super::spec(provider).unwrap_or_else(|| panic!("no table row for {provider:?}"));
+            let row =
+                super::spec(provider).unwrap_or_else(|| panic!("no table row for {provider:?}"));
             assert_eq!(row.key, provider.as_key(), "{provider:?}");
         }
 

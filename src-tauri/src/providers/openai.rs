@@ -575,7 +575,8 @@ mod tests {
         )
         .await;
 
-        assert!(result.unwrap_err().contains("insecure"));
+        // The message must name the host, whatever the locale.
+        assert!(result.unwrap_err().contains("api.example.com"));
         assert_eq!(server.request_count(), 0);
     }
 }

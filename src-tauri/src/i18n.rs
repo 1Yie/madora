@@ -213,6 +213,16 @@ fn en(key: &str) -> Option<&'static str> {
         "git.read_legacy_credentials_failed" => "Failed to read the legacy Git credentials file: {error}",
         "git.delete_legacy_credentials_failed" => "Failed to delete the legacy Git credentials file: {error}",
         "git.cannot_get_app_data_dir" => "Unable to get the application data directory: {error}",
+        "ai.provider.unsupported_model" => "The {provider} model '{model}' is not supported",
+        "ai.invalid_api_url" => "Invalid API URL: {error}",
+        "ai.unsupported_url_scheme" => "Unsupported API URL scheme '{scheme}'. Use https://",
+        "ai.api_url_missing_host" => "The API URL is missing a host",
+        "ai.insecure_api_url" => "Plain http:// is only allowed for local or private addresses; use https:// for {host}",
+        "ai.completion_timeout" => "The completion request timed out",
+        "ai.template_invalid_name" => "Invalid prompt template name: '{name}'",
+        "ai.template_not_found" => "Prompt template '{name}' for profile '{profile}' was not found",
+        "ai.template_context_invalid" => "The prompt context could not be prepared: {error}",
+        "ai.template_context_not_object" => "The prompt context must be a JSON object",
         _ => return None,
     })
 }
@@ -270,7 +280,9 @@ fn zh_cn(key: &str) -> Option<&'static str> {
         "cli.open_windows_path_failed" => "打开 Windows PATH 失败: {error}",
         "ai.send_chunk_failed" => "发送补全片段失败: {error}",
         "explorer.cannot_save_encoding" => "当前内容无法按 {encoding} 编码保存",
-        "explorer.refuse_truncated_write" => "文件过大,无法完整载入。直接保存会丢失其余内容,请改用其他编辑器修改。",
+        "explorer.refuse_truncated_write" => {
+            "文件过大,无法完整载入。直接保存会丢失其余内容,请改用其他编辑器修改。"
+        }
         "explorer.enter_file_name" => "请输入文件名",
         "explorer.file_name_no_separator" => "文件名不能包含路径分隔符",
         "explorer.enter_directory_name" => "请输入文件夹名称",
@@ -316,6 +328,8 @@ fn zh_cn(key: &str) -> Option<&'static str> {
         "webdav.write_file_failed" => "写入 {path} 失败: {error}",
         "webdav.upload_file_failed" => "上传 {path} 失败: {error}",
         "webdav.download_file_failed" => "下载 {path} 失败: {error}",
+        "webdav.xml_parse_error" => "XML 解析失败: {error}",
+        "webdav.read_response_failed" => "读取响应失败: {error}",
         "git.no_workdir" => "当前仓库没有可用的工作区目录",
         "git.not_editor_managed" => "当前目录不是由编辑器管理的 Git 仓库",
         "git.cannot_resolve_workdir" => "无法解析仓库工作区目录: {error}",
@@ -360,6 +374,16 @@ fn zh_cn(key: &str) -> Option<&'static str> {
         "git.read_legacy_credentials_failed" => "读取旧版 Git 凭证文件失败: {error}",
         "git.delete_legacy_credentials_failed" => "删除旧版 Git 凭证文件失败: {error}",
         "git.cannot_get_app_data_dir" => "无法获取应用数据目录: {error}",
+        "ai.provider.unsupported_model" => "{provider} 不支持模型 '{model}'",
+        "ai.invalid_api_url" => "API URL 无效: {error}",
+        "ai.unsupported_url_scheme" => "不支持的 API URL 协议 '{scheme}',请使用 https://",
+        "ai.api_url_missing_host" => "API URL 缺少主机名",
+        "ai.insecure_api_url" => "明文 http:// 只能用于本机或内网地址,请为 {host} 使用 https://",
+        "ai.completion_timeout" => "补全请求超时",
+        "ai.template_invalid_name" => "提示词模板名称无效: '{name}'",
+        "ai.template_not_found" => "找不到配置 '{profile}' 的提示词模板 '{name}'",
+        "ai.template_context_invalid" => "无法准备提示词上下文: {error}",
+        "ai.template_context_not_object" => "提示词上下文必须是 JSON 对象",
         _ => return None,
     })
 }
@@ -455,6 +479,8 @@ fn ja(key: &str) -> Option<&'static str> {
         "webdav.write_file_failed" => "{path} の書き込みに失敗しました: {error}",
         "webdav.upload_file_failed" => "{path} のアップロードに失敗しました: {error}",
         "webdav.download_file_failed" => "{path} のダウンロードに失敗しました: {error}",
+        "webdav.xml_parse_error" => "XML の解析に失敗しました: {error}",
+        "webdav.read_response_failed" => "応答の読み取りに失敗しました: {error}",
         "git.no_workdir" => "現在のリポジトリには使用可能な作業ディレクトリがありません",
         "git.not_editor_managed" => "現在のディレクトリはエディタ管理の Git リポジトリではありません",
         "git.cannot_resolve_workdir" => "リポジトリの作業ディレクトリを解決できません: {error}",
@@ -497,6 +523,16 @@ fn ja(key: &str) -> Option<&'static str> {
         "git.read_legacy_credentials_failed" => "旧バージョンの Git 認証情報ファイルの読み取りに失敗しました: {error}",
         "git.delete_legacy_credentials_failed" => "旧バージョンの Git 認証情報ファイルの削除に失敗しました: {error}",
         "git.cannot_get_app_data_dir" => "アプリケーションデータディレクトリを取得できません: {error}",
+        "ai.provider.unsupported_model" => "{provider} ではモデル '{model}' を利用できません",
+        "ai.invalid_api_url" => "API URL が無効です: {error}",
+        "ai.unsupported_url_scheme" => "未対応の API URL スキーム '{scheme}' です。https:// を使用してください",
+        "ai.api_url_missing_host" => "API URL にホスト名がありません",
+        "ai.insecure_api_url" => "平文の http:// はローカルまたはプライベートなアドレスにのみ使用できます。{host} には https:// を使用してください",
+        "ai.completion_timeout" => "補完リクエストがタイムアウトしました",
+        "ai.template_invalid_name" => "プロンプトテンプレート名が無効です: '{name}'",
+        "ai.template_not_found" => "プロファイル '{profile}' のプロンプトテンプレート '{name}' が見つかりません",
+        "ai.template_context_invalid" => "プロンプトコンテキストを準備できませんでした: {error}",
+        "ai.template_context_not_object" => "プロンプトコンテキストは JSON オブジェクトである必要があります",
         _ => return None,
     })
 }
@@ -592,6 +628,8 @@ fn ko(key: &str) -> Option<&'static str> {
         "webdav.write_file_failed" => "{path} 쓰기에 실패했습니다: {error}",
         "webdav.upload_file_failed" => "{path} 업로드에 실패했습니다: {error}",
         "webdav.download_file_failed" => "{path} 다운로드에 실패했습니다: {error}",
+        "webdav.xml_parse_error" => "XML 구문 분석에 실패했습니다: {error}",
+        "webdav.read_response_failed" => "응답을 읽지 못했습니다: {error}",
         "git.no_workdir" => "현재 리포지토리에 사용 가능한 작업 디렉터리가 없습니다",
         "git.not_editor_managed" => "현재 디렉터리는 편집기가 관리하는 Git 리포지토리가 아닙니다",
         "git.cannot_resolve_workdir" => "리포지토리 작업 디렉터리를 확인할 수 없습니다: {error}",
@@ -634,6 +672,81 @@ fn ko(key: &str) -> Option<&'static str> {
         "git.read_legacy_credentials_failed" => "레거시 Git 자격 증명 파일 읽기에 실패했습니다: {error}",
         "git.delete_legacy_credentials_failed" => "레거시 Git 자격 증명 파일 삭제에 실패했습니다: {error}",
         "git.cannot_get_app_data_dir" => "애플리케이션 데이터 디렉터리를 가져올 수 없습니다: {error}",
+        "ai.provider.unsupported_model" => "{provider}에서 모델 '{model}'을(를) 지원하지 않습니다",
+        "ai.invalid_api_url" => "API URL이 올바르지 않습니다: {error}",
+        "ai.unsupported_url_scheme" => "지원하지 않는 API URL 스킴 '{scheme}'입니다. https://를 사용해 주세요",
+        "ai.api_url_missing_host" => "API URL에 호스트가 없습니다",
+        "ai.insecure_api_url" => "평문 http://는 로컬 또는 사설 주소에만 허용됩니다. {host}에는 https://를 사용해 주세요",
+        "ai.completion_timeout" => "완성 요청 시간이 초과되었습니다",
+        "ai.template_invalid_name" => "프롬프트 템플릿 이름이 올바르지 않습니다: '{name}'",
+        "ai.template_not_found" => "프로필 '{profile}'의 프롬프트 템플릿 '{name}'을(를) 찾을 수 없습니다",
+        "ai.template_context_invalid" => "프롬프트 컨텍스트를 준비할 수 없습니다: {error}",
+        "ai.template_context_not_object" => "프롬프트 컨텍스트는 JSON 객체여야 합니다",
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The keys a locale function defines, read from this file.
+    fn keys_of(function: &str) -> BTreeSet<String> {
+        let source = include_str!("i18n.rs");
+        let start = source
+            .find(&format!("fn {function}(key: &str)"))
+            .unwrap_or_else(|| panic!("no {function} function"));
+        let end = source[start..]
+            .find("_ => return None,")
+            .map(|offset| start + offset)
+            .unwrap_or_else(|| panic!("{function} has no terminator"));
+
+        source[start..end]
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+
+                if !line.contains("=>") {
+                    return None;
+                }
+
+                let rest = line.strip_prefix('"')?;
+                rest.split_once('"').map(|(key, _)| key.to_string())
+            })
+            .collect()
+    }
+
+    /// A key added to one locale but not the others silently falls back to
+    /// English, which is exactly the kind of gap this file keeps growing.
+    #[test]
+    fn every_locale_defines_the_same_keys() {
+        let english = keys_of("en");
+        assert!(
+            english.len() > 100,
+            "the key parser found only {} keys; is it still matching the file?",
+            english.len()
+        );
+
+        for locale in ["zh_cn", "ja", "ko"] {
+            let keys = keys_of(locale);
+            let missing: Vec<_> = english.difference(&keys).collect();
+            let unknown: Vec<_> = keys.difference(&english).collect();
+
+            assert!(missing.is_empty(), "{locale} is missing {missing:?}");
+            assert!(
+                unknown.is_empty(),
+                "{locale} defines unknown keys {unknown:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_keys_resolve_to_the_key_itself() {
+        assert!(en("ai.api_key_required").is_some());
+        assert!(zh_cn("ai.api_key_required").is_some());
+        assert!(ja("ai.api_key_required").is_some());
+        assert!(ko("ai.api_key_required").is_some());
+        assert!(en("no.such.key").is_none());
+    }
 }
