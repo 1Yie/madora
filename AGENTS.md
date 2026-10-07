@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Madora is a Tauri v2 desktop app for Markdown editing with AI autocompletion. The frontend is React 19 + Vite 7 + TypeScript (strict mode), styled with Tailwind CSS v4 via shadcn/ui (radix-nova style, `@base-ui/react` primitives). The backend is Rust with 40+ Tauri commands across 8 modules. AI completions use a Fill-in-the-Middle (FIM) pattern with 5 provider implementations (OpenAI, Anthropic, DeepSeek, Kimi, Custom).
+Madora is a Tauri v2 desktop app for Markdown editing with AI autocompletion. The frontend is React 19 + Vite 7 + TypeScript (strict mode), styled with Tailwind CSS v4 via shadcn/ui (radix-nova style, `@base-ui/react` primitives). The backend is Rust with 40+ Tauri commands across 8 modules. AI completions use a Fill-in-the-Middle (FIM) pattern with 14 providers that are described by one table and served over 5 wire protocols (OpenAI chat, Anthropic messages, Google generateContent, OpenAI Responses, DeepSeek raw completions).
 
 ## Architecture & Data Flow
 
@@ -18,7 +18,7 @@ Models (src-tauri/src/models/) — serde serialization types
 
 **Provider chain (React → Tauri):** `main.tsx` mounts `ThemeProvider → ToastProvider → AiSettingsProvider → ProseThemeProvider → App`. `App` renders a custom title bar + hash router. The single route `/` loads `MainLayout` → `WorkspaceBrowser`, which orchestrates the resizable sidebar (file tree) + content pane (editor/preview).
 
-**AI completion data flow:** User types in CodeMirror → `use-editor` hook debounces input (80ms) → calls `invoke('generate_completion_stream')` with prefix/suffix → Rust `AiCompletionService` checks cache (15s TTL, 128 entries), deduplicates in-flight → delegates to `CompletionProvider` trait → `PromptManager` renders FIM templates → HTTP request to provider → SSE stream back through `Channel<String>` → rendered as inline ghost text via CodeMirror `Decoration.widget`.
+**AI completion data flow:** User types in CodeMirror → `use-editor` hook debounces input (80ms) → calls `invoke('generate_completion_stream')` with prefix/suffix → Rust `AiCompletionService` checks cache (15s TTL, 128 entries), deduplicates in-flight → picks the protocol for the provider → `PromptManager` renders FIM templates → HTTP request to provider → SSE stream back through `Channel<String>` → rendered as inline ghost text via CodeMirror `Decoration.widget`.
 
 **State management:** No global state library — React Context for providers, `useState`/`useReducer` for component state, `EditorEntry` registry pattern (`unsaved-registry.ts`) backed by `Map<string, EditorEntry>` with localStorage draft fallback.
 
@@ -35,7 +35,7 @@ Models (src-tauri/src/models/) — serde serialization types
 | `src/__tests__/`           | Vitest test files                                                                                           |
 | `src-tauri/src/commands/`  | 8 Tauri command modules (ai, explorer, git, project, secure_storage, system, theme, utility)                |
 | `src-tauri/src/services/`  | 3 services: ai, explorer, project                                                                           |
-| `src-tauri/src/providers/` | 5 AI provider implementations + common SSE parser                                                           |
+| `src-tauri/src/providers/` | Provider table (`mod.rs`) + one adapter per wire protocol + common request skeleton and SSE parser          |
 | `src-tauri/src/models/`    | Shared serde types for AI, explorer, git                                                                    |
 | `src-tauri/src/prompt/`    | Prompt template manager with per-provider FIM templates                                                     |
 | `src-tauri/prompts/`       | Compiled-in FIM prompt templates (`{provider}/fim_{system,user}.md`)                                        |
@@ -82,7 +82,8 @@ cargo test           # Rust tests (includes git integration tests)
 - **All `#[tauri::command]` are `async fn`** (except `greet`, `get_system_theme`).
 - **Return type**: `Result<T, String>` — errors are stringified, no custom error enum.
 - **Managed state**: accessed via `tauri::State<'_, T>`, registered in `app.rs`.
-- **`CompletionProvider` trait**: `#[async_trait] pub trait CompletionProvider: Send + Sync` with required `request_fim_completion` and default `request_fim_completion_stream` (calls non-stream by default). Providers are static singletons.
+- **Provider table**: `providers/mod.rs` holds a `PROVIDERS` table (key, default URL, default model, `Protocol`, URL affix) as the single source of truth, and a `Protocol` enum that dispatches to the five wire formats. Adding an OpenAI-compatible provider is one table row.
+- **Request skeleton**: `providers/common.rs` owns connection resolution, prompt rendering, retries, status/error handling, the whole-request timeout and the SSE loop. A protocol only supplies its endpoint, auth header, payload and one event-to-text closure.
 - **Streaming**: Uses Tauri `Channel<String>`. Provider callbacks are `&mut dyn FnMut(String) -> Result<(), String>`. Common SSE parser in `providers/common.rs`.
 - **AI caching**: `AiCompletionService` holds `Mutex<HashMap<CompletionCacheKey, CachedCompletion>>`, 15s TTL, 128 max entries, with in-flight dedup via `Arc<InFlightCompletionRequest>`.
 - **Secure storage**: API keys via OS keyring (`keyring` crate, service name `"madora.ai"`), cached in `LazyLock<Mutex<HashMap>>`.
@@ -113,10 +114,10 @@ cargo test           # Rust tests (includes git integration tests)
 | `src-tauri/src/lib.rs`                                    | Rust library root — module declarations + `run()`                  |
 | `src-tauri/src/app.rs`                                    | App setup — plugins, managed state, 40+ command registration       |
 | `src-tauri/src/services/ai.rs`                            | AI completion cache + dedup + dispatch                             |
-| `src-tauri/src/providers/mod.rs`                          | `CompletionProvider` trait definition + static provider singletons |
+| `src-tauri/src/providers/mod.rs`                          | Provider table (defaults + protocol) and protocol dispatch         |
 | `src-tauri/src/prompt/mod.rs`                             | Prompt template manager with XDG fallback                          |
 | `src-tauri/tauri.conf.json`                               | Tauri v2 window/build/bundle config                                |
-| `src/assets/models.json`                                  | AI model catalogue (18 models across 4 providers)                  |
+| `src/assets/models.json`                                  | AI model catalogue per provider (defaults are asserted against it) |
 
 ## Runtime/Tooling Preferences
 
@@ -152,7 +153,7 @@ cargo test           # Rust tests (includes git integration tests)
 ### Rust tests
 
 - **Integration tests**: `src-tauri/tests/git_integration.rs` uses `tempfile` + real `git2` + subprocess `git` CLI. Tests init/add/commit/status/log/branch/merge/conflict detection.
-- **Rust unit tests**: Inline in provider/service modules with mock HTTP responses.
+- **Rust unit tests**: Inline in provider/service modules. Provider tests run against a scripted chunked-HTTP server (`providers/test_support.rs`) so URL, auth headers, status handling, retries and SSE framing are covered end to end.
 - **Running**: `cargo test` from `src-tauri/`.
 
 ### Build verification
