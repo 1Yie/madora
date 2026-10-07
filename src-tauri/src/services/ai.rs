@@ -43,10 +43,23 @@ struct CompletionCacheKey {
     model: String,
     provider: AiProvider,
     use_ssl: bool,
-    title: String,
-    prefix: String,
-    suffix: String,
+    /// Fingerprints of the text sent upstream rather than the text itself.
+    /// The cache only needs to tell two requests apart, so this keeps the key
+    /// small and cheap to hash on every keystroke, and does not hold a second
+    /// copy of the user's document in memory.
+    title: u64,
+    prefix: u64,
+    suffix: u64,
     template_revision: u64,
+}
+
+/// A stable hash of one piece of a completion request.
+fn fingerprint(text: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[derive(Clone)]
@@ -235,14 +248,7 @@ impl Default for AiCompletionService {
 
 impl AiCompletionService {
     pub fn new() -> Self {
-        let client = Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .read_timeout(Duration::from_secs(30))
-            .pool_max_idle_per_host(8)
-            .tcp_keepalive(Duration::from_secs(30))
-            .user_agent("madora/1.0")
-            .build()
-            .expect("Failed to create HTTP client");
+        let client = Self::build_client();
 
         Self {
             client,
@@ -256,6 +262,25 @@ impl AiCompletionService {
     /// Cancels the streaming completion registered under `request_id`, if any.
     pub fn cancel_completion_stream(&self, request_id: &str) {
         self.cancellations.cancel(request_id);
+    }
+
+    /// The tuned client, or reqwest's default one.
+    ///
+    /// A build failure here would otherwise take the whole application down at
+    /// startup; losing the connection-tuning settings is a far smaller problem
+    /// than losing the app, and completions still work.
+    fn build_client() -> Client {
+        Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .read_timeout(Duration::from_secs(30))
+            .pool_max_idle_per_host(8)
+            .tcp_keepalive(Duration::from_secs(30))
+            .user_agent("madora/1.0")
+            .build()
+            .unwrap_or_else(|error| {
+                eprintln!("could not build the tuned HTTP client ({error}); using defaults");
+                Client::new()
+            })
     }
 }
 
@@ -313,12 +338,9 @@ fn build_completion_cache_key(
         model: resolve_cache_model(provider, config),
         provider,
         use_ssl: config.use_ssl,
-        title: request
-            .title
-            .clone()
-            .unwrap_or_else(|| "Untitled".to_string()),
-        prefix,
-        suffix,
+        title: fingerprint(request.title.as_deref().unwrap_or("Untitled")),
+        prefix: fingerprint(&prefix),
+        suffix: fingerprint(&suffix),
         template_revision: service.prompt_manager.revision(),
     }
 }
@@ -479,20 +501,17 @@ fn strip_duplicated_prefix(text: &str, prefix: &str) -> String {
         return text.to_string();
     }
 
-    let mut overlap = 0;
-    for candidate in MIN_DUPLICATED_PREFIX_CHARS..=max_overlap {
+    // Longest first, so the common cases (no overlap at all, or a short one)
+    // stop after a couple of comparisons instead of scanning every length.
+    for candidate in (MIN_DUPLICATED_PREFIX_CHARS..=max_overlap).rev() {
         let tail = &prefix_chars[prefix_chars.len() - candidate..];
 
         if tail == &text_chars[..candidate] {
-            overlap = candidate;
+            return text_chars[candidate..].iter().collect();
         }
     }
 
-    if overlap == 0 {
-        return text.to_string();
-    }
-
-    text_chars[overlap..].iter().collect()
+    text.to_string()
 }
 
 /// The endpoint the request will use, resolved by the same helper the
@@ -697,9 +716,9 @@ mod tests {
             model: label.to_string(),
             provider: AiProvider::OpenAi,
             use_ssl: true,
-            title: "Doc".to_string(),
-            prefix: "prefix".to_string(),
-            suffix: String::new(),
+            title: fingerprint("Doc"),
+            prefix: fingerprint("prefix"),
+            suffix: fingerprint(""),
             template_revision: 0,
         }
     }
@@ -785,9 +804,11 @@ mod tests {
         };
         let key = build_completion_cache_key(&service, &config, &request);
         assert_eq!(key.provider, AiProvider::DeepSeek);
-        assert_eq!(key.prefix, "hello");
-        assert_eq!(key.suffix, "");
-        assert_eq!(key.title, "Untitled");
+        // The key holds fingerprints, never the text itself.
+        assert_eq!(key.prefix, fingerprint("hello"));
+        assert_eq!(key.suffix, fingerprint(""));
+        assert_eq!(key.title, fingerprint("Untitled"));
+        assert_ne!(key.prefix, fingerprint("hello "));
     }
 
     #[test]
@@ -942,6 +963,17 @@ mod tests {
         assert_eq!(
             postprocess_completion("line two\nline three", prefix),
             "line three"
+        );
+    }
+
+    #[test]
+    fn postprocess_strips_the_longest_repeat_when_several_lengths_match() {
+        // The prefix tail is periodic, so 8, 10 and 12 characters all match;
+        // the whole 12 must be removed, not just the shortest match.
+        assert_eq!(postprocess_completion("abababababab", "xxabababababab"), "");
+        assert_eq!(
+            postprocess_completion("ababababababXY", "xxabababababab"),
+            "XY"
         );
     }
 
@@ -1135,8 +1167,8 @@ mod tests {
             };
             let key = build_completion_cache_key(&service, &config, &request);
 
-            assert_eq!(key.prefix, context.prefix, "{provider:?}");
-            assert_eq!(key.suffix, context.suffix, "{provider:?}");
+            assert_eq!(key.prefix, fingerprint(&context.prefix), "{provider:?}");
+            assert_eq!(key.suffix, fingerprint(&context.suffix), "{provider:?}");
         }
     }
 
