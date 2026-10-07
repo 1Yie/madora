@@ -455,4 +455,186 @@ mod tests {
         let error = resolve_route(&config_with_model("unknown-model")).unwrap_err();
         assert!(error.contains("could not be routed"));
     }
+
+    // ─── end to end against a scripted local server ─────────────────
+
+    use crate::models::ai::CompletionRequest;
+    use crate::prompt::PromptManager;
+    use crate::providers::test_support::{MockServer, ScriptedResponse};
+    use crate::providers::CompletionProvider;
+    use reqwest::Client;
+
+    fn e2e_config(server: &MockServer, provider: AiProvider, model: &str) -> AiCompletionConfig {
+        AiCompletionConfig {
+            api_key: "sk-test-key".into(),
+            api_url: Some(server.base_url.clone()),
+            model: Some(model.into()),
+            provider: Some(provider),
+            use_ssl: false,
+            ..Default::default()
+        }
+    }
+
+    fn e2e_request(suffix: Option<&str>) -> CompletionRequest {
+        CompletionRequest {
+            title: Some("Notes".into()),
+            prefix: "Hello, wor".into(),
+            suffix: suffix.map(str::to_string),
+        }
+    }
+
+    async fn zen_complete(server: &MockServer, model: &str) -> Result<String, String> {
+        super::OpenCodeZenProvider
+            .request_fim_completion(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &e2e_config(server, AiProvider::OpenCodeZen, model),
+                &e2e_request(Some("after")),
+            )
+            .await
+    }
+
+    async fn zen_stream(server: &MockServer, model: &str) -> (Result<String, String>, Vec<String>) {
+        let mut chunks = Vec::new();
+        let result = super::OpenCodeZenProvider
+            .request_fim_completion_stream(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &e2e_config(server, AiProvider::OpenCodeZen, model),
+                &e2e_request(None),
+                &mut |chunk| {
+                    chunks.push(chunk);
+                    Ok(())
+                },
+            )
+            .await;
+
+        (result, chunks)
+    }
+
+    #[tokio::test]
+    async fn zen_routes_each_model_family_to_its_own_endpoint() {
+        let cases: [(&str, &str, &str); 4] = [
+            ("gpt-5.5", "/v1/responses", r#"{"output_text":"ld!"}"#),
+            (
+                "claude-sonnet-4-6",
+                "/v1/messages",
+                r#"{"content":[{"type":"text","text":"ld!"}]}"#,
+            ),
+            (
+                "gemini-3.1-pro",
+                "/v1/models/gemini-3.1-pro:generateContent",
+                r#"{"candidates":[{"content":{"parts":[{"text":"ld!"}]}}]}"#,
+            ),
+            (
+                "deepseek-v4-pro",
+                "/v1/chat/completions",
+                r#"{"choices":[{"message":{"content":"ld!"}}]}"#,
+            ),
+        ];
+
+        for (model, path, body) in cases {
+            let server = MockServer::start(vec![ScriptedResponse::json(200, body)]).await;
+
+            let text = zen_complete(&server, model).await;
+
+            assert_eq!(text.as_deref(), Ok("ld!"), "{model}");
+            assert_eq!(server.requests()[0].path, path, "{model}");
+        }
+    }
+
+    #[tokio::test]
+    async fn zen_responses_request_is_stateless_and_has_no_stop_parameter() {
+        let server =
+            MockServer::start(vec![ScriptedResponse::json(200, r#"{"output_text":"ok"}"#)]).await;
+
+        zen_complete(&server, "gpt-5.5").await.unwrap();
+
+        let sent = &server.requests()[0];
+        assert_eq!(sent.header("authorization"), Some("Bearer sk-test-key"));
+        let body = sent.json();
+        assert_eq!(
+            body["store"],
+            json!(false),
+            "completions must not be stored upstream"
+        );
+        assert!(body.get("stop").is_none());
+        assert!(body["input"].as_str().unwrap().contains("Hello, wor"));
+    }
+
+    #[tokio::test]
+    async fn zen_responses_extracts_text_from_output_items() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"output":[{"type":"reasoning"},{"type":"message","content":[{"type":"output_text","text":"ld"},{"type":"output_text","text":"!"}]}]}"#,
+        )])
+        .await;
+
+        let text = zen_complete(&server, "gpt-5.5").await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+    }
+
+    #[tokio::test]
+    async fn zen_responses_streams_output_text_deltas() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "event: response.created\ndata: {\"type\":\"response.created\"}\n\n",
+            "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ld\"}\n\n",
+            "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"!\"}\n\n",
+            "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output_text\":\"ld!\"}}\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = zen_stream(&server, "gpt-5.5").await;
+
+        assert_eq!(result.as_deref(), Ok("ld!"));
+        assert_eq!(
+            chunks,
+            vec!["ld", "!"],
+            "the completed event must not repeat text that already streamed"
+        );
+    }
+
+    #[tokio::test]
+    async fn zen_responses_falls_back_to_the_completed_event_when_nothing_streamed() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output_text\":\"whole\"}}\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = zen_stream(&server, "gpt-5.5").await;
+
+        assert_eq!(result.as_deref(), Ok("whole"));
+        assert_eq!(chunks, vec!["whole"]);
+    }
+
+    #[tokio::test]
+    async fn zen_responses_error_event_and_http_error_are_reported() {
+        let in_stream = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"error\":{\"message\":\"model overloaded\"}}\n\n",
+        ])])
+        .await;
+        let (result, _) = zen_stream(&in_stream, "gpt-5.5").await;
+        assert!(result.unwrap_err().contains("model overloaded"));
+
+        let http = MockServer::start(vec![ScriptedResponse::json(
+            429,
+            r#"{"error":{"message":"rate limited"}}"#,
+        )
+        .with_header("retry-after", "0")])
+        .await;
+        let error = zen_complete(&http, "gpt-5.5").await.unwrap_err();
+        assert!(error.contains("rate limited"), "{error}");
+        assert_eq!(http.request_count(), 3);
+    }
+
+    #[tokio::test]
+    async fn zen_refuses_an_unroutable_model_before_connecting() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, "{}")]).await;
+
+        let error = zen_complete(&server, "totally-unknown").await.unwrap_err();
+
+        assert!(error.contains("totally-unknown"), "{error}");
+        assert_eq!(server.request_count(), 0);
+    }
 }

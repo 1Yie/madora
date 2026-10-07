@@ -369,4 +369,309 @@ mod tests {
         assert_eq!(payload["temperature"], json!(0.5));
         assert_eq!(payload["stop"], json!(["X", "Y"]));
     }
+
+    // ─── end to end against a scripted local server ─────────────────
+
+    use crate::models::ai::{AiCompletionConfig, CompletionRequest};
+    use crate::prompt::PromptManager;
+    use crate::providers::test_support::{MockServer, ScriptedResponse};
+    use crate::providers::CompletionProvider;
+    use reqwest::Client;
+
+    fn config(server: &MockServer, provider: AiProvider) -> AiCompletionConfig {
+        AiCompletionConfig {
+            api_key: "sk-test-key".into(),
+            api_url: Some(server.base_url.clone()),
+            model: Some("test-model".into()),
+            provider: Some(provider),
+            use_ssl: false,
+            ..Default::default()
+        }
+    }
+
+    fn request(suffix: Option<&str>) -> CompletionRequest {
+        CompletionRequest {
+            title: Some("Notes".into()),
+            prefix: "Hello, wor".into(),
+            suffix: suffix.map(str::to_string),
+        }
+    }
+
+    async fn complete(
+        server: &MockServer,
+        provider: AiProvider,
+        suffix: Option<&str>,
+    ) -> Result<String, String> {
+        super::OpenAiProvider
+            .request_fim_completion(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &config(server, provider),
+                &request(suffix),
+            )
+            .await
+    }
+
+    async fn stream(
+        server: &MockServer,
+        provider: AiProvider,
+        suffix: Option<&str>,
+    ) -> (Result<String, String>, Vec<String>) {
+        let mut chunks = Vec::new();
+        let result = super::OpenAiProvider
+            .request_fim_completion_stream(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &config(server, provider),
+                &request(suffix),
+                &mut |chunk| {
+                    chunks.push(chunk);
+                    Ok(())
+                },
+            )
+            .await;
+
+        (result, chunks)
+    }
+
+    const CHAT_OK: &str = r#"{"choices":[{"message":{"content":"ld!"}}]}"#;
+
+    #[tokio::test]
+    async fn openai_sends_an_authenticated_chat_request_and_returns_the_text() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, CHAT_OK)]).await;
+
+        let text = complete(&server, AiProvider::OpenAi, Some(" and more")).await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        let sent = &server.requests()[0];
+        assert_eq!(sent.method, "POST");
+        assert_eq!(sent.path, "/v1/chat/completions");
+        assert_eq!(sent.header("authorization"), Some("Bearer sk-test-key"));
+        let body = sent.json();
+        assert_eq!(body["model"], json!("test-model"));
+        assert_eq!(body["messages"][0]["role"], json!("system"));
+        assert!(body["messages"][1]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Hello, wor"));
+        assert!(body.get("stream").is_none());
+    }
+
+    #[tokio::test]
+    async fn openai_streams_deltas_in_order_and_joins_them() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ld\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"!\"}}]}\n\n",
+            "data: [DONE]\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = stream(&server, AiProvider::OpenAi, None).await;
+
+        assert_eq!(result.as_deref(), Ok("ld!"));
+        assert_eq!(chunks, vec!["ld", "!"]);
+        assert_eq!(server.requests()[0].json()["stream"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn openai_stream_reassembles_events_and_characters_split_across_reads() {
+        let event = "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\n".as_bytes();
+        // Cut inside the multi-byte character and inside the event separator.
+        let cut_in_char = event.iter().position(|byte| *byte == 0xE4).unwrap() + 1;
+        let pieces = vec![
+            event[..cut_in_char].to_vec(),
+            event[cut_in_char..event.len() - 1].to_vec(),
+            event[event.len() - 1..].to_vec(),
+            b"data: [DONE]\n\n".to_vec(),
+        ];
+        let server = MockServer::start(vec![ScriptedResponse::sse_bytes(pieces)]).await;
+
+        let (result, chunks) = stream(&server, AiProvider::OpenAi, None).await;
+
+        assert_eq!(result.as_deref(), Ok("你好"));
+        assert_eq!(chunks, vec!["你好"]);
+    }
+
+    #[tokio::test]
+    async fn openai_stream_tolerates_comments_and_crlf_framing() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            ": keep-alive\r\n\r\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\r\n\r\n",
+            "data: [DONE]\r\n\r\n",
+        ])])
+        .await;
+
+        let (result, chunks) = stream(&server, AiProvider::OpenAi, None).await;
+
+        assert_eq!(result.as_deref(), Ok("ok"));
+        assert_eq!(chunks, vec!["ok"]);
+    }
+
+    #[tokio::test]
+    async fn openai_http_error_surfaces_the_upstream_message() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            401,
+            r#"{"error":{"message":"Incorrect API key provided."}}"#,
+        )])
+        .await;
+
+        let error = complete(&server, AiProvider::OpenAi, None)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("Incorrect API key provided."), "{error}");
+        assert!(error.contains("401"), "{error}");
+        assert!(
+            !error.contains("sk-test-key"),
+            "the key must never be echoed"
+        );
+        assert_eq!(server.request_count(), 1, "401 is not retried");
+    }
+
+    #[tokio::test]
+    async fn openai_stream_http_error_surfaces_the_upstream_message() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            400,
+            r#"{"error":{"message":"bad model"}}"#,
+        )])
+        .await;
+
+        let (result, chunks) = stream(&server, AiProvider::OpenAi, None).await;
+
+        assert!(result.unwrap_err().contains("bad model"));
+        assert!(chunks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn openai_http_200_carrying_an_error_is_an_error() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"error":{"message":"quota exceeded"}}"#,
+        )])
+        .await;
+
+        let error = complete(&server, AiProvider::OpenAi, None)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("quota exceeded"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn openai_stream_error_event_after_some_text_fails_the_request() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
+            "data: {\"error\":{\"message\":\"upstream died\"}}\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = stream(&server, AiProvider::OpenAi, None).await;
+
+        assert!(result.unwrap_err().contains("upstream died"));
+        assert_eq!(
+            chunks,
+            vec!["partial"],
+            "text already delivered stays delivered"
+        );
+    }
+
+    #[tokio::test]
+    async fn openai_retries_rate_limits_then_succeeds() {
+        let server = MockServer::start(vec![
+            ScriptedResponse::json(429, r#"{"error":{"message":"slow down"}}"#)
+                .with_header("retry-after", "0"),
+            ScriptedResponse::json(200, CHAT_OK),
+        ])
+        .await;
+
+        let text = complete(&server, AiProvider::OpenAi, None).await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        assert_eq!(server.request_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn openai_gives_up_after_the_retry_budget() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            503,
+            r#"{"error":{"message":"overloaded"}}"#,
+        )
+        .with_header("retry-after", "0")])
+        .await;
+
+        let error = complete(&server, AiProvider::OpenAi, None)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("overloaded"), "{error}");
+        assert_eq!(server.request_count(), 3, "one attempt plus two retries");
+    }
+
+    #[tokio::test]
+    async fn openai_without_an_api_key_never_sends_a_request() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, CHAT_OK)]).await;
+        let mut config = config(&server, AiProvider::OpenAi);
+        config.api_key = "  ".into();
+
+        let result = super::OpenAiProvider
+            .request_fim_completion(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &config,
+                &request(None),
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert_eq!(server.request_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn openai_compatible_providers_share_the_wire_format() {
+        // Kimi, Zhipu, MiMo and the rest all reuse this implementation; a
+        // request for each must hit the same path with its own prompt profile.
+        for provider in [
+            AiProvider::Kimi,
+            AiProvider::Zhipu,
+            AiProvider::ZhipuCoding,
+            AiProvider::MiMo,
+            AiProvider::MiMoCoding,
+            AiProvider::OpenAi,
+        ] {
+            let server = MockServer::start(vec![ScriptedResponse::json(200, CHAT_OK)]).await;
+
+            let text = super::request_openai_compatible_fim(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &config(&server, provider),
+                &request(None),
+            )
+            .await;
+
+            assert_eq!(text.as_deref(), Ok("ld!"), "{provider:?}");
+            assert_eq!(
+                server.requests()[0].path,
+                "/v1/chat/completions",
+                "{provider:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn openai_rejects_plaintext_endpoints_on_public_hosts_without_connecting() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, CHAT_OK)]).await;
+        let mut config = config(&server, AiProvider::Custom);
+        config.api_url = Some("http://api.example.com".into());
+
+        let result = super::request_openai_compatible_fim(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &config,
+            &request(None),
+        )
+        .await;
+
+        assert!(result.unwrap_err().contains("insecure"));
+        assert_eq!(server.request_count(), 0);
+    }
 }

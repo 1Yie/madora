@@ -28,6 +28,10 @@ enum AnthropicAuthMode {
 #[derive(Deserialize)]
 struct AnthropicTextBlock {
     text: Option<String>,
+    /// `text`, `thinking`, `tool_use`, ... Only text blocks are completion
+    /// output.
+    #[serde(rename = "type")]
+    block_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -147,11 +151,21 @@ pub(crate) async fn request_anthropic_compatible_fim(
     let payload =
         parse_success_json::<AnthropicMessageResponse>(provider.display_name(), response).await?;
 
-    Ok(payload
+    Ok(take_anthropic_text(payload))
+}
+
+/// Joins every text block of a response. Models that think first (MiniMax,
+/// Qwen and other Anthropic-compatible endpoints) put a `thinking` block ahead
+/// of the answer, and an answer may be split across several text blocks, so
+/// taking only the first block would return nothing or a fragment.
+fn take_anthropic_text(payload: AnthropicMessageResponse) -> String {
+    payload
         .content
-        .and_then(|content| content.into_iter().next())
-        .and_then(|block| block.text)
-        .unwrap_or_default())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|block| matches!(block.block_type.as_deref(), None | Some("text")))
+        .filter_map(|block| block.text)
+        .collect()
 }
 
 pub(crate) async fn request_anthropic_compatible_fim_stream(
@@ -418,5 +432,201 @@ mod tests {
         assert_eq!(payload["max_tokens"], json!(123));
         assert_eq!(payload["temperature"], json!(0.5));
         assert_eq!(payload["stop_sequences"], json!(["X", "Y"]));
+    }
+
+    // ─── end to end against a scripted local server ─────────────────
+
+    use crate::models::ai::{AiCompletionConfig, CompletionRequest};
+    use crate::prompt::PromptManager;
+    use crate::providers::test_support::{MockServer, ScriptedResponse};
+    use reqwest::Client;
+
+    fn e2e_config(server: &MockServer, provider: AiProvider, model: &str) -> AiCompletionConfig {
+        AiCompletionConfig {
+            api_key: "sk-test-key".into(),
+            api_url: Some(server.base_url.clone()),
+            model: Some(model.into()),
+            provider: Some(provider),
+            use_ssl: false,
+            ..Default::default()
+        }
+    }
+
+    fn e2e_request(suffix: Option<&str>) -> CompletionRequest {
+        CompletionRequest {
+            title: Some("Notes".into()),
+            prefix: "Hello, wor".into(),
+            suffix: suffix.map(str::to_string),
+        }
+    }
+
+    async fn anthropic_complete(
+        server: &MockServer,
+        provider: AiProvider,
+        suffix: Option<&str>,
+    ) -> Result<String, String> {
+        super::request_anthropic_compatible_fim(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server, provider, "claude-test"),
+            &e2e_request(suffix),
+        )
+        .await
+    }
+
+    async fn anthropic_stream(
+        server: &MockServer,
+        provider: AiProvider,
+    ) -> (Result<String, String>, Vec<String>) {
+        let mut chunks = Vec::new();
+        let result = super::request_anthropic_compatible_fim_stream(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server, provider, "claude-test"),
+            &e2e_request(None),
+            &mut |chunk| {
+                chunks.push(chunk);
+                Ok(())
+            },
+        )
+        .await;
+
+        (result, chunks)
+    }
+
+    const MESSAGE_OK: &str =
+        r#"{"content":[{"type":"text","text":"ld"},{"type":"text","text":"!"}]}"#;
+
+    #[tokio::test]
+    async fn anthropic_authenticates_with_x_api_key_and_a_version_header() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, MESSAGE_OK)]).await;
+
+        let text = anthropic_complete(&server, AiProvider::Anthropic, None).await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        let sent = &server.requests()[0];
+        assert_eq!(sent.path, "/v1/messages");
+        assert_eq!(sent.header("x-api-key"), Some("sk-test-key"));
+        assert_eq!(sent.header("anthropic-version"), Some("2023-06-01"));
+        assert_eq!(sent.header("authorization"), None);
+        let body = sent.json();
+        assert!(body["system"].as_str().is_some());
+        assert_eq!(body["messages"][0]["role"], json!("user"));
+    }
+
+    #[tokio::test]
+    async fn minimax_uses_bearer_auth_on_the_anthropic_protocol() {
+        for provider in [AiProvider::MiniMax, AiProvider::MiniMaxCoding] {
+            let server = MockServer::start(vec![ScriptedResponse::json(200, MESSAGE_OK)]).await;
+
+            let text = anthropic_complete(&server, provider, None).await;
+
+            assert_eq!(text.as_deref(), Ok("ld!"), "{provider:?}");
+            let sent = &server.requests()[0];
+            assert_eq!(sent.header("authorization"), Some("Bearer sk-test-key"));
+            assert_eq!(sent.header("x-api-key"), None);
+        }
+    }
+
+    #[tokio::test]
+    async fn anthropic_streams_text_deltas_and_ignores_other_events() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ld\"}}\n\n",
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}}\n\n",
+            "event: ping\ndata: {\"type\":\"ping\"}\n\n",
+            "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = anthropic_stream(&server, AiProvider::Anthropic).await;
+
+        assert_eq!(result.as_deref(), Ok("ld!"));
+        assert_eq!(chunks, vec!["ld", "!"]);
+        assert_eq!(server.requests()[0].json()["stream"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn anthropic_stream_error_event_fails_the_request() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"part\"}}\n\n",
+            "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = anthropic_stream(&server, AiProvider::Anthropic).await;
+
+        assert!(result.unwrap_err().contains("Overloaded"));
+        assert_eq!(chunks, vec!["part"]);
+    }
+
+    #[tokio::test]
+    async fn anthropic_http_error_and_retry_behave_like_the_others() {
+        let failing = MockServer::start(vec![ScriptedResponse::json(
+            401,
+            r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#,
+        )])
+        .await;
+        let error = anthropic_complete(&failing, AiProvider::Anthropic, None)
+            .await
+            .unwrap_err();
+        assert!(error.contains("invalid x-api-key"), "{error}");
+        assert!(!error.contains("sk-test-key"));
+        assert_eq!(failing.request_count(), 1);
+
+        let flaky = MockServer::start(vec![
+            ScriptedResponse::json(503, r#"{"error":{"message":"busy"}}"#)
+                .with_header("retry-after", "0"),
+            ScriptedResponse::json(200, MESSAGE_OK),
+        ])
+        .await;
+        assert_eq!(
+            anthropic_complete(&flaky, AiProvider::Anthropic, None)
+                .await
+                .as_deref(),
+            Ok("ld!")
+        );
+        assert_eq!(flaky.request_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn anthropic_http_200_carrying_an_error_is_an_error() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"type":"error","error":{"type":"api_error","message":"internal"}}"#,
+        )])
+        .await;
+
+        let error = anthropic_complete(&server, AiProvider::Anthropic, None)
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("internal"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn anthropic_skips_thinking_blocks_and_joins_text_blocks() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"content":[{"type":"thinking","thinking":"let me think","signature":"x"},{"type":"text","text":"ld"},{"type":"text","text":"!"}]}"#,
+        )])
+        .await;
+
+        let text = anthropic_complete(&server, AiProvider::MiniMax, None).await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+    }
+
+    #[tokio::test]
+    async fn anthropic_ignores_tool_use_blocks() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"content":[{"type":"text","text":"ok"},{"type":"tool_use","id":"t","name":"n","input":{}}]}"#,
+        )])
+        .await;
+
+        let text = anthropic_complete(&server, AiProvider::Anthropic, None).await;
+
+        assert_eq!(text.as_deref(), Ok("ok"));
     }
 }

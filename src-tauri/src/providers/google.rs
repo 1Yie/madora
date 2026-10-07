@@ -402,4 +402,146 @@ mod tests {
         assert_eq!(config["temperature"], json!(0.5));
         assert_eq!(config["stopSequences"], json!(["X", "Y"]));
     }
+
+    // ─── end to end against a scripted local server ─────────────────
+
+    use crate::models::ai::{AiCompletionConfig, AiProvider, CompletionRequest};
+    use crate::prompt::PromptManager;
+    use crate::providers::test_support::{MockServer, ScriptedResponse};
+    use reqwest::Client;
+
+    fn e2e_config(server: &MockServer, provider: AiProvider, model: &str) -> AiCompletionConfig {
+        AiCompletionConfig {
+            api_key: "sk-test-key".into(),
+            api_url: Some(server.base_url.clone()),
+            model: Some(model.into()),
+            provider: Some(provider),
+            use_ssl: false,
+            ..Default::default()
+        }
+    }
+
+    fn e2e_request(suffix: Option<&str>) -> CompletionRequest {
+        CompletionRequest {
+            title: Some("Notes".into()),
+            prefix: "Hello, wor".into(),
+            suffix: suffix.map(str::to_string),
+        }
+    }
+
+    async fn google_complete(server: &MockServer, model: &str) -> Result<String, String> {
+        super::request_google_compatible_fim(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server, AiProvider::Google, model),
+            &e2e_request(Some("after")),
+        )
+        .await
+    }
+
+    async fn google_stream(server: &MockServer) -> (Result<String, String>, Vec<String>) {
+        let mut chunks = Vec::new();
+        let result = super::request_google_compatible_fim_stream(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server, AiProvider::Google, "gemini-2.5-flash"),
+            &e2e_request(None),
+            &mut |chunk| {
+                chunks.push(chunk);
+                Ok(())
+            },
+        )
+        .await;
+
+        (result, chunks)
+    }
+
+    const GENERATE_OK: &str =
+        r#"{"candidates":[{"content":{"parts":[{"text":"ld"},{"text":"!"}]}}]}"#;
+
+    #[tokio::test]
+    async fn google_puts_the_model_in_the_path_and_the_key_in_a_header() {
+        let server = MockServer::start(vec![ScriptedResponse::json(200, GENERATE_OK)]).await;
+
+        let text = google_complete(&server, "gemini-2.5-flash").await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        let sent = &server.requests()[0];
+        assert_eq!(sent.path, "/v1/models/gemini-2.5-flash:generateContent");
+        assert_eq!(sent.header("x-goog-api-key"), Some("sk-test-key"));
+        assert!(
+            !sent.path.contains("sk-test-key"),
+            "the key must not travel in the URL"
+        );
+        let body = sent.json();
+        assert_eq!(
+            body["generationConfig"]["responseMimeType"],
+            json!("text/plain")
+        );
+    }
+
+    #[tokio::test]
+    async fn google_skips_thought_parts() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"candidates":[{"content":{"parts":[{"text":"hidden reasoning","thought":true},{"text":"answer"}]}}]}"#,
+        )])
+        .await;
+
+        let text = google_complete(&server, "gemini-2.5-flash").await;
+
+        assert_eq!(text.as_deref(), Ok("answer"));
+    }
+
+    #[tokio::test]
+    async fn google_streams_through_the_sse_endpoint() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ld\"}]}}]}\r\n\r\n",
+            "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"!\"}]}}]}\r\n\r\n",
+        ])])
+        .await;
+
+        let (result, chunks) = google_stream(&server).await;
+
+        assert_eq!(result.as_deref(), Ok("ld!"));
+        assert_eq!(chunks, vec!["ld", "!"]);
+        assert_eq!(
+            server.requests()[0].path,
+            "/v1/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
+        );
+    }
+
+    #[tokio::test]
+    async fn google_error_payloads_and_http_errors_are_reported() {
+        let http = MockServer::start(vec![ScriptedResponse::json(
+            400,
+            r#"{"error":{"code":400,"message":"API key not valid.","status":"INVALID_ARGUMENT"}}"#,
+        )])
+        .await;
+        let error = google_complete(&http, "gemini-2.5-flash")
+            .await
+            .unwrap_err();
+        assert!(error.contains("API key not valid."), "{error}");
+
+        let in_stream = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"error\":{\"code\":500,\"message\":\"backend error\"}}\n\n",
+        ])])
+        .await;
+        let (result, _) = google_stream(&in_stream).await;
+        assert!(result.unwrap_err().contains("backend error"));
+    }
+
+    #[tokio::test]
+    async fn google_retries_a_transient_gateway_error() {
+        let server = MockServer::start(vec![
+            ScriptedResponse::json(502, r#"{"error":{"message":"bad gateway"}}"#),
+            ScriptedResponse::json(200, GENERATE_OK),
+        ])
+        .await;
+
+        let text = google_complete(&server, "gemini-2.5-flash").await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        assert_eq!(server.request_count(), 2);
+    }
 }

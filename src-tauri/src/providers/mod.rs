@@ -14,6 +14,9 @@ mod opencode_zen;
 mod zhipu;
 mod zhipu_coding;
 
+#[cfg(test)]
+pub(crate) mod test_support;
+
 use async_trait::async_trait;
 use reqwest::Client;
 

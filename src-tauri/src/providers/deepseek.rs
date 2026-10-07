@@ -289,4 +289,108 @@ mod tests {
         assert!(plain.get("stream").is_none());
         assert_eq!(streaming["stream"], json!(true));
     }
+
+    // ─── end to end against a scripted local server ─────────────────
+
+    use crate::prompt::PromptManager;
+    use crate::providers::test_support::{MockServer, ScriptedResponse};
+    use crate::providers::CompletionProvider;
+    use reqwest::Client;
+
+    fn e2e_config(server: &MockServer) -> AiCompletionConfig {
+        AiCompletionConfig {
+            api_key: "sk-test-key".into(),
+            api_url: Some(server.base_url.clone()),
+            model: Some("deepseek-test".into()),
+            provider: Some(AiProvider::DeepSeek),
+            use_ssl: false,
+            ..Default::default()
+        }
+    }
+
+    async fn deepseek_complete(server: &MockServer) -> Result<String, String> {
+        super::DeepSeekProvider
+            .request_fim_completion(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &e2e_config(server),
+                &request("Hello, wor".into(), Some("after".into())),
+            )
+            .await
+    }
+
+    async fn deepseek_stream(server: &MockServer) -> (Result<String, String>, Vec<String>) {
+        let mut chunks = Vec::new();
+        let result = super::DeepSeekProvider
+            .request_fim_completion_stream(
+                &Client::new(),
+                &PromptManager::from_user_root(None),
+                &e2e_config(server),
+                &request("Hello, wor".into(), None),
+                &mut |chunk| {
+                    chunks.push(chunk);
+                    Ok(())
+                },
+            )
+            .await;
+
+        (result, chunks)
+    }
+
+    #[tokio::test]
+    async fn deepseek_uses_the_beta_completions_endpoint_with_a_raw_prompt() {
+        let server = MockServer::start(vec![ScriptedResponse::json(
+            200,
+            r#"{"choices":[{"text":"ld!"}]}"#,
+        )])
+        .await;
+
+        let text = deepseek_complete(&server).await;
+
+        assert_eq!(text.as_deref(), Ok("ld!"));
+        let sent = &server.requests()[0];
+        assert_eq!(sent.path, "/beta/completions");
+        assert_eq!(sent.header("authorization"), Some("Bearer sk-test-key"));
+        let body = sent.json();
+        assert_eq!(body["prompt"], json!("Hello, wor"));
+        assert_eq!(body["suffix"], json!("after"));
+        assert_eq!(body["thinking"], json!({ "type": "disabled" }));
+    }
+
+    #[tokio::test]
+    async fn deepseek_streams_text_choices() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"choices\":[{\"text\":\"ld\"}]}\n\n",
+            "data: {\"choices\":[{\"text\":\"!\"}]}\n\n",
+            "data: [DONE]\n\n",
+        ])])
+        .await;
+
+        let (result, chunks) = deepseek_stream(&server).await;
+
+        assert_eq!(result.as_deref(), Ok("ld!"));
+        assert_eq!(chunks, vec!["ld", "!"]);
+        let body = server.requests()[0].json();
+        assert_eq!(body["stream"], json!(true));
+        assert!(body["suffix"].is_null());
+    }
+
+    #[tokio::test]
+    async fn deepseek_reports_http_and_stream_errors() {
+        let http = MockServer::start(vec![ScriptedResponse::json(
+            401,
+            r#"{"error":{"message":"Authentication Fails"}}"#,
+        )])
+        .await;
+        let error = deepseek_complete(&http).await.unwrap_err();
+        assert!(error.contains("Authentication Fails"), "{error}");
+        assert!(!error.contains("sk-test-key"));
+
+        let in_stream = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"error\":{\"message\":\"server busy\"}}\n\n",
+        ])])
+        .await;
+        let (result, _) = deepseek_stream(&in_stream).await;
+        assert!(result.unwrap_err().contains("server busy"));
+    }
 }
