@@ -90,10 +90,12 @@ pub async fn generate_completion_stream(
     request: CompletionRequest,
     request_id: Option<String>,
     channel: Channel<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let provider = config.provider.unwrap_or_default();
     config.api_key = require_api_key(provider).await?;
 
+    // Chunks arrive on `channel` as the provider produces them; the return
+    // value is the final post-processed text (`None` when cancelled).
     ai::generate_completion_stream(service.inner(), &config, &request, request_id, channel).await
 }
 

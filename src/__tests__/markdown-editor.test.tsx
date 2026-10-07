@@ -126,6 +126,7 @@ describe('MarkdownEditor', () => {
 		mocks.streamCompletion.mockImplementation(
 			async ({ onChunk }: { onChunk: (chunk: string) => void }) => {
 				onChunk('建议');
+				return '建议';
 			}
 		);
 

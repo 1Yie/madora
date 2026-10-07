@@ -58,14 +58,20 @@ export async function deleteAiApiKey(opts: {
 	return invoke('delete_ai_api_key', { provider: opts.provider });
 }
 
-/** Streams an AI completion via a Tauri Channel. */
+/**
+ * Streams an AI completion via a Tauri Channel.
+ *
+ * Resolves to the final, post-processed completion (code fences and a repeated
+ * prefix removed), which can differ from the concatenated chunks, or to `null`
+ * when the request was cancelled.
+ */
 export async function generateCompletionStream(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
 	requestId?: string;
 	channel: Channel<string>;
-}): Promise<void> {
-	return invoke('generate_completion_stream', {
+}): Promise<string | null> {
+	return invoke<string | null>('generate_completion_stream', {
 		config: opts.config,
 		request: opts.request,
 		requestId: opts.requestId ?? null,
@@ -74,19 +80,20 @@ export async function generateCompletionStream(opts: {
 }
 
 /** Cancels an in-flight streaming completion. Errors are caller-handled. */
-export async function cancelCompletionStream(
-	requestId: string
-): Promise<void> {
+export async function cancelCompletionStream(requestId: string): Promise<void> {
 	return invoke('cancel_completion_stream', { requestId });
 }
 
-/** Streams an AI completion via a callback, hiding the Tauri Channel creation. */
+/**
+ * Streams an AI completion via a callback, hiding the Tauri Channel creation.
+ * Resolves to the final completion text, or `null` when cancelled.
+ */
 export async function streamCompletion(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
 	requestId?: string;
 	onChunk: (chunk: string) => void;
-}): Promise<void> {
+}): Promise<string | null> {
 	const channel = new Channel<string>((chunk) => {
 		opts.onChunk(chunk);
 	});

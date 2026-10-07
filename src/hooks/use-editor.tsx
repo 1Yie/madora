@@ -1171,9 +1171,12 @@ export function useEditor({
 				tone: 'loading',
 			});
 			let completion = '';
+			// Set once the stream has settled, so a frame queued by the last chunk
+			// cannot redraw the preview after the final state has been applied.
+			let requestEnded = false;
 
 			try {
-				await streamCompletion({
+				const finalCompletion = await streamCompletion({
 					config: {
 						apiUrl: settings.apiUrl.trim().length > 0 ? settings.apiUrl : null,
 						customProtocol:
@@ -1201,6 +1204,7 @@ export function useEditor({
 							streamingRafPendingRef.current = false;
 
 							if (requestId !== requestSequenceRef.current) return;
+							if (requestEnded) return;
 
 							const currentView = viewRef.current;
 							if (!currentView) return;
@@ -1231,6 +1235,17 @@ export function useEditor({
 					});
 					return;
 				}
+
+				// The backend post-processes the text (unwraps a code fence, drops a
+				// repeated prefix) after the raw chunks have streamed, so its final
+				// answer replaces what was accumulated. `null` means it was
+				// cancelled and there is nothing to show.
+				requestEnded = true;
+				if (finalCompletion === null) {
+					clearCompletionPreview();
+					return;
+				}
+				completion = finalCompletion;
 
 				const currentView = viewRef.current;
 				if (!currentView) return;

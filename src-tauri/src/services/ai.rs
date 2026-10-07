@@ -542,131 +542,154 @@ fn finalize_completion(
     Ok(text)
 }
 
+/// How a completion request ended, from the caller's point of view.
+#[derive(Debug, PartialEq)]
+enum CompletionOutcome {
+    /// Final, post-processed text. Empty means "nothing worth showing".
+    Text(String),
+    /// The user cancelled; there is nothing to show and nothing to report.
+    Cancelled,
+}
+
+/// The shared leader/follower protocol behind both completion entry points.
+///
+/// A cache hit is returned at once. Otherwise the first caller for a cache key
+/// becomes the leader and runs `execute`; concurrent callers with the same key
+/// wait for the leader's published outcome instead of hitting the provider
+/// again. If a leader disappears (dropped or panicked), waiters retry as the
+/// new leader, up to `MAX_LEADER_ATTEMPTS` times.
+///
+/// `execute` produces the raw provider text. It is post-processed, cached and
+/// published here, so every caller of a key sees the same final text however
+/// it was delivered (streamed or not).
+async fn run_completion<E, Fut>(
+    service: &AiCompletionService,
+    cache_key: &CompletionCacheKey,
+    prefix: &str,
+    token: Option<&CancellationToken>,
+    mut execute: E,
+) -> Result<CompletionOutcome, String>
+where
+    E: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<String, String>>,
+{
+    if let Some(text) = get_cached_completion(service, cache_key) {
+        return Ok(CompletionOutcome::Text(text));
+    }
+
+    for _ in 0..MAX_LEADER_ATTEMPTS {
+        let (in_flight_request, is_leader) = service.in_flight.acquire(cache_key);
+
+        if !is_leader {
+            match wait_for_in_flight_completion_request(&in_flight_request, token).await {
+                WaiterOutcome::Completed(result) => return result.map(CompletionOutcome::Text),
+                WaiterOutcome::Cancelled => continue,
+                WaiterOutcome::CancelledByUser => return Ok(CompletionOutcome::Cancelled),
+                WaiterOutcome::TimedOut => return Err(in_flight_timeout_error()),
+            }
+        }
+
+        let _guard = InFlightLeaderGuard {
+            registry: service.in_flight.clone(),
+            cache_key: cache_key.clone(),
+            request: in_flight_request.clone(),
+        };
+
+        // Cancellation drops the provider future, which drops the underlying
+        // response stream and closes the connection.
+        let raw_result = match token {
+            Some(token) => tokio::select! {
+                biased;
+                _ = token.cancelled() => return Ok(CompletionOutcome::Cancelled),
+                result = execute() => result,
+            },
+            None => execute().await,
+        };
+
+        let result = finalize_completion(service, cache_key, raw_result, prefix);
+        in_flight_request.set_outcome(SharedCompletionOutcome::Completed(result.clone()));
+
+        return result.map(CompletionOutcome::Text);
+    }
+
+    Err(in_flight_timeout_error())
+}
+
 pub async fn generate_completion(
     service: &AiCompletionService,
     config: &AiCompletionConfig,
     request: &CompletionRequest,
 ) -> Result<CompletionResult, String> {
     let cache_key = build_completion_cache_key(service, config, request);
+    let provider = get_provider(resolve_provider(config));
 
-    if let Some(text) = get_cached_completion(service, &cache_key) {
-        return Ok(CompletionResult { text });
-    }
+    let outcome = run_completion(service, &cache_key, &request.prefix, None, || {
+        provider.request_fim_completion(&service.client, &service.prompt_manager, config, request)
+    })
+    .await?;
 
-    for _ in 0..MAX_LEADER_ATTEMPTS {
-        let (in_flight_request, is_leader) = service.in_flight.acquire(&cache_key);
-
-        if !is_leader {
-            match wait_for_in_flight_completion_request(&in_flight_request, None).await {
-                WaiterOutcome::Completed(Ok(text)) => return Ok(CompletionResult { text }),
-                WaiterOutcome::Completed(Err(error)) => return Err(error),
-                WaiterOutcome::Cancelled => continue,
-                WaiterOutcome::CancelledByUser => {
-                    return Ok(CompletionResult {
-                        text: String::new(),
-                    })
-                }
-                WaiterOutcome::TimedOut => return Err(in_flight_timeout_error()),
-            }
-        }
-
-        let _guard = InFlightLeaderGuard {
-            registry: service.in_flight.clone(),
-            cache_key: cache_key.clone(),
-            request: in_flight_request.clone(),
-        };
-
-        let provider = get_provider(resolve_provider(config));
-        let raw_result = provider
-            .request_fim_completion(&service.client, &service.prompt_manager, config, request)
-            .await;
-        let result = finalize_completion(service, &cache_key, raw_result, &request.prefix);
-        in_flight_request.set_outcome(SharedCompletionOutcome::Completed(result.clone()));
-
-        return result.map(|text| CompletionResult { text });
-    }
-
-    Err(in_flight_timeout_error())
+    Ok(CompletionResult {
+        text: match outcome {
+            CompletionOutcome::Text(text) => text,
+            CompletionOutcome::Cancelled => String::new(),
+        },
+    })
 }
 
+/// Streams a completion to `channel` chunk by chunk and returns the final,
+/// post-processed text.
+///
+/// The chunks are the provider's raw output as it arrives; the returned text
+/// is what gets cached and handed to every other caller of the same request,
+/// so the frontend should show it in place of what it accumulated. `None`
+/// means the request was cancelled.
 pub async fn generate_completion_stream(
     service: &AiCompletionService,
     config: &AiCompletionConfig,
     request: &CompletionRequest,
     request_id: Option<String>,
     channel: Channel<String>,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     let _cancellation_guard = request_id
         .as_deref()
         .map(|request_id| service.cancellations.register(request_id));
     let token = _cancellation_guard.as_ref().map(CancellationGuard::token);
 
     let cache_key = build_completion_cache_key(service, config, request);
+    let provider = get_provider(resolve_provider(config));
 
-    if let Some(text) = get_cached_completion(service, &cache_key) {
-        send_completion_chunk(&channel, text)?;
-        return Ok(());
-    }
+    // Only a leader streams. Cached and followed results arrive whole, as a
+    // single chunk, before the final text is returned.
+    let streamed = std::sync::atomic::AtomicBool::new(false);
 
-    for _ in 0..MAX_LEADER_ATTEMPTS {
-        let (in_flight_request, is_leader) = service.in_flight.acquire(&cache_key);
-
-        if !is_leader {
-            match wait_for_in_flight_completion_request(&in_flight_request, token.as_ref()).await {
-                WaiterOutcome::Completed(Ok(text)) => {
-                    send_completion_chunk(&channel, text)?;
-                    return Ok(());
-                }
-                WaiterOutcome::Completed(Err(error)) => return Err(error),
-                WaiterOutcome::Cancelled => continue,
-                WaiterOutcome::CancelledByUser => return Ok(()),
-                WaiterOutcome::TimedOut => return Err(in_flight_timeout_error()),
-            }
-        }
-
-        let _guard = InFlightLeaderGuard {
-            registry: service.in_flight.clone(),
-            cache_key: cache_key.clone(),
-            request: in_flight_request.clone(),
-        };
-
-        let provider = get_provider(resolve_provider(config));
-        let mut on_chunk = |chunk: String| send_completion_chunk(&channel, chunk);
-
-        // Cancellation drops the provider future, which drops the underlying
-        // response stream and closes the connection.
-        let raw_result = match token.as_ref() {
-            Some(token) => tokio::select! {
-                biased;
-                _ = token.cancelled() => return Ok(()),
-                result = provider.request_fim_completion_stream(
+    let outcome = run_completion(service, &cache_key, &request.prefix, token.as_ref(), || {
+        streamed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let channel = &channel;
+        async move {
+            let mut on_chunk = |chunk: String| send_completion_chunk(channel, chunk);
+            provider
+                .request_fim_completion_stream(
                     &service.client,
                     &service.prompt_manager,
                     config,
                     request,
                     &mut on_chunk,
-                ) => result,
-            },
-            None => {
-                provider
-                    .request_fim_completion_stream(
-                        &service.client,
-                        &service.prompt_manager,
-                        config,
-                        request,
-                        &mut on_chunk,
-                    )
-                    .await
+                )
+                .await
+        }
+    })
+    .await?;
+
+    match outcome {
+        CompletionOutcome::Cancelled => Ok(None),
+        CompletionOutcome::Text(text) => {
+            if !streamed.load(std::sync::atomic::Ordering::SeqCst) {
+                send_completion_chunk(&channel, text.clone())?;
             }
-        };
 
-        let result = finalize_completion(service, &cache_key, raw_result, &request.prefix);
-        in_flight_request.set_outcome(SharedCompletionOutcome::Completed(result.clone()));
-
-        return result.map(|_| ());
+            Ok(Some(text))
+        }
     }
-
-    Err(in_flight_timeout_error())
 }
 
 #[cfg(test)]
@@ -1123,5 +1146,221 @@ mod tests {
             assert_eq!(key.prefix, context.prefix, "{provider:?}");
             assert_eq!(key.suffix, context.suffix, "{provider:?}");
         }
+    }
+
+    // ─── run_completion (leader / follower protocol) ─────────────────
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    async fn run(
+        service: &AiCompletionService,
+        key: &CompletionCacheKey,
+        prefix: &str,
+        token: Option<&CancellationToken>,
+        calls: &AtomicUsize,
+        result: Result<String, String>,
+    ) -> Result<CompletionOutcome, String> {
+        run_completion(service, key, prefix, token, || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            let result = result.clone();
+            async move { result }
+        })
+        .await
+    }
+
+    #[tokio::test]
+    async fn run_completion_postprocesses_caches_and_serves_repeats_from_cache() {
+        let service = test_service();
+        let key = test_cache_key("run-cache");
+        let calls = AtomicUsize::new(0);
+
+        let first = run(
+            &service,
+            &key,
+            "",
+            None,
+            &calls,
+            Ok("```\nfinal text\n```".into()),
+        )
+        .await;
+        let second = run(&service, &key, "", None, &calls, Ok("ignored".into())).await;
+
+        assert_eq!(first, Ok(CompletionOutcome::Text("final text".into())));
+        assert_eq!(second, Ok(CompletionOutcome::Text("final text".into())));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "second call must hit the cache"
+        );
+        assert_eq!(service.in_flight.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn run_completion_does_not_cache_empty_or_failed_results() {
+        let service = test_service();
+        let key = test_cache_key("run-empty");
+        let calls = AtomicUsize::new(0);
+
+        let blank = run(&service, &key, "", None, &calls, Ok("  \n".into())).await;
+        let failed = run(&service, &key, "", None, &calls, Err("boom".into())).await;
+        let good = run(&service, &key, "", None, &calls, Ok("real".into())).await;
+
+        assert_eq!(blank, Ok(CompletionOutcome::Text(String::new())));
+        assert_eq!(failed, Err("boom".to_string()));
+        assert_eq!(good, Ok(CompletionOutcome::Text("real".into())));
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            3,
+            "nothing may be cached before `good`"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_completion_strips_a_prefix_the_model_repeated() {
+        let service = test_service();
+        let key = test_cache_key("run-dup");
+        let calls = AtomicUsize::new(0);
+
+        let outcome = run(
+            &service,
+            &key,
+            "the quick brown fox ",
+            None,
+            &calls,
+            Ok("the quick brown fox jumps".into()),
+        )
+        .await;
+
+        assert_eq!(outcome, Ok(CompletionOutcome::Text("jumps".into())));
+    }
+
+    #[tokio::test]
+    async fn concurrent_callers_share_one_provider_call_and_one_final_text() {
+        let service = std::sync::Arc::new(test_service());
+        let key = test_cache_key("run-shared");
+        let calls = std::sync::Arc::new(AtomicUsize::new(0));
+        let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+
+        let leader = {
+            let (service, key, calls, gate) =
+                (service.clone(), key.clone(), calls.clone(), gate.clone());
+            tokio::spawn(async move {
+                run_completion(&service, &key, "", None, || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    let gate = gate.clone();
+                    async move {
+                        gate.notified().await;
+                        Ok("```\nshared\n```".to_string())
+                    }
+                })
+                .await
+            })
+        };
+        // Let the leader register before the follower arrives.
+        while service.in_flight.len() == 0 {
+            tokio::task::yield_now().await;
+        }
+
+        let follower = {
+            let (service, key, calls) = (service.clone(), key.clone(), calls.clone());
+            tokio::spawn(async move {
+                run_completion(&service, &key, "", None, || {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    async { Ok("follower must not run".to_string()) }
+                })
+                .await
+            })
+        };
+        tokio::task::yield_now().await;
+        gate.notify_one();
+
+        let leader = leader.await.unwrap();
+        let follower = follower.await.unwrap();
+
+        assert_eq!(leader, Ok(CompletionOutcome::Text("shared".into())));
+        assert_eq!(follower, leader, "the follower sees the same final text");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(service.in_flight.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn cancelling_the_leader_drops_the_provider_call_and_frees_the_key() {
+        let service = test_service();
+        let key = test_cache_key("run-cancel");
+        let token = CancellationToken::new();
+        let dropped = std::sync::Arc::new(AtomicUsize::new(0));
+
+        struct OnDrop(std::sync::Arc<AtomicUsize>);
+        impl Drop for OnDrop {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+
+        let canceller = {
+            let token = token.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                token.cancel();
+            })
+        };
+
+        let outcome = run_completion(&service, &key, "", Some(&token), || {
+            let marker = OnDrop(dropped.clone());
+            async move {
+                let _marker = marker;
+                std::future::pending::<Result<String, String>>().await
+            }
+        })
+        .await;
+        canceller.await.unwrap();
+
+        assert_eq!(outcome, Ok(CompletionOutcome::Cancelled));
+        assert_eq!(
+            dropped.load(Ordering::SeqCst),
+            1,
+            "the in-progress provider future must be dropped so its connection closes"
+        );
+        assert_eq!(service.in_flight.len(), 0);
+        assert!(get_cached_completion(&service, &key).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_follower_returns_cancelled_without_touching_the_leader() {
+        let service = std::sync::Arc::new(test_service());
+        let key = test_cache_key("run-follower-cancel");
+        let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+
+        let leader = {
+            let (service, key, gate) = (service.clone(), key.clone(), gate.clone());
+            tokio::spawn(async move {
+                run_completion(&service, &key, "", None, || {
+                    let gate = gate.clone();
+                    async move {
+                        gate.notified().await;
+                        Ok("leader text".to_string())
+                    }
+                })
+                .await
+            })
+        };
+        while service.in_flight.len() == 0 {
+            tokio::task::yield_now().await;
+        }
+
+        let token = CancellationToken::new();
+        token.cancel();
+        let follower = run_completion(&service, &key, "", Some(&token), || async {
+            Ok("never".to_string())
+        })
+        .await;
+        gate.notify_one();
+
+        assert_eq!(follower, Ok(CompletionOutcome::Cancelled));
+        assert_eq!(
+            leader.await.unwrap(),
+            Ok(CompletionOutcome::Text("leader text".into())),
+            "cancelling a follower must not affect the leader"
+        );
     }
 }

@@ -65,12 +65,12 @@ describe('completion cancellation', () => {
 		mocks.streamCompletion.mockImplementationOnce(
 			(opts: { requestId?: string }) => {
 				firstRequestId = opts.requestId;
-				return new Promise<void>((resolve) => {
-					resolveFirst = resolve;
+				return new Promise<string | null>((resolve) => {
+					resolveFirst = () => resolve(null);
 				});
 			}
 		);
-		mocks.streamCompletion.mockResolvedValue(undefined);
+		mocks.streamCompletion.mockResolvedValue(null);
 
 		const onChange = vi.fn();
 		const viewRef = { current: null } as MutableRefObject<EditorView | null>;
@@ -110,6 +110,96 @@ describe('completion cancellation', () => {
 
 		act(() => {
 			resolveFirst?.();
+		});
+	});
+
+	async function typeAndWaitForRequest() {
+		const onChange = vi.fn();
+		const viewRef = { current: null } as MutableRefObject<EditorView | null>;
+		const { container } = render(
+			<EditorHarness onChange={onChange} viewRef={viewRef} value="" />
+		);
+
+		await waitFor(() => {
+			expect(viewRef.current).not.toBeNull();
+		});
+
+		const view = viewRef.current;
+		if (!view) {
+			throw new Error('EditorView was not initialized');
+		}
+
+		act(() => {
+			view.focus();
+			view.dispatch({
+				changes: { from: 0, insert: '你' },
+				selection: EditorSelection.cursor(1),
+			});
+		});
+
+		await waitFor(() => {
+			expect(mocks.streamCompletion).toHaveBeenCalledTimes(1);
+		});
+
+		return container;
+	}
+
+	it("shows the backend's final text instead of the raw streamed chunks", async () => {
+		mocks.streamCompletion.mockImplementation(
+			async ({ onChunk }: { onChunk: (chunk: string) => void }) => {
+				onChunk('```\n');
+				onChunk('清理后的建议');
+				onChunk('\n```');
+				return '清理后的建议';
+			}
+		);
+
+		const container = await typeAndWaitForRequest();
+
+		await waitFor(() => {
+			expect(container.querySelector('.cm-fim-preview')).toHaveTextContent(
+				'清理后的建议'
+			);
+		});
+		expect(
+			container.querySelector('.cm-fim-preview')?.textContent
+		).not.toContain('```');
+	});
+
+	it('drops the preview when the backend decides the completion is empty', async () => {
+		mocks.streamCompletion.mockImplementation(
+			async ({ onChunk }: { onChunk: (chunk: string) => void }) => {
+				onChunk('   ');
+				return '';
+			}
+		);
+
+		const container = await typeAndWaitForRequest();
+
+		await waitFor(() => {
+			expect(mocks.streamCompletion).toHaveBeenCalled();
+		});
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(container.querySelector('.cm-fim-preview')).toBeNull();
+	});
+
+	it('drops the preview when the backend reports the request was cancelled', async () => {
+		mocks.streamCompletion.mockImplementation(
+			async ({ onChunk }: { onChunk: (chunk: string) => void }) => {
+				onChunk('partial');
+				return null;
+			}
+		);
+
+		const container = await typeAndWaitForRequest();
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+		await waitFor(() => {
+			expect(container.querySelector('.cm-fim-preview')).toBeNull();
 		});
 	});
 });
