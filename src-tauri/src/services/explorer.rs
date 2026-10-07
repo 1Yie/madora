@@ -1629,9 +1629,17 @@ mod tests {
         let file = create_markdown_file(&linked, Some(&linked.join("sub")), "note").unwrap();
         let folder = create_workspace_directory(&linked, None, "dir").unwrap();
 
-        assert!(file.path.starts_with(linked.to_str().unwrap()), "{}", file.path);
+        assert!(
+            file.path.starts_with(linked.to_str().unwrap()),
+            "{}",
+            file.path
+        );
         assert_eq!(file.relative_path, "sub/note.md");
-        assert!(folder.path.starts_with(linked.to_str().unwrap()), "{}", folder.path);
+        assert!(
+            folder.path.starts_with(linked.to_str().unwrap()),
+            "{}",
+            folder.path
+        );
         assert_eq!(folder.relative_path, "dir");
     }
 
@@ -1648,7 +1656,11 @@ mod tests {
 
         let node = import_external_file(&linked, &linked.join("sub"), &source).unwrap();
 
-        assert!(node.path.starts_with(linked.to_str().unwrap()), "{}", node.path);
+        assert!(
+            node.path.starts_with(linked.to_str().unwrap()),
+            "{}",
+            node.path
+        );
         assert_eq!(node.relative_path, "sub/pic.png");
     }
 

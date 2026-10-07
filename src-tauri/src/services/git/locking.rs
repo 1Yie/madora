@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
+
+use crate::services::mutex::lock_unpoisoned;
 
 static REPO_LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<AsyncMutex<()>>>>> = OnceLock::new();
 
@@ -29,12 +31,6 @@ pub(crate) async fn acquire_repo_lock(root_path: &Path) -> RepoLockGuard {
 
 fn lock_registry() -> &'static Mutex<HashMap<PathBuf, Arc<AsyncMutex<()>>>> {
     REPO_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn lock_key(root_path: &Path) -> PathBuf {

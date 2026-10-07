@@ -37,6 +37,7 @@ use crate::models::sync_server::{
 };
 use crate::protocol::MadoraProtocolState;
 use crate::services::ai::{self, AiCompletionService};
+use crate::services::api_keys;
 use crate::services::explorer;
 use crate::services::madora_sync::{sha256_hex, MadoraSyncStore};
 use crate::services::paths;
@@ -772,19 +773,15 @@ fn is_within_root(root: &Path, path: &Path) -> bool {
         .is_ok_and(|relative| !paths::is_protected_path(relative))
 }
 
-/// Load an API key from secure storage. Mirrors the logic in
-/// `commands::ai::require_api_key` but without the in-process cache. The
-/// keyring call blocks, so it runs on the blocking pool.
+/// The desktop's key for a completion requested by a paired device.
+///
+/// The message is a wire-protocol string the phone shows, so it stays separate
+/// from the desktop wording in `api_keys::require_async`.
 async fn load_api_key(provider: AiProvider) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use crate::commands::secure_storage;
-        secure_storage::load_ai_api_key_sync(provider)?
-            .map(|key| key.trim().to_string())
-            .filter(|key| !key.is_empty())
-            .ok_or_else(|| "No API key configured on the desktop".to_string())
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    match api_keys::lookup_async(provider).await? {
+        Some(key) => Ok(key),
+        None => Err("No API key configured on the desktop".to_string()),
+    }
 }
 
 async fn send(

@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -9,6 +9,7 @@ use tauri::ipc::Channel;
 use tokio::{sync::Notify, time::timeout};
 use tokio_util::sync::CancellationToken;
 
+use super::mutex::lock_unpoisoned;
 use crate::i18n;
 
 use crate::{
@@ -282,12 +283,6 @@ impl AiCompletionService {
                 Client::new()
             })
     }
-}
-
-pub(crate) fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn cleanup_completion_cache(cache: &mut HashMap<CompletionCacheKey, CachedCompletion>) {

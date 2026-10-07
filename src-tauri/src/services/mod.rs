@@ -1,7 +1,9 @@
 pub mod ai;
+pub mod api_keys;
 pub mod explorer;
 pub mod git;
 pub mod madora_sync;
+pub(crate) mod mutex;
 pub mod paths;
 pub mod sync_server;
 pub mod webdav;

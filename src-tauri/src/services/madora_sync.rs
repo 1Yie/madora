@@ -10,8 +10,8 @@ use subtle::ConstantTimeEq;
 
 use crate::models::madora_sync::{
     MadoraSyncAiCompletionConfig, MadoraSyncConfig, MadoraSyncConnectionState,
-    MadoraSyncPairDeviceInput, MadoraSyncPairedDevice, MadoraSyncPairingCode,
-    MadoraSyncPairingQr, MadoraSyncSettingsInput,
+    MadoraSyncPairDeviceInput, MadoraSyncPairedDevice, MadoraSyncPairingCode, MadoraSyncPairingQr,
+    MadoraSyncSettingsInput,
 };
 
 const CONFIG_FILE_NAME: &str = "madora_sync_state.json";
@@ -216,10 +216,7 @@ impl MadoraSyncStore {
             return;
         };
 
-        let temp_path = app_data_dir.join(format!(
-            "{CONFIG_FILE_NAME}.tmp-{}",
-            std::process::id()
-        ));
+        let temp_path = app_data_dir.join(format!("{CONFIG_FILE_NAME}.tmp-{}", std::process::id()));
         if std::fs::write(&temp_path, json).is_err() {
             return;
         }
@@ -788,7 +785,10 @@ mod tests {
             .expect("initial pairing");
 
         assert_eq!(paired.auth_token, pairing_token);
-        assert_eq!(paired.device.token_hash, Some(sha256_hex(pairing_token.as_bytes())));
+        assert_eq!(
+            paired.device.token_hash,
+            Some(sha256_hex(pairing_token.as_bytes()))
+        );
         assert_eq!(paired.device.auth_token, None);
         assert_eq!(
             store
@@ -853,14 +853,7 @@ mod tests {
 
         let second = store.pair_device(pair_input("phone-2", None, None, Some(&issued.code)));
         assert!(second.is_err(), "the code must not work twice");
-        assert_eq!(
-            store
-                .get_config()
-                .expect("config")
-                .paired_devices
-                .len(),
-            1
-        );
+        assert_eq!(store.get_config().expect("config").paired_devices.len(), 1);
     }
 
     #[test]
@@ -873,10 +866,8 @@ mod tests {
         // global counter does.
         for index in 0..MAX_GLOBAL_FAILURES {
             let ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, index as u8 + 1));
-            let result = store.authenticate_device(
-                pair_input("attacker", None, None, Some("000000")),
-                ip,
-            );
+            let result =
+                store.authenticate_device(pair_input("attacker", None, None, Some("000000")), ip);
             assert!(result.is_err());
         }
 
@@ -887,8 +878,7 @@ mod tests {
         );
 
         // Original matching code no longer pairs because the ticket is gone.
-        let result =
-            store.pair_device(pair_input("phone-1", None, None, Some(&issued.code)));
+        let result = store.pair_device(pair_input("phone-1", None, None, Some(&issued.code)));
         assert!(result.is_err());
     }
 
@@ -900,17 +890,15 @@ mod tests {
         let ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 50));
 
         for _ in 0..MAX_FAILURES_PER_IP {
-            let _ = store
-                .authenticate_device(pair_input("attacker", None, None, Some("000000")), ip);
+            let _ =
+                store.authenticate_device(pair_input("attacker", None, None, Some("000000")), ip);
         }
 
         // Even correct credentials are rejected while the ban is active. Issue
         // a fresh code whose value we know, then hit the banned IP.
         let issued = store.issue_pairing_code().expect("pairing code");
-        let banned = store.authenticate_device(
-            pair_input("attacker", None, None, Some(&issued.code)),
-            ip,
-        );
+        let banned =
+            store.authenticate_device(pair_input("attacker", None, None, Some(&issued.code)), ip);
         assert!(banned.is_err());
     }
 
@@ -927,7 +915,9 @@ mod tests {
         assert!(limiter
             .check(ip, start + BAN_DURATION - StdDuration::from_secs(1))
             .is_err());
-        assert!(limiter.check(ip, start + BAN_DURATION + StdDuration::from_secs(1)).is_err());
+        assert!(limiter
+            .check(ip, start + BAN_DURATION + StdDuration::from_secs(1))
+            .is_err());
         assert!(limiter.check(ip, start + BAN_DURATION * 2).is_ok());
 
         limiter.record_success(ip);
@@ -990,7 +980,10 @@ mod tests {
             )
             .expect("legacy token still authenticates");
         assert_eq!(authenticated.device.id, "phone-1");
-        assert_eq!(authenticated.device.token_hash, Some(sha256_hex(b"plain-token")));
+        assert_eq!(
+            authenticated.device.token_hash,
+            Some(sha256_hex(b"plain-token"))
+        );
     }
 
     #[test]
@@ -1000,7 +993,11 @@ mod tests {
         std::fs::write(&path, "{ this is not json").unwrap();
 
         let store = MadoraSyncStore::new(temp_dir.path().to_path_buf());
-        assert!(store.get_config().expect("config").paired_devices.is_empty());
+        assert!(store
+            .get_config()
+            .expect("config")
+            .paired_devices
+            .is_empty());
 
         let backups: Vec<_> = std::fs::read_dir(temp_dir.path())
             .expect("read dir")
