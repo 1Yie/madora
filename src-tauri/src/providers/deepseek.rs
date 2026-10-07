@@ -13,12 +13,19 @@ use crate::{
             take_text_completion, TextCompletionResponse, MAX_COMPLETION_TOKENS,
             NON_STREAM_REQUEST_TIMEOUT, STOP_SEQUENCES,
         },
-        CompletionProvider,
+        default_api_url, default_model, resolve_api_url, CompletionProvider,
     },
 };
 
-const DEFAULT_API_URL: &str = "https://api.deepseek.com";
-const DEFAULT_MODEL: &str = "deepseek-v4-flash";
+/// Defaults live in `providers::default_*` so the request and the completion
+/// cache key can never resolve different values.
+fn default_model_name() -> &'static str {
+    default_model(AiProvider::DeepSeek).unwrap_or_default()
+}
+
+fn default_url() -> &'static str {
+    default_api_url(AiProvider::DeepSeek).unwrap_or_default()
+}
 
 pub struct DeepSeekProvider;
 
@@ -37,7 +44,7 @@ impl CompletionProvider for DeepSeekProvider {
     ) -> Result<String, String> {
         let api_key = resolve_api_key(config)?;
         let api_url = resolve_beta_api_url(config)?;
-        let model = resolve_model(config, DEFAULT_MODEL)?;
+        let model = resolve_model(config, default_model_name())?;
         let has_suffix = request
             .suffix
             .as_deref()
@@ -108,7 +115,7 @@ impl CompletionProvider for DeepSeekProvider {
     ) -> Result<String, String> {
         let api_key = resolve_api_key(config)?;
         let api_url = resolve_beta_api_url(config)?;
-        let model = resolve_model(config, DEFAULT_MODEL)?;
+        let model = resolve_model(config, default_model_name())?;
         let has_suffix = request
             .suffix
             .as_deref()
@@ -204,11 +211,33 @@ impl CompletionProvider for DeepSeekProvider {
 }
 
 fn resolve_beta_api_url(config: &AiCompletionConfig) -> Result<String, String> {
-    let base_url = crate::providers::resolve_api_url(config, DEFAULT_API_URL)?;
+    let base_url = resolve_api_url(config, default_url())?;
 
     if base_url.ends_with("/beta") {
         return Ok(base_url);
     }
 
     Ok(format!("{base_url}/beta"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The cache key resolves the model/URL through `providers::default_*`;
+    /// the request must use the very same values or a cached completion could
+    /// be served for a different model than the one actually asked.
+    #[test]
+    fn request_defaults_match_the_ones_the_cache_key_uses() {
+        let config = AiCompletionConfig::default();
+
+        assert_eq!(
+            resolve_model(&config, default_model(AiProvider::DeepSeek).unwrap()).unwrap(),
+            default_model(AiProvider::DeepSeek).unwrap()
+        );
+        assert_eq!(
+            resolve_beta_api_url(&config).unwrap(),
+            format!("{}/beta", default_api_url(AiProvider::DeepSeek).unwrap())
+        );
+    }
 }

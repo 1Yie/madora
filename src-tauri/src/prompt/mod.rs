@@ -1,4 +1,8 @@
-use std::{collections::HashMap, env, fs, path::PathBuf};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
 
@@ -6,7 +10,7 @@ use crate::models::ai::AiProvider;
 
 const DEFAULT_PROMPTS_DIR: &str = "prompts";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PromptProfile {
     Anthropic,
     Custom,
@@ -44,11 +48,18 @@ impl PromptProfile {
     ];
 }
 
+/// Templates are read once, when the manager is built. Rendering never
+/// touches the disk (it runs on every completion), and the revision is derived
+/// from exactly the text that will be rendered, so the completion cache can
+/// never mix output from two template versions. Editing a user template
+/// takes effect after a restart.
 #[derive(Clone)]
 pub struct PromptManager {
-    user_root: Option<PathBuf>,
-    revision: std::sync::OnceLock<u64>,
+    templates: HashMap<(PromptProfile, &'static str), String>,
+    revision: u64,
 }
+
+const TEMPLATE_NAMES: [&str; 2] = ["fim_system", "fim_user"];
 
 #[derive(Serialize)]
 pub struct PromptContext {
@@ -66,9 +77,27 @@ impl Default for PromptManager {
 
 impl PromptManager {
     pub fn new() -> Self {
+        Self::from_user_root(resolve_user_prompt_root().as_deref())
+    }
+
+    /// Builds a manager whose templates come from `user_root` where a user
+    /// override exists and from the compiled-in defaults otherwise.
+    pub(crate) fn from_user_root(user_root: Option<&Path>) -> Self {
+        let mut templates = HashMap::new();
+
+        for profile in PromptProfile::ALL {
+            for name in TEMPLATE_NAMES {
+                if let Some(template) = load_template(user_root, profile, name) {
+                    templates.insert((profile, name), template);
+                }
+            }
+        }
+
+        let revision = compute_template_revision(&templates);
+
         Self {
-            user_root: resolve_user_prompt_root(),
-            revision: std::sync::OnceLock::new(),
+            templates,
+            revision,
         }
     }
 
@@ -83,12 +112,12 @@ impl PromptManager {
         }
 
         let template = self
-            .load_prompt(profile, name)
+            .template(profile, name)
             .or_else(|| {
                 if profile == PromptProfile::Custom {
                     None
                 } else {
-                    self.load_prompt(PromptProfile::Custom, name)
+                    self.template(PromptProfile::Custom, name)
                 }
             })
             .ok_or_else(|| {
@@ -98,30 +127,38 @@ impl PromptManager {
                 )
             })?;
 
-        render_template(&template, context)
+        render_template(template, context)
     }
 
     /// Stable fingerprint of the effective prompt templates, used to keep the
-    /// completion cache from serving results rendered from older templates.
+    /// completion cache from serving results rendered from other templates.
     pub fn revision(&self) -> u64 {
-        *self
-            .revision
-            .get_or_init(|| compute_template_revision(self))
+        self.revision
     }
 
-    fn load_prompt(&self, profile: PromptProfile, name: &str) -> Option<String> {
-        let relative_path = PathBuf::from(profile.as_key()).join(format!("{name}.md"));
+    fn template(&self, profile: PromptProfile, name: &str) -> Option<&str> {
+        TEMPLATE_NAMES
+            .iter()
+            .find(|candidate| **candidate == name)
+            .and_then(|name| self.templates.get(&(profile, *name)))
+            .map(String::as_str)
+    }
+}
 
-        if let Some(user_root) = &self.user_root {
-            let prompt_path = user_root.join(&relative_path);
+fn load_template(user_root: Option<&Path>, profile: PromptProfile, name: &str) -> Option<String> {
+    if let Some(user_root) = user_root {
+        let prompt_path = user_root.join(profile.as_key()).join(format!("{name}.md"));
 
-            if prompt_path.exists() {
-                return fs::read_to_string(prompt_path).ok();
+        if prompt_path.exists() {
+            // A user override that exists but cannot be read is skipped, so
+            // the built-in template is used instead of sending an empty prompt.
+            if let Ok(template) = fs::read_to_string(&prompt_path) {
+                return Some(template);
             }
         }
-
-        default_prompt_template(profile, name).map(str::to_string)
     }
+
+    default_prompt_template(profile, name).map(str::to_string)
 }
 
 pub fn prompt_profile_for_openai_compatible(provider: AiProvider, model: &str) -> PromptProfile {
@@ -264,15 +301,16 @@ fn is_safe_template_name(name: &str) -> bool {
             .all(|value| value.is_ascii_alphanumeric() || value == '_' || value == '-')
 }
 
-fn compute_template_revision(manager: &PromptManager) -> u64 {
+fn compute_template_revision(templates: &HashMap<(PromptProfile, &'static str), String>) -> u64 {
     use std::hash::{Hash, Hasher};
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
 
+    // Fixed iteration order, so the value is the same on every start.
     for profile in PromptProfile::ALL {
-        for name in ["fim_system", "fim_user"] {
+        for name in TEMPLATE_NAMES {
             name.hash(&mut hasher);
-            manager.load_prompt(profile, name).hash(&mut hasher);
+            templates.get(&(profile, name)).hash(&mut hasher);
         }
     }
 
@@ -534,5 +572,90 @@ mod tests {
         assert!(!super::is_safe_template_name("a/b"));
         assert!(super::is_safe_template_name("fim_system"));
         assert!(super::is_safe_template_name("fim-user"));
+    }
+
+    // ─── template snapshot ───────────────────────────────────────
+
+    fn write_override(root: &std::path::Path, profile: &str, name: &str, body: &str) {
+        let dir = root.join(profile);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(format!("{name}.md")), body).unwrap();
+    }
+
+    #[test]
+    fn user_override_replaces_the_builtin_template() {
+        let dir = tempfile::tempdir().unwrap();
+        write_override(dir.path(), "openai", "fim_user", "custom {{prefix}}");
+        let manager = super::PromptManager::from_user_root(Some(dir.path()));
+
+        let rendered = manager
+            .render_prompt(PromptProfile::OpenAi, "fim_user", &context("HELLO", ""))
+            .unwrap();
+
+        assert_eq!(rendered, "custom HELLO");
+    }
+
+    #[test]
+    fn revision_changes_with_template_content_and_is_stable_otherwise() {
+        let plain = super::PromptManager::from_user_root(None);
+        let again = super::PromptManager::from_user_root(None);
+        assert_eq!(plain.revision(), again.revision());
+
+        let dir = tempfile::tempdir().unwrap();
+        write_override(dir.path(), "kimi", "fim_system", "different system prompt");
+        let overridden = super::PromptManager::from_user_root(Some(dir.path()));
+        assert_ne!(plain.revision(), overridden.revision());
+    }
+
+    #[test]
+    fn rendering_does_not_reread_the_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        write_override(dir.path(), "openai", "fim_user", "v1 {{prefix}}");
+        let manager = super::PromptManager::from_user_root(Some(dir.path()));
+        let before = manager.revision();
+
+        // An edit made while the app runs is not picked up: the snapshot and
+        // its revision stay consistent with each other.
+        write_override(dir.path(), "openai", "fim_user", "v2 {{prefix}}");
+        let rendered = manager
+            .render_prompt(PromptProfile::OpenAi, "fim_user", &context("X", ""))
+            .unwrap();
+
+        assert_eq!(rendered, "v1 X");
+        assert_eq!(manager.revision(), before);
+    }
+
+    #[test]
+    fn unreadable_override_falls_back_to_the_builtin_template() {
+        let dir = tempfile::tempdir().unwrap();
+        // A directory where the file should be makes the read fail.
+        std::fs::create_dir_all(dir.path().join("openai/fim_user.md")).unwrap();
+        let manager = super::PromptManager::from_user_root(Some(dir.path()));
+
+        let rendered = manager
+            .render_prompt(PromptProfile::OpenAi, "fim_user", &context("P", "S"))
+            .unwrap();
+
+        assert!(
+            rendered.contains('P'),
+            "built-in template should render: {rendered}"
+        );
+        assert!(!rendered.is_empty());
+    }
+
+    #[test]
+    fn every_profile_has_both_builtin_templates() {
+        let manager = super::PromptManager::from_user_root(None);
+
+        for profile in PromptProfile::ALL {
+            for name in super::TEMPLATE_NAMES {
+                assert!(
+                    manager
+                        .render_prompt(profile, name, &context("p", "s"))
+                        .is_ok(),
+                    "{profile:?}/{name} is missing"
+                );
+            }
+        }
     }
 }

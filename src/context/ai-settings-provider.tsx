@@ -130,7 +130,7 @@ const PROVIDERS: ProviderDefinition[] = [
 	},
 	{
 		defaultApiUrl: 'https://opencode.ai/zen',
-		defaultModel: 'claude-sonnet-4.6',
+		defaultModel: 'claude-sonnet-4-6',
 		key: 'opencode-zen',
 		label: 'OpenCode Zen',
 	},
