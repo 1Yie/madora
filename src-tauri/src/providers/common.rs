@@ -1,13 +1,14 @@
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use reqwest::{Response, Url};
+use reqwest::{RequestBuilder, Response, Url};
 use serde::{de::DeserializeOwned, Deserialize};
 
+use super::{default_model, resolve_endpoint};
 use crate::{
     i18n,
-    models::ai::{AiCompletionConfig, CompletionRequest},
-    prompt::PromptContext,
+    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
+    prompt::{PromptContext, PromptManager, PromptProfile},
 };
 
 pub const MAX_COMPLETION_TOKENS: usize = 512;
@@ -454,6 +455,226 @@ pub fn build_prompt_context(request: &CompletionRequest) -> PromptContext {
         suffix_hint,
         title,
     }
+}
+
+/// Which wording and timeout policy a request follows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompletionKind {
+    /// The whole completion arrives as one JSON body.
+    Whole,
+    /// The completion arrives as server-sent events.
+    Stream,
+}
+
+impl CompletionKind {
+    fn request_failed_key(self) -> &'static str {
+        match self {
+            Self::Whole => "ai.provider.request_failed",
+            Self::Stream => "ai.provider.request_stream_failed",
+        }
+    }
+
+    fn api_error_key(self) -> &'static str {
+        match self {
+            Self::Whole => "ai.provider.api_error",
+            Self::Stream => "ai.provider.stream_api_error",
+        }
+    }
+
+    fn parse_failed_key(self) -> &'static str {
+        match self {
+            Self::Whole => "ai.provider.parse_response_failed",
+            Self::Stream => "ai.provider.parse_stream_response_failed",
+        }
+    }
+}
+
+/// The connection settings for one completion: everything that is the same for
+/// every provider, with the provider's own defaults already applied.
+pub struct ResolvedConnection {
+    pub provider: AiProvider,
+    pub api_key: String,
+    pub api_url: String,
+    pub model: String,
+    pub params: CompletionParams,
+}
+
+impl ResolvedConnection {
+    /// Resolves the key, endpoint, model and sampling parameters.
+    ///
+    /// Defaults come from `providers::default_*` / `providers::resolve_endpoint`,
+    /// the same helpers the completion cache key uses, so a request and its
+    /// cache entry can never disagree about what was asked for.
+    pub fn resolve(
+        config: &AiCompletionConfig,
+        fallback_provider: AiProvider,
+        request: &CompletionRequest,
+        open_ended_stop: OpenEndedStop,
+    ) -> Result<Self, String> {
+        let provider = config.provider.unwrap_or(fallback_provider);
+
+        Ok(Self {
+            provider,
+            api_key: resolve_api_key(config)?.to_string(),
+            api_url: resolve_endpoint(provider, config)?,
+            model: resolve_model(config, default_model(provider).unwrap_or_default())?.to_string(),
+            params: CompletionParams::for_request(request, open_ended_stop),
+        })
+    }
+}
+
+/// A resolved connection plus the two FIM prompts rendered for it.
+pub struct PreparedCompletion {
+    pub connection: ResolvedConnection,
+    pub system_prompt: String,
+    pub user_prompt: String,
+}
+
+impl PreparedCompletion {
+    pub fn prepare(
+        prompt_manager: &PromptManager,
+        config: &AiCompletionConfig,
+        request: &CompletionRequest,
+        profile_for: fn(AiProvider, &str) -> PromptProfile,
+        fallback_provider: AiProvider,
+        open_ended_stop: OpenEndedStop,
+    ) -> Result<Self, String> {
+        let connection =
+            ResolvedConnection::resolve(config, fallback_provider, request, open_ended_stop)?;
+        let profile = profile_for(connection.provider, &connection.model);
+        let context = build_prompt_context(request);
+        let system_prompt = prompt_manager.render_prompt(profile, "fim_system", &context)?;
+        let user_prompt = prompt_manager.render_prompt(profile, "fim_user", &context)?;
+
+        Ok(Self {
+            connection,
+            system_prompt,
+            user_prompt,
+        })
+    }
+}
+
+/// Sends a request and turns any failure into a user-facing error.
+///
+/// Shared by every provider so retries, the whole-request timeout, the status
+/// check and body summarising are written once: `build` is the only
+/// provider-specific part (endpoint, auth header, payload).
+pub async fn send_request<F>(
+    kind: CompletionKind,
+    provider: AiProvider,
+    mut build: F,
+) -> Result<Response, String>
+where
+    F: FnMut() -> RequestBuilder,
+{
+    let response = send_with_status_retries(|| {
+        let request = build();
+
+        // Streaming is bounded by the client's connect/read timeouts; a
+        // non-streaming request gets a wall-clock cap because nothing is
+        // delivered until it finishes.
+        if kind == CompletionKind::Whole {
+            request.timeout(NON_STREAM_REQUEST_TIMEOUT)
+        } else {
+            request
+        }
+    })
+    .await
+    .map_err(|error| {
+        i18n::tf(
+            kind.request_failed_key(),
+            &[
+                ("provider", provider.display_name()),
+                ("error", &error.to_string()),
+            ],
+        )
+    })?;
+
+    if response.status().is_success() {
+        return Ok(response);
+    }
+
+    let status = response.status();
+    let body = read_error_body(response).await;
+
+    Err(i18n::tf(
+        kind.api_error_key(),
+        &[
+            ("provider", provider.display_name()),
+            ("status", &status.as_u16().to_string()),
+            ("body", &summarize_error_body(&body)),
+        ],
+    ))
+}
+
+/// Parses one SSE event into a provider payload.
+pub fn parse_stream_event<T: DeserializeOwned>(
+    provider: AiProvider,
+    event: &SseEvent,
+) -> Result<T, String> {
+    serde_json::from_str::<T>(&event.data).map_err(|error| {
+        i18n::tf(
+            CompletionKind::Stream.parse_failed_key(),
+            &[
+                ("provider", provider.display_name()),
+                ("error", &error.to_string()),
+            ],
+        )
+    })
+}
+
+/// Reads a streaming response, collecting the completion while forwarding each
+/// piece to `on_chunk`.
+///
+/// `extract` is the only provider-specific part: it turns one event into the
+/// next piece of text (or `None` for events that carry no text). It also
+/// receives the text collected so far, which some APIs need to avoid emitting
+/// the same content twice. Stop markers, upstream error events, empty pieces
+/// and the accumulation are handled here for every provider.
+pub async fn stream_completion<F>(
+    kind: CompletionKind,
+    provider: AiProvider,
+    response: Response,
+    mut extract: F,
+    on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
+) -> Result<String, String>
+where
+    F: FnMut(&SseEvent, &str) -> Result<Option<String>, String>,
+{
+    let mut completion = String::new();
+
+    stream_sse_response(response, |event| {
+        if event.data == "[DONE]" || event.data.trim().is_empty() {
+            return Ok(());
+        }
+
+        // A provider may report a failure inside an otherwise successful
+        // stream; treat it as a real error instead of returning a short answer.
+        if let Some(message) = detect_error_payload(&event.data) {
+            return Err(i18n::tf(
+                kind.api_error_key(),
+                &[
+                    ("provider", provider.display_name()),
+                    ("status", "200"),
+                    ("body", &message),
+                ],
+            ));
+        }
+
+        let Some(chunk) = extract(&event, &completion)? else {
+            return Ok(());
+        };
+
+        if chunk.is_empty() {
+            return Ok(());
+        }
+
+        completion.push_str(&chunk);
+        on_chunk(chunk)
+    })
+    .await?;
+
+    Ok(completion)
 }
 
 pub fn take_text_completion(payload: TextCompletionResponse) -> String {

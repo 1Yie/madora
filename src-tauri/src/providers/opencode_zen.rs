@@ -4,20 +4,18 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_openai_compatible, PromptManager},
     providers::{
         anthropic::{request_anthropic_compatible_fim, request_anthropic_compatible_fim_stream},
         common::{
-            build_prompt_context, detect_error_payload, join_url, parse_success_json,
-            read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
-            summarize_error_body, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
+            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+            CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
         },
-        default_api_url, default_model,
+        default_model,
         google::{request_google_compatible_fim, request_google_compatible_fim_stream},
         openai::{request_openai_compatible_fim, request_openai_compatible_fim_stream},
-        resolve_api_url, resolve_model, CompletionProvider,
+        resolve_model, CompletionProvider,
     },
 };
 
@@ -200,50 +198,34 @@ async fn request_openai_responses_fim(
     config: &AiCompletionConfig,
     request: &CompletionRequest,
 ) -> Result<String, String> {
-    let provider = config.provider.unwrap_or(AiProvider::OpenCodeZen);
-    let api_key = resolve_api_key(config)?;
-    let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
-    let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
-    let prompt_profile = prompt_profile_for_openai_compatible(provider, model);
-    let prompt_context = build_prompt_context(request);
-    let system_prompt =
-        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
+    let PreparedCompletion {
+        connection,
+        system_prompt,
+        user_prompt,
+    } = PreparedCompletion::prepare(
+        prompt_manager,
+        config,
+        request,
+        prompt_profile_for_openai_compatible,
+        AiProvider::OpenCodeZen,
+        OpenEndedStop::Structural,
+    )?;
+    let provider = connection.provider;
+    let payload = build_responses_payload(
+        &connection.model,
+        system_prompt,
+        user_prompt,
+        connection.params,
+        false,
+    );
 
-    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
-
-    let payload = build_responses_payload(model, system_prompt, user_prompt, params, false);
-
-    let response = send_with_status_retries(|| {
+    let response = send_request(CompletionKind::Whole, provider, || {
         client
-            .post(join_url(&api_url, "/v1/responses"))
-            .bearer_auth(api_key)
-            .timeout(NON_STREAM_REQUEST_TIMEOUT)
+            .post(join_url(&connection.api_url, "/v1/responses"))
+            .bearer_auth(&connection.api_key)
             .json(&payload)
     })
-    .await
-    .map_err(|error| {
-        let err = error.to_string();
-        i18n::tf(
-            "ai.provider.request_failed",
-            &[("provider", provider.display_name()), ("error", &err)],
-        )
-    })?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = read_error_body(response).await;
-
-        let status_str = status.as_u16().to_string();
-        return Err(i18n::tf(
-            "ai.provider.api_error",
-            &[
-                ("provider", provider.display_name()),
-                ("status", &status_str),
-                ("body", &summarize_error_body(&body)),
-            ],
-        ));
-    }
+    .await?;
 
     let payload =
         parse_success_json::<ResponsesApiResponse>(provider.display_name(), response).await?;
@@ -258,86 +240,50 @@ async fn request_openai_responses_fim_stream(
     request: &CompletionRequest,
     on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
 ) -> Result<String, String> {
-    let provider = config.provider.unwrap_or(AiProvider::OpenCodeZen);
-    let api_key = resolve_api_key(config)?;
-    let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
-    let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
-    let prompt_profile = prompt_profile_for_openai_compatible(provider, model);
-    let prompt_context = build_prompt_context(request);
-    let system_prompt =
-        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
+    let PreparedCompletion {
+        connection,
+        system_prompt,
+        user_prompt,
+    } = PreparedCompletion::prepare(
+        prompt_manager,
+        config,
+        request,
+        prompt_profile_for_openai_compatible,
+        AiProvider::OpenCodeZen,
+        OpenEndedStop::Structural,
+    )?;
+    let provider = connection.provider;
+    let payload = build_responses_payload(
+        &connection.model,
+        system_prompt,
+        user_prompt,
+        connection.params,
+        true,
+    );
 
-    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
-
-    let payload = build_responses_payload(model, system_prompt, user_prompt, params, true);
-
-    let response = send_with_status_retries(|| {
+    let response = send_request(CompletionKind::Stream, provider, || {
         client
-            .post(join_url(&api_url, "/v1/responses"))
-            .bearer_auth(api_key)
+            .post(join_url(&connection.api_url, "/v1/responses"))
+            .bearer_auth(&connection.api_key)
             .json(&payload)
-    })
-    .await
-    .map_err(|error| {
-        let err = error.to_string();
-        i18n::tf(
-            "ai.provider.request_stream_failed",
-            &[("provider", provider.display_name()), ("error", &err)],
-        )
-    })?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = read_error_body(response).await;
-
-        let status_str = status.as_u16().to_string();
-        return Err(i18n::tf(
-            "ai.provider.stream_api_error",
-            &[
-                ("provider", provider.display_name()),
-                ("status", &status_str),
-                ("body", &summarize_error_body(&body)),
-            ],
-        ));
-    }
-
-    let mut completion = String::new();
-    stream_sse_response(response, |event| {
-        if event.data == "[DONE]" || event.data.trim().is_empty() {
-            return Ok(());
-        }
-
-        if let Some(message) = detect_error_payload(&event.data) {
-            return Err(i18n::tf(
-                "ai.provider.stream_api_error",
-                &[
-                    ("provider", provider.display_name()),
-                    ("status", "200"),
-                    ("body", &message),
-                ],
-            ));
-        }
-
-        let payload =
-            serde_json::from_str::<ResponsesApiStreamEvent>(&event.data).map_err(|error| {
-                let err = error.to_string();
-                i18n::tf(
-                    "ai.provider.parse_stream_response_failed",
-                    &[("provider", provider.display_name()), ("error", &err)],
-                )
-            })?;
-        let chunk = take_responses_stream_text(payload, completion.is_empty());
-        if chunk.is_empty() {
-            return Ok(());
-        }
-
-        completion.push_str(&chunk);
-        on_chunk(chunk)
     })
     .await?;
 
-    Ok(completion)
+    stream_completion(
+        CompletionKind::Stream,
+        provider,
+        response,
+        |event, accumulated| {
+            let payload = parse_stream_event::<ResponsesApiStreamEvent>(provider, event)?;
+            // Only fall back to the completed event's full text when nothing
+            // streamed, or the answer would be emitted twice.
+            let chunk = take_responses_stream_text(payload, accumulated.is_empty());
+
+            Ok(Some(chunk).filter(|text| !text.is_empty()))
+        },
+        on_chunk,
+    )
+    .await
 }
 
 fn build_responses_payload(

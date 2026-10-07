@@ -3,30 +3,18 @@ use reqwest::Client;
 use serde_json::json;
 
 use crate::{
-    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::PromptManager,
     providers::{
         build_prompt_context,
         common::{
-            detect_error_payload, join_url, parse_success_json, read_error_body, resolve_api_key,
-            resolve_model, send_with_status_retries, stream_sse_response, summarize_error_body,
-            take_text_completion, CompletionParams, OpenEndedStop, TextCompletionResponse,
-            NON_STREAM_REQUEST_TIMEOUT,
+            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+            take_text_completion, CompletionKind, CompletionParams, OpenEndedStop,
+            ResolvedConnection, TextCompletionResponse,
         },
-        default_api_url, default_model, resolve_api_url, CompletionProvider,
+        CompletionProvider,
     },
 };
-
-/// Defaults live in `providers::default_*` so the request and the completion
-/// cache key can never resolve different values.
-fn default_model_name() -> &'static str {
-    default_model(AiProvider::DeepSeek).unwrap_or_default()
-}
-
-fn default_url() -> &'static str {
-    default_api_url(AiProvider::DeepSeek).unwrap_or_default()
-}
 
 pub struct DeepSeekProvider;
 
@@ -43,43 +31,25 @@ impl CompletionProvider for DeepSeekProvider {
         config: &AiCompletionConfig,
         request: &CompletionRequest,
     ) -> Result<String, String> {
-        let api_key = resolve_api_key(config)?;
-        let api_url = resolve_beta_api_url(config)?;
-        let model = resolve_model(config, default_model_name())?;
-        let payload = build_payload(model, request, false);
+        let connection = ResolvedConnection::resolve(
+            config,
+            AiProvider::DeepSeek,
+            request,
+            OpenEndedStop::Sentence,
+        )?;
+        let provider = connection.provider;
+        let payload = build_payload(&connection.model, request, connection.params, false);
 
-        let response = send_with_status_retries(|| {
+        let response = send_request(CompletionKind::Whole, provider, || {
             client
-                .post(join_url(&api_url, "/completions"))
-                .bearer_auth(api_key)
-                .timeout(NON_STREAM_REQUEST_TIMEOUT)
+                .post(join_url(&connection.api_url, "/completions"))
+                .bearer_auth(&connection.api_key)
                 .json(&payload)
         })
-        .await
-        .map_err(|error| {
-            let err = error.to_string();
-            i18n::tf(
-                "ai.provider.request_failed",
-                &[("provider", "DeepSeek"), ("error", &err)],
-            )
-        })?;
+        .await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = read_error_body(response).await;
-
-            let status_str = status.as_u16().to_string();
-            return Err(i18n::tf(
-                "ai.provider.api_error",
-                &[
-                    ("provider", "DeepSeek"),
-                    ("status", &status_str),
-                    ("body", &summarize_error_body(&body)),
-                ],
-            ));
-        }
-
-        let payload = parse_success_json::<TextCompletionResponse>("DeepSeek", response).await?;
+        let payload =
+            parse_success_json::<TextCompletionResponse>(provider.display_name(), response).await?;
 
         Ok(take_text_completion(payload))
     }
@@ -92,77 +62,35 @@ impl CompletionProvider for DeepSeekProvider {
         request: &CompletionRequest,
         on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
     ) -> Result<String, String> {
-        let api_key = resolve_api_key(config)?;
-        let api_url = resolve_beta_api_url(config)?;
-        let model = resolve_model(config, default_model_name())?;
-        let payload = build_payload(model, request, true);
+        let connection = ResolvedConnection::resolve(
+            config,
+            AiProvider::DeepSeek,
+            request,
+            OpenEndedStop::Sentence,
+        )?;
+        let provider = connection.provider;
+        let payload = build_payload(&connection.model, request, connection.params, true);
 
-        let response = send_with_status_retries(|| {
+        let response = send_request(CompletionKind::Stream, provider, || {
             client
-                .post(join_url(&api_url, "/completions"))
-                .bearer_auth(api_key)
+                .post(join_url(&connection.api_url, "/completions"))
+                .bearer_auth(&connection.api_key)
                 .json(&payload)
-        })
-        .await
-        .map_err(|error| {
-            let err = error.to_string();
-            i18n::tf(
-                "ai.provider.request_stream_failed",
-                &[("provider", "DeepSeek"), ("error", &err)],
-            )
-        })?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = read_error_body(response).await;
-
-            let status_str = status.as_u16().to_string();
-            return Err(i18n::tf(
-                "ai.provider.stream_api_error",
-                &[
-                    ("provider", "DeepSeek"),
-                    ("status", &status_str),
-                    ("body", &summarize_error_body(&body)),
-                ],
-            ));
-        }
-
-        let mut completion = String::new();
-        stream_sse_response(response, |event| {
-            if event.data == "[DONE]" {
-                return Ok(());
-            }
-
-            if let Some(message) = detect_error_payload(&event.data) {
-                return Err(i18n::tf(
-                    "ai.provider.stream_api_error",
-                    &[
-                        ("provider", "DeepSeek"),
-                        ("status", "200"),
-                        ("body", &message),
-                    ],
-                ));
-            }
-
-            let payload =
-                serde_json::from_str::<TextCompletionResponse>(&event.data).map_err(|error| {
-                    let err = error.to_string();
-                    i18n::tf(
-                        "ai.provider.parse_stream_response_failed",
-                        &[("provider", "DeepSeek"), ("error", &err)],
-                    )
-                })?;
-            let chunk = take_text_completion(payload);
-            if chunk.is_empty() {
-                return Ok(());
-            }
-
-            completion.push_str(&chunk);
-            on_chunk(chunk)
         })
         .await?;
 
-        Ok(completion)
+        stream_completion(
+            CompletionKind::Stream,
+            provider,
+            response,
+            |event, _accumulated| {
+                let payload = parse_stream_event::<TextCompletionResponse>(provider, event)?;
+
+                Ok(Some(take_text_completion(payload)).filter(|text| !text.is_empty()))
+            },
+            on_chunk,
+        )
+        .await
     }
 }
 
@@ -171,8 +99,12 @@ impl CompletionProvider for DeepSeekProvider {
 /// The text comes from the same bounded `build_prompt_context` every other
 /// provider uses, so the completion cache key (derived from it too) always
 /// describes what was actually sent.
-fn build_payload(model: &str, request: &CompletionRequest, stream: bool) -> serde_json::Value {
-    let params = CompletionParams::for_request(request, OpenEndedStop::Sentence);
+fn build_payload(
+    model: &str,
+    request: &CompletionRequest,
+    params: CompletionParams,
+    stream: bool,
+) -> serde_json::Value {
     let context = build_prompt_context(request);
     let suffix = (!context.suffix.is_empty()).then_some(context.suffix.as_str());
 
@@ -195,35 +127,47 @@ fn build_payload(model: &str, request: &CompletionRequest, stream: bool) -> serd
     payload
 }
 
-fn resolve_beta_api_url(config: &AiCompletionConfig) -> Result<String, String> {
-    let base_url = resolve_api_url(config, default_url())?;
-
-    if base_url.ends_with("/beta") {
-        return Ok(base_url);
-    }
-
-    Ok(format!("{base_url}/beta"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The cache key resolves the model/URL through `providers::default_*`;
-    /// the request must use the very same values or a cached completion could
-    /// be served for a different model than the one actually asked.
+    use crate::providers::{default_model, resolve_endpoint};
+
+    /// The cache key resolves the model and endpoint through
+    /// `providers::default_*` / `providers::resolve_endpoint`; the request must
+    /// use the very same values or a cached completion could be served for a
+    /// different model or endpoint than the one actually asked.
     #[test]
-    fn request_defaults_match_the_ones_the_cache_key_uses() {
-        let config = AiCompletionConfig::default();
+    fn request_connection_matches_the_ones_the_cache_key_uses() {
+        let config = AiCompletionConfig {
+            api_key: "sk-test".into(),
+            ..Default::default()
+        };
+        let request = request("prefix".into(), Some("suffix".into()));
+
+        let connection = ResolvedConnection::resolve(
+            &config,
+            AiProvider::DeepSeek,
+            &request,
+            OpenEndedStop::Sentence,
+        )
+        .unwrap();
 
         assert_eq!(
-            resolve_model(&config, default_model(AiProvider::DeepSeek).unwrap()).unwrap(),
+            connection.model,
             default_model(AiProvider::DeepSeek).unwrap()
         );
         assert_eq!(
-            resolve_beta_api_url(&config).unwrap(),
-            format!("{}/beta", default_api_url(AiProvider::DeepSeek).unwrap())
+            connection.api_url,
+            resolve_endpoint(AiProvider::DeepSeek, &config).unwrap()
         );
+        assert!(connection.api_url.ends_with("/beta"));
+    }
+
+    fn payload_for(request: &CompletionRequest, stream: bool) -> serde_json::Value {
+        let params = CompletionParams::for_request(request, OpenEndedStop::Sentence);
+
+        build_payload("m", request, params, stream)
     }
 
     use crate::providers::common::{
@@ -243,7 +187,7 @@ mod tests {
         let long_prefix = format!("{}{}", "H".repeat(500), "p".repeat(MAX_CHAT_PREFIX_CHARS));
         let long_suffix = format!("{}{}", "s".repeat(MAX_CHAT_SUFFIX_CHARS), "T".repeat(500));
 
-        let payload = build_payload("m", &request(long_prefix, Some(long_suffix)), false);
+        let payload = payload_for(&request(long_prefix, Some(long_suffix)), false);
 
         let prompt = payload["prompt"].as_str().unwrap();
         let suffix = payload["suffix"].as_str().unwrap();
@@ -262,7 +206,7 @@ mod tests {
     #[test]
     fn payload_omits_an_empty_suffix_and_stops_at_sentence_ends() {
         for suffix in [None, Some(String::new())] {
-            let payload = build_payload("m", &request("hello".into(), suffix), false);
+            let payload = payload_for(&request("hello".into(), suffix), false);
 
             assert!(payload["suffix"].is_null());
             assert_eq!(payload["max_tokens"], json!(MAX_OPEN_ENDED_TOKENS));
@@ -272,7 +216,7 @@ mod tests {
 
     #[test]
     fn payload_with_a_suffix_uses_the_shared_budget_and_stops() {
-        let payload = build_payload("m", &request("a".into(), Some("b".into())), false);
+        let payload = payload_for(&request("a".into(), Some("b".into())), false);
 
         assert_eq!(payload["max_tokens"], json!(MAX_COMPLETION_TOKENS));
         assert_eq!(
@@ -283,8 +227,8 @@ mod tests {
 
     #[test]
     fn only_the_streaming_payload_sets_stream() {
-        let plain = build_payload("m", &request("a".into(), None), false);
-        let streaming = build_payload("m", &request("a".into(), None), true);
+        let plain = payload_for(&request("a".into(), None), false);
+        let streaming = payload_for(&request("a".into(), None), true);
 
         assert!(plain.get("stream").is_none());
         assert_eq!(streaming["stream"], json!(true));

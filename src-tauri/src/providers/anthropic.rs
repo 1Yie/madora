@@ -4,16 +4,14 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
-    i18n,
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_anthropic_compatible, PromptManager},
     providers::{
         common::{
-            build_prompt_context, detect_error_payload, join_url, parse_success_json,
-            read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
-            summarize_error_body, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
+            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+            CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
         },
-        default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
+        CompletionProvider,
     },
 };
 
@@ -92,61 +90,39 @@ pub(crate) async fn request_anthropic_compatible_fim(
     config: &AiCompletionConfig,
     request: &CompletionRequest,
 ) -> Result<String, String> {
-    let provider = config.provider.unwrap_or(AiProvider::Anthropic);
-    let api_key = resolve_api_key(config)?;
-    let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
-    let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
-    let prompt_profile = prompt_profile_for_anthropic_compatible(provider, model);
-    let prompt_context = build_prompt_context(request);
-    let system_prompt =
-        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
-
-    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
-
-    let payload = build_anthropic_compatible_payload(
-        provider,
-        model,
+    let PreparedCompletion {
+        connection,
         system_prompt,
         user_prompt,
-        params,
+    } = PreparedCompletion::prepare(
+        prompt_manager,
+        config,
+        request,
+        prompt_profile_for_anthropic_compatible,
+        AiProvider::Anthropic,
+        OpenEndedStop::Structural,
+    )?;
+    let provider = connection.provider;
+    let payload = build_anthropic_compatible_payload(
+        provider,
+        &connection.model,
+        system_prompt,
+        user_prompt,
+        connection.params,
         false,
     );
 
-    let response = send_with_status_retries(|| {
+    let response = send_request(CompletionKind::Whole, provider, || {
         apply_anthropic_auth(
             client
-                .post(join_url(&api_url, "/v1/messages"))
+                .post(join_url(&connection.api_url, "/v1/messages"))
                 .header("anthropic-version", ANTHROPIC_API_VERSION)
-                .timeout(NON_STREAM_REQUEST_TIMEOUT)
                 .json(&payload),
             auth_mode_for_provider(provider),
-            api_key,
+            &connection.api_key,
         )
     })
-    .await
-    .map_err(|error| {
-        let err = error.to_string();
-        i18n::tf(
-            "ai.provider.request_failed",
-            &[("provider", provider.display_name()), ("error", &err)],
-        )
-    })?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = read_error_body(response).await;
-
-        let status_str = status.as_u16().to_string();
-        return Err(i18n::tf(
-            "ai.provider.api_error",
-            &[
-                ("provider", provider.display_name()),
-                ("status", &status_str),
-                ("body", &summarize_error_body(&body)),
-            ],
-        ));
-    }
+    .await?;
 
     let payload =
         parse_success_json::<AnthropicMessageResponse>(provider.display_name(), response).await?;
@@ -154,10 +130,6 @@ pub(crate) async fn request_anthropic_compatible_fim(
     Ok(take_anthropic_text(payload))
 }
 
-/// Joins every text block of a response. Models that think first (MiniMax,
-/// Qwen and other Anthropic-compatible endpoints) put a `thinking` block ahead
-/// of the answer, and an answer may be split across several text blocks, so
-/// taking only the first block would return nothing or a fragment.
 fn take_anthropic_text(payload: AnthropicMessageResponse) -> String {
     payload
         .content
@@ -175,94 +147,52 @@ pub(crate) async fn request_anthropic_compatible_fim_stream(
     request: &CompletionRequest,
     on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
 ) -> Result<String, String> {
-    let provider = config.provider.unwrap_or(AiProvider::Anthropic);
-    let api_key = resolve_api_key(config)?;
-    let api_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
-    let model = resolve_model(config, default_model(provider).unwrap_or_default())?;
-    let prompt_profile = prompt_profile_for_anthropic_compatible(provider, model);
-    let prompt_context = build_prompt_context(request);
-    let system_prompt =
-        prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
-    let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
-
-    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
-
-    let payload = build_anthropic_compatible_payload(
-        provider,
-        model,
+    let PreparedCompletion {
+        connection,
         system_prompt,
         user_prompt,
-        params,
+    } = PreparedCompletion::prepare(
+        prompt_manager,
+        config,
+        request,
+        prompt_profile_for_anthropic_compatible,
+        AiProvider::Anthropic,
+        OpenEndedStop::Structural,
+    )?;
+    let provider = connection.provider;
+    let payload = build_anthropic_compatible_payload(
+        provider,
+        &connection.model,
+        system_prompt,
+        user_prompt,
+        connection.params,
         true,
     );
 
-    let response = send_with_status_retries(|| {
+    let response = send_request(CompletionKind::Stream, provider, || {
         apply_anthropic_auth(
             client
-                .post(join_url(&api_url, "/v1/messages"))
+                .post(join_url(&connection.api_url, "/v1/messages"))
                 .header("anthropic-version", ANTHROPIC_API_VERSION)
                 .json(&payload),
             auth_mode_for_provider(provider),
-            api_key,
+            &connection.api_key,
         )
-    })
-    .await
-    .map_err(|error| {
-        let err = error.to_string();
-        i18n::tf(
-            "ai.provider.request_stream_failed",
-            &[("provider", provider.display_name()), ("error", &err)],
-        )
-    })?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = read_error_body(response).await;
-
-        let status_str = status.as_u16().to_string();
-        return Err(i18n::tf(
-            "ai.provider.stream_api_error",
-            &[
-                ("provider", provider.display_name()),
-                ("status", &status_str),
-                ("body", &summarize_error_body(&body)),
-            ],
-        ));
-    }
-
-    let mut completion = String::new();
-    stream_sse_response(response, |event| {
-        if let Some(message) = detect_error_payload(&event.data) {
-            return Err(i18n::tf(
-                "ai.provider.stream_api_error",
-                &[
-                    ("provider", provider.display_name()),
-                    ("status", "200"),
-                    ("body", &message),
-                ],
-            ));
-        }
-
-        let payload = serde_json::from_str::<AnthropicMessageStreamResponse>(&event.data).map_err(
-            |error| {
-                let err = error.to_string();
-                i18n::tf(
-                    "ai.provider.parse_stream_response_failed",
-                    &[("provider", provider.display_name()), ("error", &err)],
-                )
-            },
-        )?;
-        let chunk = take_anthropic_stream_text(payload);
-        if chunk.is_empty() {
-            return Ok(());
-        }
-
-        completion.push_str(&chunk);
-        on_chunk(chunk)
     })
     .await?;
 
-    Ok(completion)
+    stream_completion(
+        CompletionKind::Stream,
+        provider,
+        response,
+        |event, _accumulated| {
+            let payload = parse_stream_event::<AnthropicMessageStreamResponse>(provider, event)?;
+
+            Ok(Some(take_anthropic_stream_text(payload)).filter(|text| !text.is_empty()))
+        },
+        on_chunk,
+    )
+    .await
 }
 
 fn take_anthropic_stream_text(payload: AnthropicMessageStreamResponse) -> String {

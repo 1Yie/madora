@@ -16,7 +16,7 @@ use crate::{
         AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult, CustomProviderProtocol,
     },
     prompt::PromptManager,
-    providers::{build_prompt_context, default_api_url, default_model, get_provider},
+    providers::{build_prompt_context, default_model, get_provider},
 };
 
 const COMPLETION_CACHE_MAX_ENTRIES: usize = 128;
@@ -495,22 +495,12 @@ fn strip_duplicated_prefix(text: &str, prefix: &str) -> String {
     text_chars[overlap..].iter().collect()
 }
 
+/// The endpoint the request will use, resolved by the same helper the
+/// providers use so the key cannot describe a different URL than the request.
+/// An unresolvable configuration yields an empty key component: such a request
+/// fails before anything could be cached.
 fn resolve_cache_api_url(provider: AiProvider, config: &AiCompletionConfig) -> String {
-    let api_url = config
-        .api_url
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .or_else(|| default_api_url(provider))
-        .unwrap_or_default()
-        .trim_end_matches('/')
-        .to_string();
-
-    if provider == AiProvider::DeepSeek && !api_url.is_empty() && !api_url.ends_with("/beta") {
-        return format!("{api_url}/beta");
-    }
-
-    api_url
+    crate::providers::resolve_endpoint(provider, config).unwrap_or_default()
 }
 
 fn resolve_cache_model(provider: AiProvider, config: &AiCompletionConfig) -> String {

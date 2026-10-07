@@ -144,6 +144,24 @@ pub fn default_api_url(provider: AiProvider) -> Option<&'static str> {
     }
 }
 
+/// The endpoint a provider's completions are sent to: the configured or
+/// default base URL, plus any provider-specific path prefix.
+///
+/// Both the request and the completion cache key go through this function.
+pub fn resolve_endpoint(
+    provider: AiProvider,
+    config: &AiCompletionConfig,
+) -> Result<String, String> {
+    let base_url = resolve_api_url(config, default_api_url(provider).unwrap_or_default())?;
+
+    // DeepSeek's fill-in-the-middle endpoint lives under `/beta`.
+    if provider == AiProvider::DeepSeek && !base_url.ends_with("/beta") {
+        return Ok(format!("{base_url}/beta"));
+    }
+
+    Ok(base_url)
+}
+
 pub fn default_model(provider: AiProvider) -> Option<&'static str> {
     match provider {
         AiProvider::Anthropic => Some(ANTHROPIC_DEFAULT_MODEL),
