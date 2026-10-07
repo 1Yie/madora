@@ -1,3 +1,40 @@
+## [Desktop 0.4.1](https://github.com/1Yie/madora/compare/v0.3.16...v0.4.1)（2026-10-07） | Mobile 0.0.4（2026-10-07）
+
+### Bug Fixes
+
+- **linux:** pin GTK/WebKitGTK rendering environment before startup ([35bfa84](https://github.com/1Yie/madora/commit/35bfa84b5d2776325df22dbd6a4da1fd758d690d))
+- **editor:** exclude CodeMirror gutters from text selection ([8d5a694](https://github.com/1Yie/madora/commit/8d5a69455a79700e0099485c5e37fce3ec53a599))
+- **a11y:** add tooltips and aria labels to icon-only controls ([bfdbff3](https://github.com/1Yie/madora/commit/bfdbff32b6d4e11733dfd70d4ccc95d676a802d7))
+- **ui:** keep toast scrollbar drags from dismissing the toast ([71af603](https://github.com/1Yie/madora/commit/71af60394a24737ed931225a6523880a7513b596))
+- **ui:** use RefreshCcw for refresh and sync affordances ([aec08f8](https://github.com/1Yie/madora/commit/aec08f873bb53a48955c3afd3bfd9647718b316b))
+- **ui:** match the window controls' hover to the tab strip ([ba7cb9a](https://github.com/1Yie/madora/commit/ba7cb9ab0aee627794b188c2ed3564ccb72231f1))
+- **ui:** size the window controls from shared layout constants ([04f6c46](https://github.com/1Yie/madora/commit/04f6c463c9a40fe0a96bfa5ff6fc8291bc212577))
+- **explorer:** write UTF-16 files as UTF-16 ([aad82d9](https://github.com/1Yie/madora/commit/aad82d935b125f80b168dab77e8aab349c52a8b9))
+- **explorer:** refuse to overwrite a file that was read truncated ([9fd3460](https://github.com/1Yie/madora/commit/9fd3460ad8f273495a8ecc7fe88e94c910e204b1))
+- **git:** hide the status summary when it is too narrow to read ([0e8b9b8](https://github.com/1Yie/madora/commit/0e8b9b8b023d4a000a581ade374d3440437c044b))
+- **explorer:** restore text selection when a tab drag ends on unmount ([f6252cd](https://github.com/1Yie/madora/commit/f6252cdd53615800f78811a5509d8930300c5ee3))
+- **update:** fall back to release names when tags are not versions ([3958534](https://github.com/1Yie/madora/commit/39585345a4e4390fa744ea31d37ab15f514c8aad))
+- **ci:** use target triple path when packaging linux tarball ([9cfd148](https://github.com/1Yie/madora/commit/9cfd148723918f5a272f7c53349620bf02223c85))
+- **explorer:** resolve paths before checking workspace containment ([d4c5a27](https://github.com/1Yie/madora/commit/d4c5a27ce28f75d17d387f9ecca073a5a84e7984))
+- **security:** make the backend own the workspace root and set a CSP ([a7fc68d](https://github.com/1Yie/madora/commit/a7fc68d190da85bbc204d978cb72b19f8915d781))
+- **git:** never discard local edits on pull, keep status read-only-safe ([533f806](https://github.com/1Yie/madora/commit/533f80685679cd1d35ac54e4a4655be00660294f))
+- **webdav:** harden sync against traversal, symlink escape and stale baselines ([209f7c4](https://github.com/1Yie/madora/commit/209f7c45e341c9d07d110ac4d1bfa39b2bc3548b))
+- **webdav:** stop returning stored password to the webview ([6ea925c](https://github.com/1Yie/madora/commit/6ea925c37a42a4b8876df88ed6064c3bf3a5f367))
+- **sync:** rate-limit pairing and store tokens hashed at rest ([bc272dd](https://github.com/1Yie/madora/commit/bc272dddb59de6753a8c8b7da8442a16312979aa))
+- **sync:** restrict LAN peers and bound sync-server resources ([b62d8a6](https://github.com/1Yie/madora/commit/b62d8a6815d0ebe6108ea57289c2b2acfcf7e920))
+- **ai:** reject provider error payloads and bound response buffers ([4acab44](https://github.com/1Yie/madora/commit/4acab442ccd1b7638426f4094270a7687d9f3717))
+- **prompt:** render templates in a single pass and fail loudly ([b62736d](https://github.com/1Yie/madora/commit/b62736de7a87310c0a57553f85065aaf24972db3))
+- **ai:** add streaming cancellation and leak-free in-flight dedup ([cd77233](https://github.com/1Yie/madora/commit/cd7723309988f05de576360265706fab13319a30))
+- **sync:** share the canonical path check and require the open workspace ([db6c08b](https://github.com/1Yie/madora/commit/db6c08bd65c6cc3fa960946edae9084e6b48d124))
+
+### Features
+
+- **providers:** summarize provider error bodies in AI errors ([19e393a](https://github.com/1Yie/madora/commit/19e393a680ab42ee0a15e1acba98b0a863283c7b))
+- **shell:** frameless window chrome and full-window settings page ([6cebfbb](https://github.com/1Yie/madora/commit/6cebfbb8ae6b09ba0c61fd2786db0ec912da8062))
+- **explorer:** move the open-folder action into the sidebar header ([0dd2c17](https://github.com/1Yie/madora/commit/0dd2c17924d0900fb64fbbab46ddedeeec4c203c))
+- **preview:** render YAML front matter as a metadata table ([c82db60](https://github.com/1Yie/madora/commit/c82db60f7d513901d593a9c404d6a0cee3710661))
+- **git:** open the remote workbench from the panel toolbar ([3eeba60](https://github.com/1Yie/madora/commit/3eeba600a4d6921a9b77d78e458791870c48acc6))
+
 ## [Desktop 0.3.16](https://github.com/1Yie/madora/compare/v0.3.15...v0.3.16)（2026-08-11） | Mobile 0.0.4（2026-08-11）
 
 ### Features
