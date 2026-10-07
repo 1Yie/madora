@@ -11,9 +11,64 @@ use crate::{
 };
 
 pub const MAX_COMPLETION_TOKENS: usize = 512;
+/// Budget for a completion with nothing after the cursor: just finish the
+/// current thought.
+pub const MAX_OPEN_ENDED_TOKENS: usize = 64;
 pub const MAX_CHAT_PREFIX_CHARS: usize = 4_000;
 pub const MAX_CHAT_SUFFIX_CHARS: usize = 1_500;
 pub const STOP_SEQUENCES: &[&str] = &["\n\n\n", "\n# ", "\n## "];
+/// Stops used by DeepSeek's raw `/completions` endpoint when there is no
+/// suffix. That endpoint continues the text like a base model and would
+/// otherwise run on to the token limit, so it is cut at the first line or
+/// sentence end.
+pub const OPEN_ENDED_SENTENCE_STOPS: &[&str] = &["\n\n", "\n", "。", ".", "！", "?", "!"];
+
+/// Sampling settings for one completion. Every provider translates these into
+/// its own field names (`max_tokens`, `maxOutputTokens`, `stop_sequences`, ...)
+/// instead of choosing values itself, so a completion behaves the same way no
+/// matter which backend serves it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CompletionParams {
+    pub max_tokens: usize,
+    pub temperature: f32,
+    pub stop: &'static [&'static str],
+}
+
+/// How an endpoint should be stopped when the cursor has no text after it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OpenEndedStop {
+    /// Chat-style models are instructed to finish the local thought, so the
+    /// shared structural stops are enough.
+    Structural,
+    /// Raw text-completion endpoints need an explicit sentence-level stop.
+    Sentence,
+}
+
+impl CompletionParams {
+    pub fn for_request(request: &CompletionRequest, open_ended_stop: OpenEndedStop) -> Self {
+        let has_suffix = request
+            .suffix
+            .as_deref()
+            .is_some_and(|suffix| !suffix.trim().is_empty());
+
+        if has_suffix {
+            return Self {
+                max_tokens: MAX_COMPLETION_TOKENS,
+                temperature: 0.3,
+                stop: STOP_SEQUENCES,
+            };
+        }
+
+        Self {
+            max_tokens: MAX_OPEN_ENDED_TOKENS,
+            temperature: 0.2,
+            stop: match open_ended_stop {
+                OpenEndedStop::Structural => STOP_SEQUENCES,
+                OpenEndedStop::Sentence => OPEN_ENDED_SENTENCE_STOPS,
+            },
+        }
+    }
+}
 
 /// Upper bound for a non-streaming provider response body (4 MiB).
 pub const MAX_RESPONSE_BODY_BYTES: usize = 4 * 1024 * 1024;
@@ -1188,4 +1243,55 @@ mod tests {
     fn validate_api_url_rejects_non_http_schemes() {
         assert!(validate_api_url("ftp://example.com").is_err());
     }
+
+    // ─── CompletionParams ────────────────────────────────────────────
+
+    fn request_with_suffix(suffix: Option<&str>) -> CompletionRequest {
+        CompletionRequest {
+            title: None,
+            prefix: "prefix".to_string(),
+            suffix: suffix.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn params_with_a_suffix_get_the_full_budget_and_structural_stops() {
+        for style in [OpenEndedStop::Structural, OpenEndedStop::Sentence] {
+            let params = CompletionParams::for_request(&request_with_suffix(Some("after")), style);
+
+            assert_eq!(params.max_tokens, MAX_COMPLETION_TOKENS);
+            assert_eq!(params.temperature, 0.3);
+            assert_eq!(params.stop, STOP_SEQUENCES);
+        }
+    }
+
+    #[test]
+    fn params_without_a_suffix_use_the_open_ended_budget() {
+        for suffix in [None, Some(""), Some("   \n\t ")] {
+            let params = CompletionParams::for_request(
+                &request_with_suffix(suffix),
+                OpenEndedStop::Structural,
+            );
+
+            assert_eq!(
+                params.max_tokens, MAX_OPEN_ENDED_TOKENS,
+                "suffix {suffix:?}"
+            );
+            assert_eq!(params.temperature, 0.2);
+            assert_eq!(params.stop, STOP_SEQUENCES);
+        }
+    }
+
+    #[test]
+    fn raw_completion_endpoints_stop_at_sentence_ends_without_a_suffix() {
+        let params =
+            CompletionParams::for_request(&request_with_suffix(None), OpenEndedStop::Sentence);
+
+        assert_eq!(params.stop, OPEN_ENDED_SENTENCE_STOPS);
+        assert!(params.stop.contains(&"\n"));
+        assert!(params.stop.contains(&"。"));
+    }
+
+    // Checked at compile time: both are constants.
+    const _: () = assert!(MAX_OPEN_ENDED_TOKENS < MAX_COMPLETION_TOKENS);
 }

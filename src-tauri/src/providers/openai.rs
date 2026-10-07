@@ -12,8 +12,7 @@ use crate::{
             build_prompt_context, detect_error_payload, join_url, parse_success_json,
             read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
             summarize_error_body, take_chat_completion, ChatCompletionMessage,
-            ChatCompletionResponse, MAX_COMPLETION_TOKENS, NON_STREAM_REQUEST_TIMEOUT,
-            STOP_SEQUENCES,
+            ChatCompletionResponse, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
         },
         default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
     },
@@ -83,25 +82,10 @@ pub(crate) async fn request_openai_compatible_fim(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_openai_compatible_payload(
-        provider,
-        model,
-        system_prompt,
-        user_prompt,
-        max_tokens,
-        temperature,
-        false,
-    );
+    let payload =
+        build_openai_compatible_payload(provider, model, system_prompt, user_prompt, params, false);
 
     let response = send_with_status_retries(|| {
         client
@@ -157,25 +141,10 @@ pub(crate) async fn request_openai_compatible_fim_stream(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_openai_compatible_payload(
-        provider,
-        model,
-        system_prompt,
-        user_prompt,
-        max_tokens,
-        temperature,
-        true,
-    );
+    let payload =
+        build_openai_compatible_payload(provider, model, system_prompt, user_prompt, params, true);
 
     let response = send_with_status_retries(|| {
         client
@@ -264,8 +233,7 @@ fn build_openai_compatible_payload(
     model: &str,
     system_prompt: String,
     user_prompt: String,
-    max_tokens: usize,
-    temperature: f32,
+    params: CompletionParams,
     stream: bool,
 ) -> Value {
     let mut payload = json!({
@@ -280,9 +248,9 @@ fn build_openai_compatible_payload(
                 "content": user_prompt,
             }
         ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "stop": STOP_SEQUENCES,
+        "max_tokens": params.max_tokens,
+        "temperature": params.temperature,
+        "stop": params.stop,
     });
 
     if let Some(object) = payload.as_object_mut() {
@@ -316,7 +284,10 @@ fn should_disable_structured_thinking(provider: AiProvider, lower_model: &str) -
 #[cfg(test)]
 mod tests {
     use super::{build_openai_compatible_payload, should_disable_structured_thinking};
-    use crate::{models::ai::AiProvider, providers::common::STOP_SEQUENCES};
+    use crate::{
+        models::ai::AiProvider,
+        providers::common::{CompletionParams, STOP_SEQUENCES},
+    };
     use serde_json::json;
 
     #[test]
@@ -346,8 +317,11 @@ mod tests {
             "qwen3.7-max",
             "system".to_string(),
             "user".to_string(),
-            64,
-            0.2,
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
             true,
         );
 
@@ -363,12 +337,36 @@ mod tests {
             "deepseek-v4-pro",
             "system".to_string(),
             "user".to_string(),
-            64,
-            0.2,
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
             false,
         );
 
         assert_eq!(payload["thinking"], json!({ "type": "disabled" }));
         assert!(payload.get("stream").is_none());
+    }
+
+    #[test]
+    fn payload_carries_the_shared_completion_params() {
+        let params = CompletionParams {
+            max_tokens: 123,
+            temperature: 0.5,
+            stop: &["X", "Y"],
+        };
+        let payload = build_openai_compatible_payload(
+            AiProvider::OpenAi,
+            "gpt-4o-mini",
+            "system".to_string(),
+            "user".to_string(),
+            params,
+            false,
+        );
+
+        assert_eq!(payload["max_tokens"], json!(123));
+        assert_eq!(payload["temperature"], json!(0.5));
+        assert_eq!(payload["stop"], json!(["X", "Y"]));
     }
 }

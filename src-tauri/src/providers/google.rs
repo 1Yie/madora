@@ -11,8 +11,7 @@ use crate::{
         common::{
             build_prompt_context, detect_error_payload, join_url, parse_success_json,
             read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
-            summarize_error_body, MAX_COMPLETION_TOKENS, NON_STREAM_REQUEST_TIMEOUT,
-            STOP_SEQUENCES,
+            summarize_error_body, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
         },
         default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
     },
@@ -86,17 +85,9 @@ pub(crate) async fn request_google_compatible_fim(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|suffix| !suffix.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_google_payload(model, system_prompt, user_prompt, max_tokens, temperature);
+    let payload = build_google_payload(model, system_prompt, user_prompt, params);
 
     let response = send_with_status_retries(|| {
         client
@@ -153,17 +144,9 @@ pub(crate) async fn request_google_compatible_fim_stream(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|suffix| !suffix.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_google_payload(model, system_prompt, user_prompt, max_tokens, temperature);
+    let payload = build_google_payload(model, system_prompt, user_prompt, params);
 
     let response = send_with_status_retries(|| {
         client
@@ -248,14 +231,13 @@ fn build_google_payload(
     model: &str,
     system_prompt: String,
     user_prompt: String,
-    max_tokens: usize,
-    temperature: f32,
+    params: CompletionParams,
 ) -> Value {
     let mut generation_config = json!({
-        "maxOutputTokens": max_tokens,
+        "maxOutputTokens": params.max_tokens,
         "responseMimeType": "text/plain",
-        "stopSequences": STOP_SEQUENCES,
-        "temperature": temperature,
+        "stopSequences": params.stop,
+        "temperature": params.temperature,
     });
 
     let lower_model = model.to_ascii_lowercase();
@@ -334,6 +316,7 @@ mod tests {
         build_google_payload, google_generate_content_url, google_thinking_config,
         take_google_text, GoogleGenerateContentResponse,
     };
+    use crate::providers::common::{CompletionParams, STOP_SEQUENCES};
     use serde_json::json;
 
     #[test]
@@ -366,8 +349,11 @@ mod tests {
             "gemini-3.5-flash",
             "system".to_string(),
             "user".to_string(),
-            64,
-            0.2,
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
         );
 
         assert_eq!(payload["generationConfig"]["maxOutputTokens"], json!(64));
@@ -395,5 +381,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(take_google_text(payload), "answer");
+    }
+
+    #[test]
+    fn payload_carries_the_shared_completion_params() {
+        let params = CompletionParams {
+            max_tokens: 123,
+            temperature: 0.5,
+            stop: &["X", "Y"],
+        };
+        let payload = build_google_payload(
+            "gemini-2.5-flash",
+            "system".to_string(),
+            "user".to_string(),
+            params,
+        );
+        let config = &payload["generationConfig"];
+
+        assert_eq!(config["maxOutputTokens"], json!(123));
+        assert_eq!(config["temperature"], json!(0.5));
+        assert_eq!(config["stopSequences"], json!(["X", "Y"]));
     }
 }

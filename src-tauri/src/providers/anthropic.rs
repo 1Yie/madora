@@ -11,8 +11,7 @@ use crate::{
         common::{
             build_prompt_context, detect_error_payload, join_url, parse_success_json,
             read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
-            summarize_error_body, MAX_COMPLETION_TOKENS, NON_STREAM_REQUEST_TIMEOUT,
-            STOP_SEQUENCES,
+            summarize_error_body, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
         },
         default_api_url, default_model, resolve_api_url, resolve_model, CompletionProvider,
     },
@@ -99,23 +98,14 @@ pub(crate) async fn request_anthropic_compatible_fim(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
     let payload = build_anthropic_compatible_payload(
         provider,
         model,
         system_prompt,
         user_prompt,
-        max_tokens,
-        temperature,
+        params,
         false,
     );
 
@@ -181,23 +171,14 @@ pub(crate) async fn request_anthropic_compatible_fim_stream(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
     let payload = build_anthropic_compatible_payload(
         provider,
         model,
         system_prompt,
         user_prompt,
-        max_tokens,
-        temperature,
+        params,
         true,
     );
 
@@ -301,8 +282,7 @@ fn build_anthropic_compatible_payload(
     model: &str,
     system_prompt: String,
     user_prompt: String,
-    max_tokens: usize,
-    temperature: f32,
+    params: CompletionParams,
     stream: bool,
 ) -> Value {
     let mut payload = json!({
@@ -314,9 +294,9 @@ fn build_anthropic_compatible_payload(
                 "content": user_prompt,
             }
         ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "stop_sequences": STOP_SEQUENCES,
+        "max_tokens": params.max_tokens,
+        "temperature": params.temperature,
+        "stop_sequences": params.stop,
     });
 
     if let Some(object) = payload.as_object_mut() {
@@ -347,6 +327,7 @@ mod tests {
         should_disable_anthropic_thinking, AnthropicAuthMode,
     };
     use crate::models::ai::AiProvider;
+    use crate::providers::common::{CompletionParams, STOP_SEQUENCES};
     use serde_json::json;
 
     #[test]
@@ -388,8 +369,11 @@ mod tests {
             "qwen3.7-max",
             "system".to_string(),
             "user".to_string(),
-            64,
-            0.2,
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
             true,
         );
 
@@ -404,11 +388,35 @@ mod tests {
             "claude-3-5-sonnet-latest",
             "system".to_string(),
             "user".to_string(),
-            64,
-            0.2,
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
             false,
         );
 
         assert!(payload.get("thinking").is_none());
+    }
+
+    #[test]
+    fn payload_carries_the_shared_completion_params() {
+        let params = CompletionParams {
+            max_tokens: 123,
+            temperature: 0.5,
+            stop: &["X", "Y"],
+        };
+        let payload = build_anthropic_compatible_payload(
+            AiProvider::Anthropic,
+            "claude-sonnet-4-6",
+            "system".to_string(),
+            "user".to_string(),
+            params,
+            false,
+        );
+
+        assert_eq!(payload["max_tokens"], json!(123));
+        assert_eq!(payload["temperature"], json!(0.5));
+        assert_eq!(payload["stop_sequences"], json!(["X", "Y"]));
     }
 }

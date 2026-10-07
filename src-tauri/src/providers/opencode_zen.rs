@@ -12,7 +12,7 @@ use crate::{
         common::{
             build_prompt_context, detect_error_payload, join_url, parse_success_json,
             read_error_body, resolve_api_key, send_with_status_retries, stream_sse_response,
-            summarize_error_body, MAX_COMPLETION_TOKENS, NON_STREAM_REQUEST_TIMEOUT,
+            summarize_error_body, CompletionParams, OpenEndedStop, NON_STREAM_REQUEST_TIMEOUT,
         },
         default_api_url, default_model,
         google::{request_google_compatible_fim, request_google_compatible_fim_stream},
@@ -210,24 +210,9 @@ async fn request_openai_responses_fim(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_responses_payload(
-        model,
-        system_prompt,
-        user_prompt,
-        max_tokens,
-        temperature,
-        false,
-    );
+    let payload = build_responses_payload(model, system_prompt, user_prompt, params, false);
 
     let response = send_with_status_retries(|| {
         client
@@ -283,24 +268,9 @@ async fn request_openai_responses_fim_stream(
         prompt_manager.render_prompt(prompt_profile, "fim_system", &prompt_context)?;
     let user_prompt = prompt_manager.render_prompt(prompt_profile, "fim_user", &prompt_context)?;
 
-    let has_suffix = request
-        .suffix
-        .as_deref()
-        .is_some_and(|s| !s.trim().is_empty());
-    let (max_tokens, temperature) = if has_suffix {
-        (MAX_COMPLETION_TOKENS, 0.3)
-    } else {
-        (64usize, 0.2)
-    };
+    let params = CompletionParams::for_request(request, OpenEndedStop::Structural);
 
-    let payload = build_responses_payload(
-        model,
-        system_prompt,
-        user_prompt,
-        max_tokens,
-        temperature,
-        true,
-    );
+    let payload = build_responses_payload(model, system_prompt, user_prompt, params, true);
 
     let response = send_with_status_retries(|| {
         client
@@ -374,16 +344,17 @@ fn build_responses_payload(
     model: &str,
     system_prompt: String,
     user_prompt: String,
-    max_tokens: usize,
-    temperature: f32,
+    params: CompletionParams,
     stream: bool,
 ) -> Value {
+    // The Responses API has no stop-sequence parameter, so only the budget and
+    // temperature carry over.
     json!({
         "model": model,
         "input": user_prompt,
         "instructions": system_prompt,
-        "max_output_tokens": max_tokens,
-        "temperature": temperature,
+        "max_output_tokens": params.max_tokens,
+        "temperature": params.temperature,
         "store": false,
         "stream": stream,
     })

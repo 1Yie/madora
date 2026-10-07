@@ -291,22 +291,10 @@ fn resolve_provider(config: &AiCompletionConfig) -> AiProvider {
     config.provider.unwrap_or(AiProvider::DeepSeek)
 }
 
-/// Builds the cache key from exactly the text each provider actually sends.
-///
-/// DeepSeek forwards the raw request, every other provider renders the request
-/// through the shared `build_prompt_context` truncation, so the key must follow
-/// the same path to avoid serving a completion produced from different input.
-fn resolve_cache_prompt_fields(
-    provider: AiProvider,
-    request: &CompletionRequest,
-) -> (String, String) {
-    if provider == AiProvider::DeepSeek {
-        return (
-            request.prefix.clone(),
-            request.suffix.clone().unwrap_or_default(),
-        );
-    }
-
+/// Builds the cache key from exactly the text every provider sends: the
+/// request run through the shared `build_prompt_context` truncation. Because
+/// no provider bypasses it, the key cannot drift from the actual input.
+fn resolve_cache_prompt_fields(request: &CompletionRequest) -> (String, String) {
     let context = build_prompt_context(request);
     (context.prefix, context.suffix)
 }
@@ -317,7 +305,7 @@ fn build_completion_cache_key(
     request: &CompletionRequest,
 ) -> CompletionCacheKey {
     let provider = resolve_provider(config);
-    let (prefix, suffix) = resolve_cache_prompt_fields(provider, request);
+    let (prefix, suffix) = resolve_cache_prompt_fields(request);
 
     CompletionCacheKey {
         api_url: resolve_cache_api_url(provider, config),
@@ -1081,5 +1069,59 @@ mod tests {
         service.cancel_completion_stream("req-42");
 
         assert!(token.is_cancelled());
+    }
+
+    fn deepseek_config() -> AiCompletionConfig {
+        AiCompletionConfig {
+            provider: Some(AiProvider::DeepSeek),
+            ..openai_config()
+        }
+    }
+
+    #[test]
+    fn deepseek_cache_key_ignores_text_beyond_what_is_sent() {
+        let service = test_service();
+        let config = deepseek_config();
+        let head = "a".repeat(MAX_CHAT_SUFFIX_CHARS);
+        let tail = "b".repeat(MAX_CHAT_PREFIX_CHARS);
+        let request = |prefix_head: &str, suffix_tail: &str| CompletionRequest {
+            title: None,
+            prefix: format!("{prefix_head}{tail}"),
+            suffix: Some(format!("{head}{suffix_tail}")),
+        };
+
+        assert_eq!(
+            build_completion_cache_key(&service, &config, &request("head-a", "tail-a")),
+            build_completion_cache_key(&service, &config, &request("head-b", "tail-b")),
+            "text that is never sent upstream must not split the cache"
+        );
+    }
+
+    #[test]
+    fn every_provider_derives_its_cache_key_text_from_the_same_context() {
+        let service = test_service();
+        let request = CompletionRequest {
+            title: Some("Doc".into()),
+            prefix: "p".repeat(MAX_CHAT_PREFIX_CHARS + 500),
+            suffix: Some("s".repeat(MAX_CHAT_SUFFIX_CHARS + 500)),
+        };
+        let context = crate::providers::build_prompt_context(&request);
+
+        for provider in [
+            AiProvider::DeepSeek,
+            AiProvider::OpenAi,
+            AiProvider::Anthropic,
+            AiProvider::Google,
+            AiProvider::Custom,
+        ] {
+            let config = AiCompletionConfig {
+                provider: Some(provider),
+                ..openai_config()
+            };
+            let key = build_completion_cache_key(&service, &config, &request);
+
+            assert_eq!(key.prefix, context.prefix, "{provider:?}");
+            assert_eq!(key.suffix, context.suffix, "{provider:?}");
+        }
     }
 }
