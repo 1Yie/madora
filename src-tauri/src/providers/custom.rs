@@ -1,86 +1,47 @@
-use async_trait::async_trait;
-use reqwest::Client;
+//! The user-configured provider: the endpoint and model are entered by hand
+//! and the protocol is chosen in the settings.
 
-use crate::{
-    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest, CustomProviderProtocol},
-    prompt::PromptManager,
-    providers::{
-        anthropic::request_anthropic_compatible_fim,
-        anthropic::request_anthropic_compatible_fim_stream,
-        google::{request_google_compatible_fim, request_google_compatible_fim_stream},
-        openai::request_openai_compatible_fim,
-        openai::request_openai_compatible_fim_stream,
-        CompletionProvider,
-    },
-};
+use crate::models::ai::{AiCompletionConfig, CustomProviderProtocol};
 
-pub struct CustomProvider;
+use super::Protocol;
 
-#[async_trait]
-impl CompletionProvider for CustomProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::Custom
+pub(crate) fn protocol(config: &AiCompletionConfig) -> Result<Protocol, String> {
+    Ok(match config.custom_protocol.unwrap_or_default() {
+        CustomProviderProtocol::Anthropic => Protocol::AnthropicMessages,
+        CustomProviderProtocol::Google => Protocol::GoogleGenerate,
+        CustomProviderProtocol::OpenAi => Protocol::OpenAiChat,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ai::AiCompletionConfig;
+
+    #[test]
+    fn defaults_to_the_openai_chat_protocol() {
+        assert_eq!(
+            protocol(&AiCompletionConfig::default()).unwrap(),
+            Protocol::OpenAiChat
+        );
     }
 
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        match config.custom_protocol.unwrap_or_default() {
-            CustomProviderProtocol::Anthropic => {
-                request_anthropic_compatible_fim(client, prompt_manager, config, request).await
-            }
-            CustomProviderProtocol::Google => {
-                request_google_compatible_fim(client, prompt_manager, config, request).await
-            }
-            CustomProviderProtocol::OpenAi => {
-                request_openai_compatible_fim(client, prompt_manager, config, request).await
-            }
-        }
-    }
+    #[test]
+    fn follows_the_configured_protocol() {
+        for (selected, expected) in [
+            (
+                CustomProviderProtocol::Anthropic,
+                Protocol::AnthropicMessages,
+            ),
+            (CustomProviderProtocol::Google, Protocol::GoogleGenerate),
+            (CustomProviderProtocol::OpenAi, Protocol::OpenAiChat),
+        ] {
+            let config = AiCompletionConfig {
+                custom_protocol: Some(selected),
+                ..Default::default()
+            };
 
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        match config.custom_protocol.unwrap_or_default() {
-            CustomProviderProtocol::Anthropic => {
-                request_anthropic_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-            CustomProviderProtocol::Google => {
-                request_google_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-            CustomProviderProtocol::OpenAi => {
-                request_openai_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
+            assert_eq!(protocol(&config).unwrap(), expected, "{selected:?}");
         }
     }
 }

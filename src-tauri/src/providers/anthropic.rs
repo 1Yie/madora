@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use reqwest::{Client, RequestBuilder};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -6,12 +5,9 @@ use serde_json::{json, Value};
 use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_anthropic_compatible, PromptManager},
-    providers::{
-        common::{
-            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
-            CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
-        },
-        CompletionProvider,
+    providers::common::{
+        join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+        CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
     },
 };
 
@@ -51,37 +47,6 @@ struct AnthropicStreamContentBlock {
 struct AnthropicMessageStreamResponse {
     content_block: Option<AnthropicStreamContentBlock>,
     delta: Option<AnthropicStreamDelta>,
-}
-
-pub struct AnthropicProvider;
-
-#[async_trait]
-impl CompletionProvider for AnthropicProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::Anthropic
-    }
-
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        request_anthropic_compatible_fim(client, prompt_manager, config, request).await
-    }
-
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        request_anthropic_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
-            .await
-    }
 }
 
 pub(crate) async fn request_anthropic_compatible_fim(

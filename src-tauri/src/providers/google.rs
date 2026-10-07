@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -6,45 +5,11 @@ use serde_json::{json, Value};
 use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_google_compatible, PromptManager},
-    providers::{
-        common::{
-            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
-            CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
-        },
-        CompletionProvider,
+    providers::common::{
+        join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+        CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
     },
 };
-
-pub struct GoogleProvider;
-
-#[async_trait]
-impl CompletionProvider for GoogleProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::Google
-    }
-
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        request_google_compatible_fim(client, prompt_manager, config, request).await
-    }
-
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        request_google_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
-            .await
-    }
-}
 
 #[derive(Deserialize)]
 struct GooglePart {

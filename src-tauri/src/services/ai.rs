@@ -16,7 +16,7 @@ use crate::{
         AiCompletionConfig, AiProvider, CompletionRequest, CompletionResult, CustomProviderProtocol,
     },
     prompt::PromptManager,
-    providers::{build_prompt_context, default_model, get_provider},
+    providers::{build_prompt_context, default_model, resolve_protocol},
 };
 
 const COMPLETION_CACHE_MAX_ENTRIES: usize = 128;
@@ -611,10 +611,12 @@ pub async fn generate_completion(
     request: &CompletionRequest,
 ) -> Result<CompletionResult, String> {
     let cache_key = build_completion_cache_key(service, config, request);
-    let provider = get_provider(resolve_provider(config));
+    let provider = resolve_provider(config);
 
-    let outcome = run_completion(service, &cache_key, &request.prefix, None, || {
-        provider.request_fim_completion(&service.client, &service.prompt_manager, config, request)
+    let outcome = run_completion(service, &cache_key, &request.prefix, None, || async {
+        resolve_protocol(provider, config)?
+            .complete(&service.client, &service.prompt_manager, config, request)
+            .await
     })
     .await?;
 
@@ -646,7 +648,7 @@ pub async fn generate_completion_stream(
     let token = _cancellation_guard.as_ref().map(CancellationGuard::token);
 
     let cache_key = build_completion_cache_key(service, config, request);
-    let provider = get_provider(resolve_provider(config));
+    let provider = resolve_provider(config);
 
     // Only a leader streams. Cached and followed results arrive whole, as a
     // single chunk, before the final text is returned.
@@ -657,8 +659,8 @@ pub async fn generate_completion_stream(
         let channel = &channel;
         async move {
             let mut on_chunk = |chunk: String| send_completion_chunk(channel, chunk);
-            provider
-                .request_fim_completion_stream(
+            resolve_protocol(provider, config)?
+                .complete_stream(
                     &service.client,
                     &service.prompt_manager,
                     config,

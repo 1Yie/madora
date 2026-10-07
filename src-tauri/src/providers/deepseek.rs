@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
 
@@ -12,86 +11,74 @@ use crate::{
             take_text_completion, CompletionKind, CompletionParams, OpenEndedStop,
             ResolvedConnection, TextCompletionResponse,
         },
-        CompletionProvider,
     },
 };
 
-pub struct DeepSeekProvider;
+pub(crate) async fn request_deepseek_completion(
+    client: &Client,
+    _prompt_manager: &PromptManager,
+    config: &AiCompletionConfig,
+    request: &CompletionRequest,
+) -> Result<String, String> {
+    let connection = ResolvedConnection::resolve(
+        config,
+        AiProvider::DeepSeek,
+        request,
+        OpenEndedStop::Sentence,
+    )?;
+    let provider = connection.provider;
+    let payload = build_payload(&connection.model, request, connection.params, false);
 
-#[async_trait]
-impl CompletionProvider for DeepSeekProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::DeepSeek
-    }
+    let response = send_request(CompletionKind::Whole, provider, || {
+        client
+            .post(join_url(&connection.api_url, "/completions"))
+            .bearer_auth(&connection.api_key)
+            .json(&payload)
+    })
+    .await?;
 
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        _prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        let connection = ResolvedConnection::resolve(
-            config,
-            AiProvider::DeepSeek,
-            request,
-            OpenEndedStop::Sentence,
-        )?;
-        let provider = connection.provider;
-        let payload = build_payload(&connection.model, request, connection.params, false);
+    let payload =
+        parse_success_json::<TextCompletionResponse>(provider.display_name(), response).await?;
 
-        let response = send_request(CompletionKind::Whole, provider, || {
-            client
-                .post(join_url(&connection.api_url, "/completions"))
-                .bearer_auth(&connection.api_key)
-                .json(&payload)
-        })
-        .await?;
+    Ok(take_text_completion(payload))
+}
 
-        let payload =
-            parse_success_json::<TextCompletionResponse>(provider.display_name(), response).await?;
+pub(crate) async fn request_deepseek_completion_stream(
+    client: &Client,
+    _prompt_manager: &PromptManager,
+    config: &AiCompletionConfig,
+    request: &CompletionRequest,
+    on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
+) -> Result<String, String> {
+    let connection = ResolvedConnection::resolve(
+        config,
+        AiProvider::DeepSeek,
+        request,
+        OpenEndedStop::Sentence,
+    )?;
+    let provider = connection.provider;
+    let payload = build_payload(&connection.model, request, connection.params, true);
 
-        Ok(take_text_completion(payload))
-    }
+    let response = send_request(CompletionKind::Stream, provider, || {
+        client
+            .post(join_url(&connection.api_url, "/completions"))
+            .bearer_auth(&connection.api_key)
+            .json(&payload)
+    })
+    .await?;
 
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        _prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        let connection = ResolvedConnection::resolve(
-            config,
-            AiProvider::DeepSeek,
-            request,
-            OpenEndedStop::Sentence,
-        )?;
-        let provider = connection.provider;
-        let payload = build_payload(&connection.model, request, connection.params, true);
+    stream_completion(
+        CompletionKind::Stream,
+        provider,
+        response,
+        |event, _accumulated| {
+            let payload = parse_stream_event::<TextCompletionResponse>(provider, event)?;
 
-        let response = send_request(CompletionKind::Stream, provider, || {
-            client
-                .post(join_url(&connection.api_url, "/completions"))
-                .bearer_auth(&connection.api_key)
-                .json(&payload)
-        })
-        .await?;
-
-        stream_completion(
-            CompletionKind::Stream,
-            provider,
-            response,
-            |event, _accumulated| {
-                let payload = parse_stream_event::<TextCompletionResponse>(provider, event)?;
-
-                Ok(Some(take_text_completion(payload)).filter(|text| !text.is_empty()))
-            },
-            on_chunk,
-        )
-        .await
-    }
+            Ok(Some(take_text_completion(payload)).filter(|text| !text.is_empty()))
+        },
+        on_chunk,
+    )
+    .await
 }
 
 /// Request body for DeepSeek's raw `/completions` endpoint.
@@ -238,7 +225,6 @@ mod tests {
 
     use crate::prompt::PromptManager;
     use crate::providers::test_support::{MockServer, ScriptedResponse};
-    use crate::providers::CompletionProvider;
     use reqwest::Client;
 
     fn e2e_config(server: &MockServer) -> AiCompletionConfig {
@@ -253,30 +239,28 @@ mod tests {
     }
 
     async fn deepseek_complete(server: &MockServer) -> Result<String, String> {
-        super::DeepSeekProvider
-            .request_fim_completion(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &e2e_config(server),
-                &request("Hello, wor".into(), Some("after".into())),
-            )
-            .await
+        super::request_deepseek_completion(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server),
+            &request("Hello, wor".into(), Some("after".into())),
+        )
+        .await
     }
 
     async fn deepseek_stream(server: &MockServer) -> (Result<String, String>, Vec<String>) {
         let mut chunks = Vec::new();
-        let result = super::DeepSeekProvider
-            .request_fim_completion_stream(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &e2e_config(server),
-                &request("Hello, wor".into(), None),
-                &mut |chunk| {
-                    chunks.push(chunk);
-                    Ok(())
-                },
-            )
-            .await;
+        let result = super::request_deepseek_completion_stream(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &e2e_config(server),
+            &request("Hello, wor".into(), None),
+            &mut |chunk| {
+                chunks.push(chunk);
+                Ok(())
+            },
+        )
+        .await;
 
         (result, chunks)
     }

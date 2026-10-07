@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -6,13 +5,10 @@ use serde_json::{json, Value};
 use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_openai_compatible, PromptManager},
-    providers::{
-        common::{
-            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
-            take_chat_completion, ChatCompletionMessage, ChatCompletionResponse, CompletionKind,
-            CompletionParams, OpenEndedStop, PreparedCompletion,
-        },
-        CompletionProvider,
+    providers::common::{
+        join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
+        take_chat_completion, ChatCompletionMessage, ChatCompletionResponse, CompletionKind,
+        CompletionParams, OpenEndedStop, PreparedCompletion,
     },
 };
 
@@ -31,37 +27,6 @@ struct StreamingChatCompletionChoice {
 #[derive(Deserialize)]
 struct StreamingChatCompletionResponse {
     choices: Option<Vec<StreamingChatCompletionChoice>>,
-}
-
-pub struct OpenAiProvider;
-
-#[async_trait]
-impl CompletionProvider for OpenAiProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::OpenAi
-    }
-
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        request_openai_compatible_fim(client, prompt_manager, config, request).await
-    }
-
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        request_openai_compatible_fim_stream(client, prompt_manager, config, request, on_chunk)
-            .await
-    }
 }
 
 pub(crate) async fn request_openai_compatible_fim(
@@ -318,7 +283,6 @@ mod tests {
     use crate::models::ai::{AiCompletionConfig, CompletionRequest};
     use crate::prompt::PromptManager;
     use crate::providers::test_support::{MockServer, ScriptedResponse};
-    use crate::providers::CompletionProvider;
     use reqwest::Client;
 
     fn config(server: &MockServer, provider: AiProvider) -> AiCompletionConfig {
@@ -345,14 +309,13 @@ mod tests {
         provider: AiProvider,
         suffix: Option<&str>,
     ) -> Result<String, String> {
-        super::OpenAiProvider
-            .request_fim_completion(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &config(server, provider),
-                &request(suffix),
-            )
-            .await
+        super::request_openai_compatible_fim(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &config(server, provider),
+            &request(suffix),
+        )
+        .await
     }
 
     async fn stream(
@@ -361,18 +324,17 @@ mod tests {
         suffix: Option<&str>,
     ) -> (Result<String, String>, Vec<String>) {
         let mut chunks = Vec::new();
-        let result = super::OpenAiProvider
-            .request_fim_completion_stream(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &config(server, provider),
-                &request(suffix),
-                &mut |chunk| {
-                    chunks.push(chunk);
-                    Ok(())
-                },
-            )
-            .await;
+        let result = super::request_openai_compatible_fim_stream(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &config(server, provider),
+            &request(suffix),
+            &mut |chunk| {
+                chunks.push(chunk);
+                Ok(())
+            },
+        )
+        .await;
 
         (result, chunks)
     }
@@ -556,14 +518,13 @@ mod tests {
         let mut config = config(&server, AiProvider::OpenAi);
         config.api_key = "  ".into();
 
-        let result = super::OpenAiProvider
-            .request_fim_completion(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &config,
-                &request(None),
-            )
-            .await;
+        let result = super::request_openai_compatible_fim(
+            &Client::new(),
+            &PromptManager::from_user_root(None),
+            &config,
+            &request(None),
+        )
+        .await;
 
         assert!(result.is_err());
         assert_eq!(server.request_count(), 0);

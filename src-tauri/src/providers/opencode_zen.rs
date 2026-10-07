@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -7,27 +6,13 @@ use crate::{
     models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
     prompt::{prompt_profile_for_openai_compatible, PromptManager},
     providers::{
-        anthropic::{request_anthropic_compatible_fim, request_anthropic_compatible_fim_stream},
         common::{
             join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
             CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
         },
-        default_model,
-        google::{request_google_compatible_fim, request_google_compatible_fim_stream},
-        openai::{request_openai_compatible_fim, request_openai_compatible_fim_stream},
-        resolve_model, CompletionProvider,
+        Protocol,
     },
 };
-
-pub struct OpenCodeZenProvider;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OpenCodeZenRoute {
-    Anthropic,
-    Google,
-    ChatCompletions,
-    Responses,
-}
 
 #[derive(Deserialize)]
 struct ResponsesApiOutputContent {
@@ -58,109 +43,24 @@ struct ResponsesApiStreamEvent {
     type_name: Option<String>,
 }
 
-#[async_trait]
-impl CompletionProvider for OpenCodeZenProvider {
-    fn provider(&self) -> AiProvider {
-        AiProvider::OpenCodeZen
-    }
-
-    async fn request_fim_completion(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-    ) -> Result<String, String> {
-        match resolve_route(config)? {
-            OpenCodeZenRoute::Anthropic => {
-                request_anthropic_compatible_fim(client, prompt_manager, config, request).await
-            }
-            OpenCodeZenRoute::Google => {
-                request_google_compatible_fim(client, prompt_manager, config, request).await
-            }
-            OpenCodeZenRoute::ChatCompletions => {
-                request_openai_compatible_fim(client, prompt_manager, config, request).await
-            }
-            OpenCodeZenRoute::Responses => {
-                request_openai_responses_fim(client, prompt_manager, config, request).await
-            }
-        }
-    }
-
-    async fn request_fim_completion_stream(
-        &self,
-        client: &Client,
-        prompt_manager: &PromptManager,
-        config: &AiCompletionConfig,
-        request: &CompletionRequest,
-        on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-    ) -> Result<String, String> {
-        match resolve_route(config)? {
-            OpenCodeZenRoute::Anthropic => {
-                request_anthropic_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-            OpenCodeZenRoute::Google => {
-                request_google_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-            OpenCodeZenRoute::ChatCompletions => {
-                request_openai_compatible_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-            OpenCodeZenRoute::Responses => {
-                request_openai_responses_fim_stream(
-                    client,
-                    prompt_manager,
-                    config,
-                    request,
-                    on_chunk,
-                )
-                .await
-            }
-        }
-    }
-}
-
-fn resolve_route(config: &AiCompletionConfig) -> Result<OpenCodeZenRoute, String> {
-    let model = resolve_model(
-        config,
-        default_model(AiProvider::OpenCodeZen).unwrap_or_default(),
-    )?;
+/// The protocol this model is served over.
+pub(crate) fn protocol_for_model(model: &str) -> Result<Protocol, String> {
     let normalized = model.trim().to_ascii_lowercase();
 
     if matches_responses_route(&normalized) {
-        return Ok(OpenCodeZenRoute::Responses);
+        return Ok(Protocol::OpenAiResponses);
     }
 
     if matches_anthropic_route(&normalized) {
-        return Ok(OpenCodeZenRoute::Anthropic);
+        return Ok(Protocol::AnthropicMessages);
     }
 
     if matches_google_route(&normalized) {
-        return Ok(OpenCodeZenRoute::Google);
+        return Ok(Protocol::GoogleGenerate);
     }
 
     if matches_chat_completions_route(&normalized) {
-        return Ok(OpenCodeZenRoute::ChatCompletions);
+        return Ok(Protocol::OpenAiChat);
     }
 
     Err(format!(
@@ -192,7 +92,7 @@ fn matches_chat_completions_route(model: &str) -> bool {
         || model.starts_with("nemotron-")
 }
 
-async fn request_openai_responses_fim(
+pub(crate) async fn request_openai_responses_fim(
     client: &Client,
     prompt_manager: &PromptManager,
     config: &AiCompletionConfig,
@@ -233,7 +133,7 @@ async fn request_openai_responses_fim(
     Ok(take_responses_output_text(payload))
 }
 
-async fn request_openai_responses_fim_stream(
+pub(crate) async fn request_openai_responses_fim_stream(
     client: &Client,
     prompt_manager: &PromptManager,
     config: &AiCompletionConfig,
@@ -338,68 +238,55 @@ fn take_responses_stream_text(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ai::AiCompletionConfig;
 
-    fn config_with_model(model: &str) -> AiCompletionConfig {
-        AiCompletionConfig {
-            model: Some(model.to_string()),
-            ..Default::default()
-        }
+    #[test]
+    fn routes_responses_models() {
+        assert_eq!(
+            protocol_for_model("gpt-5.5").unwrap(),
+            Protocol::OpenAiResponses
+        );
+        assert_eq!(
+            protocol_for_model("gpt-5.1-codex-max").unwrap(),
+            Protocol::OpenAiResponses
+        );
     }
 
     #[test]
-    fn resolves_responses_models() {
-        let route = resolve_route(&config_with_model("gpt-5.5")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::Responses);
-
-        let route = resolve_route(&config_with_model("gpt-5.1-codex-max")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::Responses);
+    fn routes_chat_completion_models() {
+        assert_eq!(
+            protocol_for_model("deepseek-v4-pro").unwrap(),
+            Protocol::OpenAiChat
+        );
+        assert_eq!(
+            protocol_for_model("big-pickle").unwrap(),
+            Protocol::OpenAiChat
+        );
     }
 
     #[test]
-    fn resolves_chat_completion_models() {
-        let route = resolve_route(&config_with_model("deepseek-v4-pro")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::ChatCompletions);
-
-        let route = resolve_route(&config_with_model("big-pickle")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::ChatCompletions);
+    fn routes_anthropic_models() {
+        assert_eq!(
+            protocol_for_model("claude-sonnet-4-6").unwrap(),
+            Protocol::AnthropicMessages
+        );
+        assert_eq!(
+            protocol_for_model("qwen3.7-max").unwrap(),
+            Protocol::AnthropicMessages
+        );
     }
 
     #[test]
-    fn resolves_anthropic_models() {
-        let route = resolve_route(&config_with_model("claude-sonnet-4-6")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::Anthropic);
-
-        let route = resolve_route(&config_with_model("qwen3.5-plus")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::Anthropic);
+    fn routes_google_models() {
+        assert_eq!(
+            protocol_for_model("gemini-3.1-pro").unwrap(),
+            Protocol::GoogleGenerate
+        );
     }
 
     #[test]
-    fn resolves_google_models() {
-        let route = resolve_route(&config_with_model("gemini-3.1-pro")).unwrap();
-        assert_eq!(route, OpenCodeZenRoute::Google);
-    }
-
-    #[test]
-    fn extracts_response_output_text() {
-        let text = take_responses_output_text(ResponsesApiResponse {
-            output: Some(vec![ResponsesApiOutputItem {
-                content: Some(vec![ResponsesApiOutputContent {
-                    text: Some("hello".to_string()),
-                    type_name: Some("output_text".to_string()),
-                }]),
-                type_name: Some("message".to_string()),
-            }]),
-            output_text: None,
-        });
-
-        assert_eq!(text, "hello");
-    }
-
-    #[test]
-    fn returns_route_error_for_unmatched_models() {
-        let error = resolve_route(&config_with_model("unknown-model")).unwrap_err();
-        assert!(error.contains("could not be routed"));
+    fn rejects_unroutable_models() {
+        let error = protocol_for_model("unknown-model").unwrap_err();
+        assert!(error.contains("could not be routed"), "{error}");
     }
 
     // ─── end to end against a scripted local server ─────────────────
@@ -407,7 +294,6 @@ mod tests {
     use crate::models::ai::CompletionRequest;
     use crate::prompt::PromptManager;
     use crate::providers::test_support::{MockServer, ScriptedResponse};
-    use crate::providers::CompletionProvider;
     use reqwest::Client;
 
     fn e2e_config(server: &MockServer, provider: AiProvider, model: &str) -> AiCompletionConfig {
@@ -430,11 +316,13 @@ mod tests {
     }
 
     async fn zen_complete(server: &MockServer, model: &str) -> Result<String, String> {
-        super::OpenCodeZenProvider
-            .request_fim_completion(
+        let config = e2e_config(server, AiProvider::OpenCodeZen, model);
+
+        super::protocol_for_model(model)?
+            .complete(
                 &Client::new(),
                 &PromptManager::from_user_root(None),
-                &e2e_config(server, AiProvider::OpenCodeZen, model),
+                &config,
                 &e2e_request(Some("after")),
             )
             .await
@@ -442,18 +330,24 @@ mod tests {
 
     async fn zen_stream(server: &MockServer, model: &str) -> (Result<String, String>, Vec<String>) {
         let mut chunks = Vec::new();
-        let result = super::OpenCodeZenProvider
-            .request_fim_completion_stream(
-                &Client::new(),
-                &PromptManager::from_user_root(None),
-                &e2e_config(server, AiProvider::OpenCodeZen, model),
-                &e2e_request(None),
-                &mut |chunk| {
-                    chunks.push(chunk);
-                    Ok(())
-                },
-            )
-            .await;
+        let config = e2e_config(server, AiProvider::OpenCodeZen, model);
+        let result = match super::protocol_for_model(model) {
+            Ok(protocol) => {
+                protocol
+                    .complete_stream(
+                        &Client::new(),
+                        &PromptManager::from_user_root(None),
+                        &config,
+                        &e2e_request(None),
+                        &mut |chunk| {
+                            chunks.push(chunk);
+                            Ok(())
+                        },
+                    )
+                    .await
+            }
+            Err(error) => Err(error),
+        };
 
         (result, chunks)
     }
