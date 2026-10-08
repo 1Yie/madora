@@ -14,7 +14,7 @@ import { FilePreview } from '@/components/explorer/file/file-preview';
 import { TabBar } from '@/components/explorer/workspace/tab-bar';
 import appIcon from '@/assets/icon.png';
 import { explorerSidebarStatusBarClassName } from '@/components/explorer/layout';
-import { isMac } from '@/lib/platform';
+import { isMac, MAC_TRAFFIC_LIGHTS_WIDTH } from '@/lib/platform';
 
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
@@ -48,7 +48,9 @@ function SidebarBrand() {
 			className="flex h-10 shrink-0 items-center gap-2 px-4 select-none"
 		>
 			{/* Clear the macOS traffic lights (they overlay the window top-left). */}
-			{isMac && <div className="w-[52px] shrink-0" />}
+			{isMac && (
+				<div className="shrink-0" style={{ width: MAC_TRAFFIC_LIGHTS_WIDTH }} />
+			)}
 			<img
 				alt=""
 				className="pointer-events-none size-5 rounded-md"

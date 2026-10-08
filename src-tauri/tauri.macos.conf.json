@@ -9,7 +9,7 @@
 				"minWidth": 900,
 				"title": "Madora",
 				"titleBarStyle": "Overlay",
-				"trafficLightPosition": { "x": 16, "y": 14 },
+				"trafficLightPosition": { "x": 16, "y": 18 },
 				"visible": false,
 				"width": 1000
 			}

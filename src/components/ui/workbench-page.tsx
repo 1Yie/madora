@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useRegisterPageOverlay } from '@/lib/page-overlay';
-import { isMac } from '@/lib/platform';
+import { isMac, MAC_TRAFFIC_LIGHTS_WIDTH } from '@/lib/platform';
 import { cn } from '@/lib/utils';
 
 export type WorkbenchItem = {
@@ -118,11 +118,16 @@ export function WorkbenchPage({
 			>
 				<div
 					data-tauri-drag-region
-					className="flex h-10 shrink-0 items-center px-4 text-sm font-semibold
-						select-none"
+					className="flex h-10 shrink-0 items-center gap-2 px-4 text-sm
+						font-semibold select-none"
 				>
 					{/* Clear the macOS traffic lights in the window's top-left. */}
-					{isMac && <div className="w-[52px] shrink-0" />}
+					{isMac && (
+						<div
+							className="shrink-0"
+							style={{ width: MAC_TRAFFIC_LIGHTS_WIDTH }}
+						/>
+					)}
 					<span className="pointer-events-none">{title}</span>
 				</div>
 				<nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">

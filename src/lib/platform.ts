@@ -13,6 +13,13 @@ export const isWindows = /Windows/.test(ua) || /^Win/.test(platform);
 export const isLinux = !isMac && !isWindows;
 
 /**
+ * Horizontal space a top-left header must leave for the macOS traffic lights
+ * (`trafficLightPosition.x` + the three buttons, see `tauri.macos.conf.json`),
+ * plus a small gap. Pair it with `gap-2` so the content never touches them.
+ */
+export const MAC_TRAFFIC_LIGHTS_WIDTH = 56;
+
+/**
  * Frameless window controls (minimize / maximize / close) on Windows & Linux.
  * Every button has the same fixed width so its hover fill is identical, and the
  * tab strip reserves exactly `WINDOW_CONTROLS_WIDTH` so hover never bleeds over
