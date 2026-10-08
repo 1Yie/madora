@@ -18,7 +18,17 @@ const AI_KEY_SERVICE: &str = "madora.ai";
 
 /// The outcome of initialising the platform store, computed once.
 static SECURE_STORE_INIT: OnceLock<Result<(), String>> = OnceLock::new();
-static CACHE: LazyLock<Mutex<HashMap<AiProvider, String>>> = LazyLock::new(Default::default);
+static CACHE: LazyLock<Mutex<KeyCache>> = LazyLock::new(Default::default);
+
+/// The cached keys plus a counter that moves whenever one is written or
+/// removed on purpose. A slow keyring read compares it before storing its
+/// result, so it cannot overwrite a newer `store`/`delete` with the value it
+/// read before that change.
+#[derive(Default)]
+struct KeyCache {
+    keys: HashMap<AiProvider, String>,
+    generation: u64,
+}
 
 fn ensure_secure_store() -> Result<(), String> {
     SECURE_STORE_INIT
@@ -83,7 +93,11 @@ fn normalise(stored: Option<String>) -> Option<String> {
 }
 
 fn cached(provider: AiProvider) -> Option<String> {
-    lock_unpoisoned(&CACHE).get(&provider).cloned()
+    lock_unpoisoned(&CACHE).keys.get(&provider).cloned()
+}
+
+fn generation() -> u64 {
+    lock_unpoisoned(&CACHE).generation
 }
 
 fn lookup_with(
@@ -94,10 +108,17 @@ fn lookup_with(
         return Ok(Some(key));
     }
 
+    let generation_before = generation();
     let key = normalise(load()?);
 
     if let Some(key) = &key {
-        remember(provider, key);
+        let mut cache = lock_unpoisoned(&CACHE);
+
+        // Skip the write if a store or delete landed while the keyring was
+        // being read: that value is newer than what was just loaded.
+        if cache.generation == generation_before {
+            cache.keys.insert(provider, key.clone());
+        }
     }
 
     Ok(key)
@@ -184,20 +205,25 @@ pub fn remember(provider: AiProvider, api_key: &str) {
     let api_key = api_key.trim();
     let mut cache = lock_unpoisoned(&CACHE);
 
+    cache.generation += 1;
+
     if api_key.is_empty() {
-        cache.remove(&provider);
+        cache.keys.remove(&provider);
     } else {
-        cache.insert(provider, api_key.to_string());
+        cache.keys.insert(provider, api_key.to_string());
     }
 }
 
 pub fn forget(provider: AiProvider) {
-    lock_unpoisoned(&CACHE).remove(&provider);
+    let mut cache = lock_unpoisoned(&CACHE);
+
+    cache.generation += 1;
+    cache.keys.remove(&provider);
 }
 
 #[cfg(test)]
 pub fn clear_cache() {
-    lock_unpoisoned(&CACHE).clear();
+    lock_unpoisoned(&CACHE).keys.clear();
 }
 
 #[cfg(test)]
@@ -290,6 +316,34 @@ mod tests {
 
             assert!(cached(AiProvider::OpenAi).is_none(), "blank: {blank:?}");
         }
+    }
+
+    #[test]
+    fn a_store_during_a_keyring_read_is_not_overwritten() {
+        let _lock = exclusive_cache();
+
+        let key = lookup_with(AiProvider::OpenAi, || {
+            remember(AiProvider::OpenAi, "sk-new");
+            Ok(Some("sk-old".into()))
+        })
+        .unwrap();
+
+        // The caller still gets what it read, but the cache keeps the newer key.
+        assert_eq!(key.as_deref(), Some("sk-old"));
+        assert_eq!(cached(AiProvider::OpenAi).as_deref(), Some("sk-new"));
+    }
+
+    #[test]
+    fn a_delete_during_a_keyring_read_is_not_undone() {
+        let _lock = exclusive_cache();
+
+        lookup_with(AiProvider::OpenAi, || {
+            forget(AiProvider::OpenAi);
+            Ok(Some("sk-old".into()))
+        })
+        .unwrap();
+
+        assert!(cached(AiProvider::OpenAi).is_none());
     }
 
     #[test]
