@@ -45,7 +45,11 @@ export function TabBar() {
 		closeTabsAction,
 		reorderTabs,
 		tabBarMode,
+		documentMode,
 	} = useWorkspace();
+	// The window controls float over the tab strip, unless a document session
+	// puts its own top bar above it.
+	const reservesWindowControls = !isMac && !documentMode;
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
@@ -245,7 +249,7 @@ export function TabBar() {
 							isScroll ? 'flex flex-row h-full w-max items-stretch' : '-mb-px'
 						}
 					>
-						{!isScroll && !isMac && (
+						{!isScroll && reservesWindowControls && (
 							<div
 								className="float-right h-8"
 								style={{ width: WINDOW_CONTROLS_WIDTH }}
@@ -439,7 +443,7 @@ export function TabBar() {
 				</div>
 				{/* Reserved space for the frameless window controls (fixed top-right).
 					Wrap mode carves the corner inside the flow via the float instead. */}
-				{isScroll && !isMac && (
+				{isScroll && reservesWindowControls && (
 					<div
 						className="shrink-0"
 						style={{ width: WINDOW_CONTROLS_WIDTH }}
@@ -462,7 +466,7 @@ export function TabBar() {
 							duration-150 dark:from-white/12"
 						style={{
 							opacity: showRightShadow ? 1 : 0,
-							right: isMac ? 0 : WINDOW_CONTROLS_WIDTH,
+							right: reservesWindowControls ? WINDOW_CONTROLS_WIDTH : 0,
 						}}
 					/>
 				</>

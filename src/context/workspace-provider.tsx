@@ -14,15 +14,16 @@ import {
 import {
 	getWorkspaceState,
 	setWorkspaceRoot,
-	addTab as addTabBackend,
-	closeTab as closeTabBackend,
-	closeTabs as closeTabsBackend,
-	setActiveTab as setActiveTabBackend,
+	addTab as addTabBackendRaw,
+	closeTab as closeTabBackendRaw,
+	closeTabs as closeTabsBackendRaw,
+	setActiveTab as setActiveTabBackendRaw,
 	setSidebarWidth as setSidebarWidthBackend,
-	setOpenTabPaths as setOpenTabPathsBackend,
+	setOpenTabPaths as setOpenTabPathsBackendRaw,
 	setZoomLevel as setZoomLevelBackend,
 	clearWorkspaceState,
 } from '@/invoke/workspace';
+import { onOpenFilesQueued, takePendingOpenFiles } from '@/invoke/open-files';
 import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import create from 'zustand';
@@ -86,6 +87,8 @@ let tabsPersistenceReady = false;
 export type WorkspaceContextValue = {
 	/* ── File tree ── */
 	root: ExplorerNode | null;
+	/** Only files opened from outside are open: no workspace, no file tree. */
+	documentMode: boolean;
 	initialised: boolean;
 	loadingPaths: Set<string>;
 	expandDirectory: (node: ExplorerNode) => void;
@@ -512,6 +515,12 @@ function createTabEntry(node: ExplorerNode): TabEntry {
 
 type WorkspaceState = {
 	root: ExplorerNode | null;
+	/**
+	 * A session built around files handed over by the OS rather than a folder:
+	 * no workspace root, so no file tree, and nothing about it is persisted
+	 * (the previously opened workspace is still what the next launch restores).
+	 */
+	documentMode: boolean;
 	initialised: boolean;
 	loadingPaths: Set<string>;
 	tabs: TabEntry[];
@@ -545,6 +554,14 @@ type WorkspaceState = {
 type WorkspaceActions = {
 	/* ── Internal init (called by provider) ── */
 	initializeWorkspace: () => Promise<void>;
+
+	/**
+	 * Opens files the OS asked for. Without a workspace they become a
+	 * file-tree-less document session; inside a workspace they are tabs next to
+	 * the workspace's own files.
+	 */
+	openDocuments: (paths: string[]) => Promise<void>;
+	openPendingDocuments: () => Promise<void>;
 
 	/* ── File tree ── */
 	expandDirectory: (node: ExplorerNode) => Promise<void>;
@@ -672,9 +689,29 @@ async function resolveNodeFromPath(
 	};
 }
 
+/**
+ * A document session must not rewrite the saved workspace's tabs, so tab
+ * persistence goes through these instead of the raw commands.
+ */
+function persistsSession(): boolean {
+	return !useWorkspaceStore.getState().documentMode;
+}
+
+const addTabBackend = (filePath: string) =>
+	persistsSession() ? addTabBackendRaw(filePath) : Promise.resolve();
+const closeTabBackend = (filePath: string) =>
+	persistsSession() ? closeTabBackendRaw(filePath) : Promise.resolve();
+const closeTabsBackend = (filePaths: string[]) =>
+	persistsSession() ? closeTabsBackendRaw(filePaths) : Promise.resolve();
+const setActiveTabBackend = (filePath: string | null) =>
+	persistsSession() ? setActiveTabBackendRaw(filePath) : Promise.resolve();
+const setOpenTabPathsBackend = (paths: string[]) =>
+	persistsSession() ? setOpenTabPathsBackendRaw(paths) : Promise.resolve();
+
 const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 	// ── State ──
 	root: null,
+	documentMode: false,
 	initialised: false,
 	loadingPaths: new Set<string>(),
 	tabs: [],
@@ -734,6 +771,16 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				tabBarMode: initialState.tabBarMode,
 				zoomLevel: initialState.zoomLevel,
 			});
+
+			// Files the OS handed over at launch start a document session and
+			// leave the saved workspace untouched.
+			const launchFiles = await takePendingOpenFiles().catch(() => []);
+			if (launchFiles.length > 0) {
+				tabsPersistenceReady = true;
+				set({ documentMode: true, initialised: true, sidebarBusy: false });
+				await get().openDocuments(launchFiles);
+				return;
+			}
 
 			if (!initialState.rootPath) {
 				tabsPersistenceReady = true;
@@ -870,6 +917,38 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				set({ previewLoading: false });
 			}
 		}
+	},
+
+	// ── Documents handed over by the OS ──
+
+	openDocuments: async (paths) => {
+		const nodes: ExplorerNode[] = [];
+		for (const path of paths) {
+			const normalized = normalizeExplorerPath(path);
+			if (
+				!nodes.some((node) => normalizeExplorerPath(node.path) === normalized)
+			) {
+				nodes.push(createExternalNode(path));
+			}
+		}
+		if (nodes.length === 0) return;
+
+		// No folder is open: this is a document session. It has to be flagged
+		// before the first tab opens so none of it is persisted.
+		if (!get().root && !get().documentMode) {
+			tabsPersistenceReady = true;
+			set({ documentMode: true, initialised: true });
+		}
+
+		// The last file named ends up active, like opening several at once.
+		for (const node of nodes) {
+			await get().selectNode(node);
+		}
+	},
+
+	openPendingDocuments: async () => {
+		const paths = await takePendingOpenFiles().catch(() => []);
+		if (paths.length > 0) await get().openDocuments(paths);
 	},
 
 	// ── selectNode ──
@@ -1593,6 +1672,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 			set({
 				root: restoredRoot,
+				documentMode: false,
 				tabs: restoredTabs,
 				activeTabId: activeTab?.id ?? null,
 				sidebarBusy: false,
@@ -1843,6 +1923,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 		const ws = useWorkspaceStore.getState();
 		void ws.initializeWorkspace();
 	}, []);
+
+	/* ── Files the OS asks us to open while running ── */
+
+	useEffect(() => {
+		if (!initialised) return;
+		let active = true;
+		let unlisten: (() => void) | null = null;
+
+		const ws = useWorkspaceStore.getState();
+		// Anything queued while the workspace was still loading.
+		void ws.openPendingDocuments();
+
+		void onOpenFilesQueued(() => {
+			if (active) void useWorkspaceStore.getState().openPendingDocuments();
+		})
+			.then((dispose) => {
+				if (active) unlisten = dispose;
+				else dispose();
+			})
+			.catch(() => {});
+
+		return () => {
+			active = false;
+			unlisten?.();
+		};
+	}, [initialised]);
 
 	/* ── Persistence effects ── */
 

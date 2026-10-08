@@ -95,7 +95,7 @@ const emptyStatus: GitStatus = {
 };
 
 const defaultWorkspaceState = {
-	rootPath: '/workspace',
+	rootPath: '/workspace' as string | null,
 	openTabPaths: [] as string[],
 	lastActiveFilePath: null as string | null,
 	sidebarWidth: 320,
@@ -159,6 +159,10 @@ vi.mock('@/components/explorer/workspace/tab-bar', async () => {
 		},
 	};
 });
+
+vi.mock('@tauri-apps/api/event', () => ({
+	listen: vi.fn(async () => () => undefined),
+}));
 
 vi.mock('@/components/ui/toast', () => ({
 	showErrorToast: vi.fn(),
@@ -249,16 +253,21 @@ describe('WorkspaceBrowser', () => {
 	const mockInvoke = vi.mocked(invoke);
 	let workspaceState: typeof defaultWorkspaceState;
 	let pickedFolderResult: ExplorerNode | null;
+	let pendingOpenFiles: string[][];
 
 	beforeEach(() => {
 		window.localStorage.clear();
 		workspaceState = { ...defaultWorkspaceState };
 		pickedFolderResult = rootNode;
+		// Each call hands out the next batch, then nothing, like the backend.
+		pendingOpenFiles = [];
 
 		mockInvoke.mockImplementation(async (command) => {
 			switch (command) {
 				case 'get_workspace_state':
 					return workspaceState;
+				case 'take_pending_open_files':
+					return pendingOpenFiles.shift() ?? [];
 				case 'pick_workspace_folder':
 					return pickedFolderResult;
 				case 'scan_workspace_folder':
@@ -444,6 +453,135 @@ describe('WorkspaceBrowser', () => {
 			expect(
 				screen.getAllByText('selected:/workspace/readme.md:missing').length
 			).toBeGreaterThan(0);
+		});
+	});
+
+	describe('files opened from the OS', () => {
+		const persistenceCommands = [
+			'set_workspace_root',
+			'set_open_tab_paths',
+			'set_active_tab',
+			'add_tab',
+			'close_tab',
+			'close_tabs',
+		];
+		const persistenceCalls = () =>
+			mockInvoke.mock.calls.filter(([command]) =>
+				persistenceCommands.includes(command)
+			);
+
+		// The store is a module-level singleton, so a session opened by one test
+		// would otherwise still be there for the next.
+		beforeEach(async () => {
+			const { useWorkspaceStore } =
+				await import('@/context/workspace-provider');
+			useWorkspaceStore.setState({
+				root: null,
+				documentMode: false,
+				initialised: false,
+				tabs: [],
+				activeTabId: null,
+				selectedFile: null,
+				selectedNodePath: null,
+				preview: null,
+			});
+		});
+
+		it('opens a document session without a file tree', async () => {
+			workspaceState.rootPath = null;
+			pendingOpenFiles = [['/elsewhere/note.md']];
+
+			render(<WorkspaceBrowser />);
+
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('tabs:/elsewhere/note.md').length
+				).toBeGreaterThan(0);
+				expect(
+					screen.getAllByText('active:/elsewhere/note.md').length
+				).toBeGreaterThan(0);
+			});
+			expect(screen.queryByText('open-folder')).not.toBeInTheDocument();
+			expect(mockInvoke).toHaveBeenCalledWith('read_workspace_file', {
+				path: '/elsewhere/note.md',
+			});
+		});
+
+		it('wins over the saved workspace and never overwrites it', async () => {
+			workspaceState.lastActiveFilePath = '/workspace/readme.md';
+			workspaceState.openTabPaths = ['/workspace/readme.md'];
+			pendingOpenFiles = [['/elsewhere/note.md']];
+
+			render(<WorkspaceBrowser />);
+
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('tabs:/elsewhere/note.md').length
+				).toBeGreaterThan(0);
+			});
+			expect(screen.queryByText('open-folder')).not.toBeInTheDocument();
+			expect(mockInvoke).not.toHaveBeenCalledWith(
+				'scan_workspace_folder',
+				expect.anything()
+			);
+			expect(persistenceCalls()).toEqual([]);
+		});
+
+		it('opens several files, the last one active, each once', async () => {
+			workspaceState.rootPath = null;
+			pendingOpenFiles = [['/a/one.md', '/b/two.md', '/a/one.md']];
+
+			render(<WorkspaceBrowser />);
+
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('tabs:/a/one.md|/b/two.md').length
+				).toBeGreaterThan(0);
+				expect(screen.getAllByText('active:/b/two.md').length).toBeGreaterThan(
+					0
+				);
+			});
+		});
+
+		it('adds files opened later as tabs next to the workspace files', async () => {
+			workspaceState.lastActiveFilePath = '/workspace/readme.md';
+
+			render(<WorkspaceBrowser />);
+			await screen.findByText('open-folder');
+
+			const { useWorkspaceStore } =
+				await import('@/context/workspace-provider');
+			await useWorkspaceStore.getState().openDocuments(['/elsewhere/note.md']);
+
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('tabs:/workspace/readme.md|/elsewhere/note.md')
+						.length
+				).toBeGreaterThan(0);
+			});
+			// The workspace stays: its tree is still there.
+			expect(screen.getByText('open-folder')).toBeInTheDocument();
+		});
+
+		it('leaves the document session when a folder is opened', async () => {
+			workspaceState.rootPath = null;
+			pendingOpenFiles = [['/elsewhere/note.md']];
+
+			render(<WorkspaceBrowser />);
+			await waitFor(() => {
+				expect(screen.queryByText('open-folder')).not.toBeInTheDocument();
+			});
+
+			const { useWorkspaceStore } =
+				await import('@/context/workspace-provider');
+			await useWorkspaceStore.getState().openFolder();
+
+			await waitFor(() => {
+				expect(screen.getByText('open-folder')).toBeInTheDocument();
+			});
+			expect(mockInvoke).toHaveBeenCalledWith('set_workspace_root', {
+				rootPath: '/workspace',
+			});
 		});
 	});
 

@@ -14,7 +14,11 @@ import { FilePreview } from '@/components/explorer/file/file-preview';
 import { TabBar } from '@/components/explorer/workspace/tab-bar';
 import appIcon from '@/assets/icon.png';
 import { explorerSidebarStatusBarClassName } from '@/components/explorer/layout';
-import { isMac, MAC_TRAFFIC_LIGHTS_WIDTH } from '@/lib/platform';
+import {
+	isMac,
+	MAC_TRAFFIC_LIGHTS_WIDTH,
+	WINDOW_CONTROLS_WIDTH,
+} from '@/lib/platform';
 
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 560;
@@ -81,12 +85,66 @@ function SidebarBrand() {
 	);
 }
 
+/**
+ * Header of a document session, where the sidebar's brand row would be. It
+ * keeps the traffic-light clearance, the app icon and the settings button, and
+ * offers opening a folder, which is how a document session turns into a
+ * workspace.
+ */
+function DocumentTopBar({ sidebarFooter }: { sidebarFooter?: ReactNode }) {
+	const { t } = useTranslation();
+	const { openFolder, sidebarBusy } = useWorkspace();
+
+	return (
+		<div
+			data-tauri-drag-region
+			className="flex h-10 shrink-0 items-center gap-2 border-b border-border
+				bg-sidebar pl-4 text-sidebar-foreground select-none"
+			// The frameless window controls (Windows/Linux) float over this bar.
+			style={{ paddingRight: isMac ? 16 : WINDOW_CONTROLS_WIDTH }}
+		>
+			{isMac && (
+				<div className="shrink-0" style={{ width: MAC_TRAFFIC_LIGHTS_WIDTH }} />
+			)}
+			<img
+				alt=""
+				className="pointer-events-none size-5 rounded-md"
+				draggable={false}
+				src={appIcon}
+			/>
+			<span className="pointer-events-none text-sm font-semibold">Madora</span>
+			<div className="ml-auto flex items-center gap-1">
+				<Tooltip>
+					<TooltipTrigger render={<span />}>
+						<Button
+							aria-label={t('explorerPanel.openFolder')}
+							className="text-muted-foreground hover:bg-sidebar-accent
+								hover:text-sidebar-accent-foreground"
+							loading={sidebarBusy}
+							onClick={() => void openFolder()}
+							size="icon-sm"
+							variant="ghost"
+						>
+							<Folder className="size-4" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{t('explorerPanel.openFolder')}
+					</TooltipContent>
+				</Tooltip>
+				{sidebarFooter}
+			</div>
+		</div>
+	);
+}
+
 function WorkspaceBrowserContent({
 	header,
 	sidebarFooter,
 }: WorkspaceBrowserProps) {
 	const { t } = useTranslation();
-	const { sidebarWidth, setSidebarWidth, root, initialised } = useWorkspace();
+	const { sidebarWidth, setSidebarWidth, root, initialised, documentMode } =
+		useWorkspace();
 
 	const dragStartWidthRef = useRef(sidebarWidth);
 
@@ -123,6 +181,24 @@ function WorkspaceBrowserContent({
 		},
 		[sidebarWidth, setSidebarWidth]
 	);
+
+	if (documentMode) {
+		return (
+			<div className="flex h-full min-h-0 bg-background text-foreground">
+				<main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+					{header}
+					<DocumentTopBar sidebarFooter={sidebarFooter} />
+					<TabBar />
+					<div
+						className="flex min-h-0 flex-1 flex-col overflow-hidden"
+						data-no-os
+					>
+						<FilePreview />
+					</div>
+				</main>
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex h-full min-h-0 bg-background text-foreground">

@@ -513,7 +513,7 @@ export function MarkdownPreview({
 	}, []);
 
 	const handleConfirmTrust = useCallback(async () => {
-		if (!pendingExternalPath || !rootPath) return;
+		if (!pendingExternalPath) return;
 
 		try {
 			const exists = await absolutePathExists(pendingExternalPath);
@@ -533,7 +533,7 @@ export function MarkdownPreview({
 		);
 
 		setPendingExternalPath(null);
-	}, [pendingExternalPath, rootPath, t]);
+	}, [pendingExternalPath, t]);
 
 	return (
 		<div
