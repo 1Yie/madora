@@ -1,3 +1,18 @@
+## [Desktop 0.4.2](https://github.com/1Yie/madora/compare/v0.4.1...v0.4.2)（2026-10-08） | Mobile 0.0.4（2026-10-08）
+
+### Bug Fixes
+
+- **ai:** resolve provider defaults once and snapshot prompt templates ([5f34e20](https://github.com/1Yie/madora/commit/5f34e2073016aedda28172f48f4bee3a61217a4c))
+- **ai:** localize provider and template errors, stop qwen leaking across protocols ([51bc8b5](https://github.com/1Yie/madora/commit/51bc8b52c84934fb19ab17cd9fdbb9f8824dc68b))
+- **ai:** keep a slow keyring read from overwriting a newer key ([6bcdcdc](https://github.com/1Yie/madora/commit/6bcdcdcbb968fee2eb65e692b43d262e4b0a6a77))
+- **macos:** give the traffic lights room in workbench pages ([e46d303](https://github.com/1Yie/madora/commit/e46d30348c074fee23a895c37d1a0f1b99ca661d))
+- **open:** harden OS-opened documents ([50f461b](https://github.com/1Yie/madora/commit/50f461bd605fd51b5850b6d98db6c2ea5ba3c765))
+
+### Features
+
+- **open:** open Markdown files handed over by the OS ([2cc1a1f](https://github.com/1Yie/madora/commit/2cc1a1f93611836d9f147d17f94cf5ffbddc7219))
+- **workspace:** document session without a file tree ([4c68db1](https://github.com/1Yie/madora/commit/4c68db12618ed8f04054b166ce01eef00297fdab))
+
 ## [Desktop 0.4.1](https://github.com/1Yie/madora/compare/v0.3.16...v0.4.1)（2026-10-07） | Mobile 0.0.4（2026-10-07）
 
 ### Bug Fixes
