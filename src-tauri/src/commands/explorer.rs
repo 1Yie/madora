@@ -95,7 +95,8 @@ pub async fn read_workspace_file(
 
     // A Markdown file from outside the workspace (opened from the OS, followed
     // from a link, restored from a previous session) shows the images next to
-    // it. The directory comes from the path the backend just authorised.
+    // it. The directory is derived from the path the backend just authorised,
+    // so it cannot reach an image this command would not read anyway.
     let (preview, document_dir) = document_dir;
     if let Some(dir) = document_dir {
         protocol_state.allow_document_dir(dir);

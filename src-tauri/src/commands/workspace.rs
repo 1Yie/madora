@@ -28,6 +28,17 @@ pub async fn set_workspace_root(
     store.set_root_path(root_path)
 }
 
+/// Stops serving the remembered workspace until another one is opened, without
+/// forgetting it: the next launch still restores it. A document session — a file
+/// the OS handed over with no folder open — is not a workspace, so what the
+/// `madora://` protocol and path authorisation treat as the active root must
+/// not stay pointed at the folder the user had open last time.
+#[tauri::command]
+pub async fn leave_workspace(protocol_state: State<'_, MadoraProtocolState>) -> Result<(), String> {
+    protocol_state.set_workspace_root(None);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn add_tab(store: State<'_, WorkspaceStore>, file_path: String) -> Result<(), String> {
     store.add_tab(&file_path)

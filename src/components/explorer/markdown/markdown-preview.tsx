@@ -11,6 +11,7 @@ import { absolutePathExists } from '@/invoke/system';
 import { showErrorToast } from '@/components/ui/toast';
 
 import { cn } from '@/lib/utils';
+import { isSameOrDescendantPath } from '@/lib/path-utils';
 import { fromMadoraUrl, toMadoraUrl } from '@/lib/madora-url';
 import {
 	Dialog,
@@ -88,7 +89,8 @@ function tryDecodeURI(value: string): string {
  * Resolve a markdown image / link source to a `madora://` URL.
  *
  * - URLs (http/https/data/asset/madora) are returned unchanged.
- * - Absolute paths (`/img/...`) are resolved against the workspace root.
+ * - Absolute paths (`/img/...`) are resolved against the workspace root, or
+ *   against the document's own directory when no folder is open.
  * - Relative paths (`./img.png`, `../img.png`) are resolved against the
  *   markdown file's parent directory.
  *
@@ -121,28 +123,52 @@ function resolveToMadoraUrl(
 	let absolutePath: string;
 
 	if (decoded.startsWith('/')) {
-		// Absolute path in markdown — resolve against workspace root
-		if (!rootPath) {
+		// Absolute path in markdown — resolve against the workspace root. In a
+		// document session (no folder open) the document's own directory is the
+		// only root there is, so a leading slash means the same folder.
+		const base = rootPath ?? documentDirectory(filePath);
+		if (base === null) {
 			return decoded;
 		}
 
-		const trimmedRoot = rootPath.replace(/\\/g, '/').replace(/\/+$/, '');
+		const trimmedRoot = base.replace(/\\/g, '/').replace(/\/+$/, '');
 		const relativeSrc = decoded.replace(/^\/+/, '');
 		absolutePath = normaliseFilePath(`${trimmedRoot}/${relativeSrc}`);
 	} else {
 		// Relative path — resolve against the markdown file's directory
-		const fileDir = filePath.replace(/\\/g, '/');
-		const lastSlash = fileDir.lastIndexOf('/');
+		const basePath = documentDirectory(filePath);
 
-		if (lastSlash < 0) {
+		if (basePath === null) {
 			return decoded;
 		}
 
-		const basePath = fileDir.slice(0, lastSlash);
 		absolutePath = normaliseFilePath(`${basePath}/${decoded}`);
 	}
 
 	return toMadoraUrl(absolutePath);
+}
+
+/** The directory of `filePath`, as the slash form the URL helpers use. */
+function documentDirectory(filePath: string): string | null {
+	const fileDir = filePath.replace(/\\/g, '/');
+	const lastSlash = fileDir.lastIndexOf('/');
+
+	return lastSlash < 0 ? null : fileDir.slice(0, lastSlash);
+}
+
+/**
+ * Whether `absolutePath` is somewhere the user already opened: inside the
+ * workspace, or — with no folder open (a document session) — inside the
+ * directory of the document being read.
+ */
+function isWithinOpenedFolder(
+	absolutePath: string,
+	rootPath: string | null,
+	filePath: string
+): boolean {
+	const container = rootPath ?? documentDirectory(filePath);
+
+	return container !== null && isSameOrDescendantPath(absolutePath, container);
 }
 
 // ─── Standalone image component with `madora://` resolution ──────────────
@@ -229,12 +255,14 @@ function MarkdownLink({
 
 			const isMarkdown = /\.(md|markdown|mdx)$/i.test(absolutePath);
 
-			const isWithinWorkspace =
-				rootPath !== null &&
-				absolutePath.startsWith(rootPath.replace(/\\/g, '/'));
+			const inOpenedFolder = isWithinOpenedFolder(
+				absolutePath,
+				rootPath,
+				filePath
+			);
 
 			if (isMarkdown) {
-				if (isWithinWorkspace) {
+				if (inOpenedFolder) {
 					// Directly navigate — same workspace
 					let fileExists: boolean;
 					try {

@@ -83,11 +83,14 @@ impl MadoraProtocolState {
     }
 
     /// Lets relative images of a document opened from outside the workspace
-    /// load: images (and only images) next to it are served.
+    /// load: images (and only images) anywhere under the document's directory
+    /// are served, so `![x](images/pic.png)` works.
     ///
-    /// `dir` must come from a file the backend itself authorised for reading,
-    /// never from a path the webview names, so a document cannot widen what
-    /// it can reach.
+    /// `dir` must be derived from a file the backend itself resolved through
+    /// [`super::services::explorer::authorize_file_access`], never from a path the
+    /// webview names on its own. It grants no more than reading that file does
+    /// — the same command serves images from anywhere — it exists because an
+    /// `<img>` cannot go through a command at all.
     pub fn allow_document_dir(&self, dir: PathBuf) {
         let mut dirs = self
             .document_dirs
@@ -105,7 +108,8 @@ impl MadoraProtocolState {
     /// Decides whether `canonical` (already resolved) may be served.
     ///
     /// Anything inside the workspace is served, except protected paths. Outside
-    /// it, only images inside the directory of an externally opened document.
+    /// it, only images inside the directory of an externally opened document,
+    /// where the same protected paths are refused.
     fn check_read(&self, canonical: &Path) -> Result<(), (StatusCode, String)> {
         let workspace_root = self.get_workspace_root();
 
@@ -132,7 +136,11 @@ impl MadoraProtocolState {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .iter()
-                .any(|dir| canonical.starts_with(dir));
+                .any(|dir| {
+                    canonical
+                        .strip_prefix(dir)
+                        .is_ok_and(|relative| !paths::is_protected_path(relative))
+                });
 
         if in_document_dir {
             return Ok(());
@@ -557,6 +565,21 @@ mod tests {
                 .unwrap_err();
             assert_eq!(status, StatusCode::FORBIDDEN, "{name}");
         }
+    }
+
+    #[test]
+    fn a_document_directory_does_not_serve_protected_subdirectories() {
+        let workspace = tempfile::tempdir().unwrap();
+        let docs = tempfile::tempdir().unwrap();
+        fs::create_dir(docs.path().join(".ssh")).unwrap();
+        fs::write(docs.path().join(".ssh").join("key.png"), b"x").unwrap();
+        let state = state_with_workspace(workspace.path());
+        state.allow_document_dir(canonical(docs.path().to_path_buf()));
+
+        let (status, _) = state
+            .check_read(&canonical(docs.path().join(".ssh").join("key.png")))
+            .unwrap_err();
+        assert_eq!(status, StatusCode::FORBIDDEN);
     }
 
     #[test]

@@ -99,7 +99,7 @@ pub fn run() {
         // `Opened` event before this hook has run.
         app.state::<PendingOpenFiles>()
             .push(open_files_service::paths_from_args(
-                env::args().skip(1),
+                env::args_os().skip(1),
                 env::current_dir().ok().as_deref(),
             ));
 
@@ -161,6 +161,7 @@ pub fn run() {
             explorer::copy_workspace_node,
             workspace::get_workspace_state,
             workspace::set_workspace_root,
+            workspace::leave_workspace,
             workspace::add_tab,
             workspace::close_tab,
             workspace::close_tabs,

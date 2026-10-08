@@ -22,6 +22,7 @@ import {
 	setOpenTabPaths as setOpenTabPathsBackendRaw,
 	setZoomLevel as setZoomLevelBackend,
 	clearWorkspaceState,
+	leaveWorkspace as leaveWorkspaceBackend,
 } from '@/invoke/workspace';
 import { onOpenFilesQueued, takePendingOpenFiles } from '@/invoke/open-files';
 import { gitRestoreFile, gitStatus as fetchGitStatus } from '@/invoke/git';
@@ -81,6 +82,7 @@ type InitialWorkspaceState = {
 let tabIdCounter = 0;
 let previewRequestIdCounter = 0;
 let tabsPersistenceReady = false;
+let initializing: Promise<void> | null = null;
 
 // ─── Exported Types ────────────────────────────────────────────────
 
@@ -554,6 +556,7 @@ type WorkspaceState = {
 type WorkspaceActions = {
 	/* ── Internal init (called by provider) ── */
 	initializeWorkspace: () => Promise<void>;
+	runInitializeWorkspace: () => Promise<void>;
 
 	/**
 	 * Opens files the OS asked for. Without a workspace they become a
@@ -758,13 +761,32 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
 	// ── Internal init ──
 
-	initializeWorkspace: async () => {
+	initializeWorkspace: () => {
+		// StrictMode mounts twice. A second run would find the files the OS
+		// handed over already taken and restore the saved workspace over them,
+		// so concurrent calls share the run in flight.
+		initializing ??= get()
+			.runInitializeWorkspace()
+			.finally(() => {
+				initializing = null;
+			});
+		return initializing;
+	},
+
+	runInitializeWorkspace: async () => {
 		const { showHiddenFiles } = useAppSettingsStore.getState();
 
 		set({ sidebarBusy: true, sidebarError: null });
 
 		try {
-			const initialState = await fetchInitialState();
+			// Only a state that cannot even be read justifies forgetting it: the
+			// failure leaves nothing to restore. Everything below it (an unplugged
+			// drive, an unreadable folder) must keep the remembered workspace, so
+			// the next launch can still restore it.
+			const initialState = await fetchInitialState().catch((error) => {
+				void clearWorkspaceState().catch(() => {});
+				throw error;
+			});
 
 			set({
 				sidebarWidth: clampSidebarWidth(initialState.sidebarWidth),
@@ -778,6 +800,9 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 			if (launchFiles.length > 0) {
 				tabsPersistenceReady = true;
 				set({ documentMode: true, initialised: true, sidebarBusy: false });
+				// A document session is not a workspace, so the saved one stops
+				// being served until a folder is opened.
+				void leaveWorkspaceBackend().catch(() => {});
 				await get().openDocuments(launchFiles);
 				return;
 			}
@@ -876,7 +901,7 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 				void get().loadPreview(activeNode);
 			}
 		} catch (error) {
-			void clearWorkspaceState().catch(() => {});
+			// The remembered workspace is deliberately left as it was; see above.
 			tabsPersistenceReady = true;
 			set({
 				root: null,
@@ -926,10 +951,29 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 		for (const path of paths) {
 			const normalized = normalizeExplorerPath(path);
 			if (
-				!nodes.some((node) => normalizeExplorerPath(node.path) === normalized)
+				nodes.some((node) => normalizeExplorerPath(node.path) === normalized)
 			) {
-				nodes.push(createExternalNode(path));
+				continue;
 			}
+
+			// A file inside the open workspace is its tree node, so a tab it
+			// already has keeps its place in the tree.
+			const { root } = get();
+			if (root && !isOutsideWorkspace(path, root.path)) {
+				const { node, root: resolvedRoot } = await resolveNodeFromPath(
+					root,
+					path
+				);
+				if (resolvedRoot !== root && get().root === root) {
+					set({ root: resolvedRoot });
+				}
+				if (node?.kind === 'file') {
+					nodes.push(node);
+					continue;
+				}
+			}
+
+			nodes.push(createExternalNode(path));
 		}
 		if (nodes.length === 0) return;
 
@@ -938,6 +982,9 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 		if (!get().root && !get().documentMode) {
 			tabsPersistenceReady = true;
 			set({ documentMode: true, initialised: true });
+			// A document session is not a workspace, so the saved one stops being
+			// served until a folder is opened.
+			void leaveWorkspaceBackend().catch(() => {});
 		}
 
 		// The last file named ends up active, like opening several at once.

@@ -21,6 +21,15 @@ export async function setWorkspaceRoot(rootPath: string | null): Promise<void> {
 	return invoke('set_workspace_root', { rootPath });
 }
 
+/**
+ * Stops treating the remembered workspace as the active one, without forgetting
+ * it: a document session serves no workspace, and the next launch still
+ * restores the saved one.
+ */
+export async function leaveWorkspace(): Promise<void> {
+	return invoke('leave_workspace');
+}
+
 /** Add a file to the open tabs list. */
 export async function addTab(filePath: string): Promise<void> {
 	return invoke('add_tab', { filePath });

@@ -1,12 +1,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from '@testing-library/react';
 
 vi.mock('@/invoke/opener', () => ({
 	openUrl: vi.fn(),
 }));
 
+vi.mock('@/invoke/system', () => ({
+	absolutePathExists: vi.fn(async () => true),
+}));
+
 import { MarkdownPreview } from '@/components/explorer/markdown/markdown-preview';
 import { fromMadoraUrl, toMadoraUrl } from '@/lib/madora-url';
+import i18n from '@/i18n';
 
 afterEach(() => {
 	cleanup();
@@ -198,6 +209,86 @@ describe('MarkdownPreview', () => {
 
 		expect(document.querySelector('table')).toBeNull();
 		expect(document.body.textContent).toContain('name: x');
+	});
+});
+
+describe('without a folder open (a document session)', () => {
+	const externalTitle = () => i18n.t('markdownPreview.externalTitle');
+
+	it('resolves a leading-slash image against the document itself', () => {
+		render(
+			<MarkdownPreview
+				content="![图](/img/pic.png)"
+				filePath="/tmp/docs/note.md"
+				rootPath={null}
+			/>
+		);
+
+		expect(screen.getByAltText('图')).toHaveAttribute(
+			'src',
+			'madora://localhost/tmp/docs/img/pic.png'
+		);
+	});
+
+	it('follows a link next to the document without asking', async () => {
+		const navigate = vi.fn();
+		window.addEventListener('madora-navigate-file', navigate);
+
+		render(
+			<MarkdownPreview
+				content="[另一篇](./other.md)"
+				filePath="/tmp/docs/note.md"
+				rootPath={null}
+			/>
+		);
+		fireEvent.click(screen.getByText('另一篇'));
+
+		await waitFor(() => expect(navigate).toHaveBeenCalled());
+		expect(navigate.mock.calls[0][0].detail.filePath).toBe(
+			'/tmp/docs/other.md'
+		);
+		// The document's own folder is not "outside" anything.
+		expect(screen.queryByText(externalTitle())).toBeNull();
+
+		window.removeEventListener('madora-navigate-file', navigate);
+	});
+
+	it('still asks before a link that only leaves the document folder', async () => {
+		const navigate = vi.fn();
+		window.addEventListener('madora-navigate-file', navigate);
+
+		render(
+			<MarkdownPreview
+				content="[另一篇](../elsewhere/other.md)"
+				filePath="/tmp/docs/note.md"
+				rootPath={null}
+			/>
+		);
+		fireEvent.click(screen.getByText('另一篇'));
+
+		await screen.findByText(externalTitle());
+		expect(navigate).not.toHaveBeenCalled();
+
+		window.removeEventListener('madora-navigate-file', navigate);
+	});
+
+	it('still asks before a folder that only shares a prefix with the workspace', async () => {
+		const navigate = vi.fn();
+		window.addEventListener('madora-navigate-file', navigate);
+
+		render(
+			<MarkdownPreview
+				content="[另一篇](../work2/other.md)"
+				filePath="/tmp/work/note.md"
+				rootPath="/tmp/work"
+			/>
+		);
+		fireEvent.click(screen.getByText('另一篇'));
+
+		await screen.findByText(externalTitle());
+		expect(navigate).not.toHaveBeenCalled();
+
+		window.removeEventListener('madora-navigate-file', navigate);
 	});
 });
 

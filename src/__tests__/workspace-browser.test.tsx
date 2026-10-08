@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
 	cleanup,
@@ -290,6 +291,7 @@ describe('WorkspaceBrowser', () => {
 						truncated: false,
 					};
 				case 'set_workspace_root':
+				case 'leave_workspace':
 				case 'set_open_tab_paths':
 				case 'set_active_tab':
 				case 'add_tab':
@@ -505,6 +507,9 @@ describe('WorkspaceBrowser', () => {
 			expect(mockInvoke).toHaveBeenCalledWith('read_workspace_file', {
 				path: '/elsewhere/note.md',
 			});
+			// Serving the remembered workspace while a document session is open
+			// would leave two answers to "which folder is open".
+			expect(mockInvoke).toHaveBeenCalledWith('leave_workspace');
 		});
 
 		it('wins over the saved workspace and never overwrites it', async () => {
@@ -525,6 +530,31 @@ describe('WorkspaceBrowser', () => {
 				expect.anything()
 			);
 			expect(persistenceCalls()).toEqual([]);
+		});
+
+		it('keeps the document session when StrictMode initialises twice', async () => {
+			workspaceState.lastActiveFilePath = '/workspace/readme.md';
+			workspaceState.openTabPaths = ['/workspace/readme.md'];
+			pendingOpenFiles = [['/elsewhere/note.md']];
+
+			render(
+				<StrictMode>
+					<WorkspaceBrowser />
+				</StrictMode>
+			);
+
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('tabs:/elsewhere/note.md').length
+				).toBeGreaterThan(0);
+			});
+			const { useWorkspaceStore } =
+				await import('@/context/workspace-provider');
+			expect(useWorkspaceStore.getState().root).toBeNull();
+			expect(mockInvoke).not.toHaveBeenCalledWith(
+				'scan_workspace_folder',
+				expect.anything()
+			);
 		});
 
 		it('opens several files, the last one active, each once', async () => {
@@ -561,6 +591,33 @@ describe('WorkspaceBrowser', () => {
 			});
 			// The workspace stays: its tree is still there.
 			expect(screen.getByText('open-folder')).toBeInTheDocument();
+			expect(mockInvoke).not.toHaveBeenCalledWith('leave_workspace');
+		});
+
+		it('opens a workspace file as its tree node, not a second tab', async () => {
+			workspaceState.lastActiveFilePath = '/workspace/notes.md';
+			workspaceState.openTabPaths = [
+				'/workspace/readme.md',
+				'/workspace/notes.md',
+			];
+
+			render(<WorkspaceBrowser />);
+			await waitFor(() => {
+				expect(
+					screen.getAllByText('active:/workspace/notes.md').length
+				).toBeGreaterThan(0);
+			});
+
+			const { useWorkspaceStore } =
+				await import('@/context/workspace-provider');
+			await useWorkspaceStore
+				.getState()
+				.openDocuments(['/workspace/readme.md']);
+
+			const { tabs, selectedFile } = useWorkspaceStore.getState();
+			expect(tabs).toHaveLength(2);
+			expect(tabs[0].node.relativePath).toBe('readme.md');
+			expect(selectedFile?.path).toBe('/workspace/readme.md');
 		});
 
 		it('leaves the document session when a folder is opened', async () => {
@@ -583,6 +640,26 @@ describe('WorkspaceBrowser', () => {
 				rootPath: '/workspace',
 			});
 		});
+	});
+
+	it('keeps the remembered workspace when restoring it fails', async () => {
+		const base = mockInvoke.getMockImplementation();
+		mockInvoke.mockImplementation(async (command, args) => {
+			if (command === 'scan_workspace_folder') {
+				throw new Error('the folder is not reachable');
+			}
+			return base?.(command, args);
+		});
+
+		render(<WorkspaceBrowser />);
+
+		const { useWorkspaceStore } = await import('@/context/workspace-provider');
+		await waitFor(() => {
+			expect(useWorkspaceStore.getState().sidebarError).toBeTruthy();
+		});
+		// The folder may come back — an unplugged drive, a share that is briefly
+		// offline — so a failed restore must not forget it.
+		expect(mockInvoke).not.toHaveBeenCalledWith('clear_workspace_state');
 	});
 
 	it('reads tab bar mode from workspace state', async () => {
