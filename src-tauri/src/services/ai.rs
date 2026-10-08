@@ -747,8 +747,10 @@ mod tests {
 
     #[test]
     fn resolve_cache_api_url_custom_url() {
-        let mut config = AiCompletionConfig::default();
-        config.api_url = Some("https://custom.api.com".into());
+        let config = AiCompletionConfig {
+            api_url: Some("https://custom.api.com".into()),
+            ..Default::default()
+        };
         let url = resolve_cache_api_url(AiProvider::DeepSeek, &config);
         assert!(url.contains("custom.api.com"));
         assert!(url.ends_with("/beta"));
@@ -756,8 +758,10 @@ mod tests {
 
     #[test]
     fn resolve_cache_api_url_already_has_beta() {
-        let mut config = AiCompletionConfig::default();
-        config.api_url = Some("https://api.deepseek.com/beta".into());
+        let config = AiCompletionConfig {
+            api_url: Some("https://api.deepseek.com/beta".into()),
+            ..Default::default()
+        };
         let url = resolve_cache_api_url(AiProvider::DeepSeek, &config);
         assert_eq!(url, "https://api.deepseek.com/beta");
     }
@@ -766,8 +770,10 @@ mod tests {
 
     #[test]
     fn resolve_cache_model_configured() {
-        let mut config = AiCompletionConfig::default();
-        config.model = Some("my-model".into());
+        let config = AiCompletionConfig {
+            model: Some("my-model".into()),
+            ..Default::default()
+        };
         let model = resolve_cache_model(AiProvider::DeepSeek, &config);
         assert_eq!(model, "my-model");
     }
@@ -916,8 +922,10 @@ mod tests {
 
     #[test]
     fn resolve_provider_explicit() {
-        let mut config = AiCompletionConfig::default();
-        config.provider = Some(AiProvider::OpenAi);
+        let config = AiCompletionConfig {
+            provider: Some(AiProvider::OpenAi),
+            ..Default::default()
+        };
         assert_eq!(resolve_provider(&config), AiProvider::OpenAi);
     }
 

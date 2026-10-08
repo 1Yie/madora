@@ -1033,8 +1033,10 @@ mod tests {
 
     #[test]
     fn resolve_api_key_valid() {
-        let mut config = AiCompletionConfig::default();
-        config.api_key = "sk-abc123".into();
+        let config = AiCompletionConfig {
+            api_key: "sk-abc123".into(),
+            ..Default::default()
+        };
         assert_eq!(resolve_api_key(&config).unwrap(), "sk-abc123");
     }
 
@@ -1053,8 +1055,10 @@ mod tests {
 
     #[test]
     fn resolve_api_key_trimmed() {
-        let mut config = AiCompletionConfig::default();
-        config.api_key = "  sk-xyz  ".into();
+        let config = AiCompletionConfig {
+            api_key: "  sk-xyz  ".into(),
+            ..Default::default()
+        };
         assert_eq!(resolve_api_key(&config).unwrap(), "sk-xyz");
     }
 
@@ -1062,8 +1066,10 @@ mod tests {
 
     #[test]
     fn resolve_model_custom() {
-        let mut config = AiCompletionConfig::default();
-        config.model = Some("my-model".into());
+        let config = AiCompletionConfig {
+            model: Some("my-model".into()),
+            ..Default::default()
+        };
         assert_eq!(resolve_model(&config, "default-model").unwrap(), "my-model");
     }
 
@@ -1078,8 +1084,10 @@ mod tests {
 
     #[test]
     fn resolve_model_empty_after_trim() {
-        let mut config = AiCompletionConfig::default();
-        config.model = Some("  ".into());
+        let config = AiCompletionConfig {
+            model: Some("  ".into()),
+            ..Default::default()
+        };
         assert_eq!(resolve_model(&config, "fallback").unwrap(), "fallback");
     }
 
@@ -1087,8 +1095,10 @@ mod tests {
 
     #[test]
     fn resolve_api_url_custom() {
-        let mut config = AiCompletionConfig::default();
-        config.api_url = Some("https://custom.api.com/".into());
+        let config = AiCompletionConfig {
+            api_url: Some("https://custom.api.com/".into()),
+            ..Default::default()
+        };
         assert_eq!(
             resolve_api_url(&config, "https://default.com").unwrap(),
             "https://custom.api.com"
@@ -1106,8 +1116,10 @@ mod tests {
 
     #[test]
     fn resolve_api_url_trim_trailing_slash() {
-        let mut config = AiCompletionConfig::default();
-        config.api_url = Some("https://api.test.com/v1///".into());
+        let config = AiCompletionConfig {
+            api_url: Some("https://api.test.com/v1///".into()),
+            ..Default::default()
+        };
         assert_eq!(
             resolve_api_url(&config, "https://fallback.com").unwrap(),
             "https://api.test.com/v1"
@@ -1116,8 +1128,10 @@ mod tests {
 
     #[test]
     fn resolve_api_url_empty_after_trim_falls_to_default() {
-        let mut config = AiCompletionConfig::default();
-        config.api_url = Some("  ".into());
+        let config = AiCompletionConfig {
+            api_url: Some("  ".into()),
+            ..Default::default()
+        };
         assert_eq!(
             resolve_api_url(&config, "https://default.com").unwrap(),
             "https://default.com"
