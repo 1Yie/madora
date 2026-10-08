@@ -1,9 +1,10 @@
 [Desktop Entry]
 Categories=Office;TextEditor;
 Comment=Markdown editing, powered by AI
-Exec=madora
+Exec=madora %F
 Icon=madora
 Name=Madora
 StartupWMClass=madora
 Terminal=false
 Type=Application
+MimeType=text/markdown;text/x-markdown;

@@ -43,7 +43,12 @@ use tauri::{
 /// `madora://` protocol handler.
 pub struct MadoraProtocolState {
     workspace_root: Mutex<Option<PathBuf>>,
+    document_dirs: Mutex<Vec<PathBuf>>,
 }
+
+/// How many directories of externally opened documents are remembered. Old
+/// ones are dropped first, so the set cannot grow without bound.
+const MAX_DOCUMENT_DIRS: usize = 32;
 
 impl Default for MadoraProtocolState {
     fn default() -> Self {
@@ -55,6 +60,7 @@ impl MadoraProtocolState {
     pub fn new() -> Self {
         Self {
             workspace_root: Mutex::new(None),
+            document_dirs: Mutex::new(Vec::new()),
         }
     }
 
@@ -74,6 +80,75 @@ impl MadoraProtocolState {
     /// Get a clone of the current workspace root.
     pub fn get_workspace_root(&self) -> Option<PathBuf> {
         self.lock_root().clone()
+    }
+
+    /// Lets relative images of a document opened from outside the workspace
+    /// load: images (and only images) next to it are served.
+    ///
+    /// `dir` must come from a file the backend itself authorised for reading,
+    /// never from a path the webview names, so a document cannot widen what
+    /// it can reach.
+    pub fn allow_document_dir(&self, dir: PathBuf) {
+        let mut dirs = self
+            .document_dirs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+
+        dirs.retain(|known| known != &dir);
+        dirs.push(dir);
+
+        if dirs.len() > MAX_DOCUMENT_DIRS {
+            dirs.remove(0);
+        }
+    }
+
+    /// Decides whether `canonical` (already resolved) may be served.
+    ///
+    /// Anything inside the workspace is served, except protected paths. Outside
+    /// it, only images inside the directory of an externally opened document.
+    fn check_read(&self, canonical: &Path) -> Result<(), (StatusCode, String)> {
+        let workspace_root = self.get_workspace_root();
+
+        if let Some(root) = &workspace_root {
+            let canonical_root = root.canonicalize().map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Workspace root is not accessible.".to_string(),
+                )
+            })?;
+
+            if let Ok(relative) = canonical.strip_prefix(&canonical_root) {
+                return if paths::is_protected_path(relative) {
+                    Err((StatusCode::FORBIDDEN, "Access denied.".to_string()))
+                } else {
+                    Ok(())
+                };
+            }
+        }
+
+        let in_document_dir = is_image_path(canonical)
+            && self
+                .document_dirs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .any(|dir| canonical.starts_with(dir));
+
+        if in_document_dir {
+            return Ok(());
+        }
+
+        if workspace_root.is_none() {
+            return Err((
+                StatusCode::NOT_FOUND,
+                "No workspace is configured. Please open a workspace first.".to_string(),
+            ));
+        }
+
+        Err((
+            StatusCode::FORBIDDEN,
+            "Access denied: the requested path is outside the workspace.".to_string(),
+        ))
     }
 
     /// Checks that `claimed` (a root path sent by the webview) is the
@@ -155,19 +230,7 @@ pub fn handle_madora_protocol<R: Runtime>(
         return error_response(StatusCode::BAD_REQUEST, "Malformed path in request");
     };
 
-    // ── 3. SECURITY: Get the workspace root for validation ─
-    let state = app_handle.state::<MadoraProtocolState>();
-    let workspace_root = match state.get_workspace_root() {
-        Some(root) => root,
-        None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "No workspace is configured. Please open a workspace first.",
-            );
-        }
-    };
-
-    // ── 4. SECURITY: Canonicalise (resolves symlinks, `.`, `..`) ──
+    // ── 3. SECURITY: Canonicalise (resolves symlinks, `.`, `..`) ──
     let canonical = match requested.canonicalize() {
         Ok(p) => p,
         Err(_) => {
@@ -175,34 +238,16 @@ pub fn handle_madora_protocol<R: Runtime>(
         }
     };
 
-    // ── 5. SECURITY: Ensure the resolved path is within the workspace root ──
-    let canonical_root = match workspace_root.canonicalize() {
-        Ok(r) => r,
-        Err(_) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Workspace root is not accessible.",
-            );
-        }
-    };
+    // ── 4. SECURITY: Ensure the resolved path is one we may serve ──
+    let state = app_handle.state::<MadoraProtocolState>();
 
-    if !canonical.starts_with(&canonical_root) {
-        return error_response(
-            StatusCode::FORBIDDEN,
-            "Access denied: the requested path is outside the workspace.",
-        );
+    if let Err((status, message)) = state.check_read(&canonical) {
+        return error_response(status, &message);
     }
 
-    // ── 6. Ensure it's a regular file (not a directory) ─────
+    // ── 5. Ensure it's a regular file (not a directory) ─────
     if canonical.is_dir() {
         return error_response(StatusCode::FORBIDDEN, "Cannot read a directory.");
-    }
-
-    if canonical
-        .strip_prefix(&canonical_root)
-        .is_ok_and(paths::is_protected_path)
-    {
-        return error_response(StatusCode::FORBIDDEN, "Access denied.");
     }
 
     // ── 7. Read the file ────────────────────────────────────
@@ -255,6 +300,11 @@ fn error_response(status: StatusCode, message: &str) -> Response<Vec<u8>> {
         "text/plain; charset=utf-8",
         message.as_bytes().to_vec(),
     )
+}
+
+/// Whether `path` is an image the webview can show in an `<img>`.
+fn is_image_path(path: &Path) -> bool {
+    mime_for_path(path).starts_with("image/")
 }
 
 /// Determine the MIME type for a file based on its extension.
@@ -445,6 +495,109 @@ mod tests {
         assert!(state.authorize_root(dir.path()).is_err());
         // A different spelling of the same directory is still that directory.
         assert!(state.authorize_root(&root.join("../ws")).is_ok());
+    }
+
+    // ── check_read ──────────────────────────────────────────
+
+    fn state_with_workspace(root: &Path) -> MadoraProtocolState {
+        let state = MadoraProtocolState::new();
+        state.set_workspace_root(Some(root.to_path_buf()));
+        state
+    }
+
+    fn canonical(path: PathBuf) -> PathBuf {
+        path.canonicalize().unwrap()
+    }
+
+    #[test]
+    fn check_read_serves_workspace_files_but_not_protected_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        fs::write(dir.path().join("a.png"), b"x").unwrap();
+        fs::write(dir.path().join(".git").join("config"), b"x").unwrap();
+        let state = state_with_workspace(dir.path());
+
+        assert!(state
+            .check_read(&canonical(dir.path().join("a.png")))
+            .is_ok());
+        let (status, _) = state
+            .check_read(&canonical(dir.path().join(".git").join("config")))
+            .unwrap_err();
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn check_read_refuses_everything_without_a_workspace_or_document() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.png"), b"x").unwrap();
+        let state = MadoraProtocolState::new();
+
+        let (status, _) = state
+            .check_read(&canonical(dir.path().join("a.png")))
+            .unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn a_document_directory_serves_images_only() {
+        let workspace = tempfile::tempdir().unwrap();
+        let docs = tempfile::tempdir().unwrap();
+        fs::write(docs.path().join("pic.PNG"), b"x").unwrap();
+        fs::write(docs.path().join("secret.txt"), b"x").unwrap();
+        fs::write(docs.path().join("note.md"), b"x").unwrap();
+        let state = state_with_workspace(workspace.path());
+        state.allow_document_dir(canonical(docs.path().to_path_buf()));
+
+        assert!(state
+            .check_read(&canonical(docs.path().join("pic.PNG")))
+            .is_ok());
+        for name in ["secret.txt", "note.md"] {
+            let (status, _) = state
+                .check_read(&canonical(docs.path().join(name)))
+                .unwrap_err();
+            assert_eq!(status, StatusCode::FORBIDDEN, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_document_directory_works_without_a_workspace() {
+        let docs = tempfile::tempdir().unwrap();
+        fs::create_dir(docs.path().join("img")).unwrap();
+        fs::write(docs.path().join("img").join("pic.png"), b"x").unwrap();
+        let state = MadoraProtocolState::new();
+        state.allow_document_dir(canonical(docs.path().to_path_buf()));
+
+        assert!(state
+            .check_read(&canonical(docs.path().join("img").join("pic.png")))
+            .is_ok());
+    }
+
+    #[test]
+    fn images_beside_an_unrelated_directory_stay_blocked() {
+        let docs = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        fs::write(other.path().join("pic.png"), b"x").unwrap();
+        let state = MadoraProtocolState::new();
+        state.allow_document_dir(canonical(docs.path().to_path_buf()));
+
+        assert!(state
+            .check_read(&canonical(other.path().join("pic.png")))
+            .is_err());
+    }
+
+    #[test]
+    fn only_the_most_recent_document_directories_are_remembered() {
+        let state = MadoraProtocolState::new();
+
+        for index in 0..MAX_DOCUMENT_DIRS + 5 {
+            state.allow_document_dir(PathBuf::from(format!("/docs/{index}")));
+        }
+        state.allow_document_dir(PathBuf::from("/docs/40"));
+
+        let dirs = state.document_dirs.lock().unwrap();
+        assert_eq!(dirs.len(), MAX_DOCUMENT_DIRS);
+        assert!(!dirs.contains(&PathBuf::from("/docs/0")));
+        assert_eq!(dirs.last(), Some(&PathBuf::from("/docs/40")));
     }
 
     // ── MadoraProtocolState ─────────────────────────────────

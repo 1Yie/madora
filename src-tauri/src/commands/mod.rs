@@ -2,6 +2,7 @@ pub mod ai;
 pub mod explorer;
 pub mod git;
 pub mod madora_sync;
+pub mod open_files;
 pub mod secure_storage;
 pub mod system;
 pub mod theme;

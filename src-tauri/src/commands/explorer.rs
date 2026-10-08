@@ -81,12 +81,27 @@ pub async fn read_workspace_file(
     let root = protocol_state.get_workspace_root();
     let requested = PathBuf::from(path);
 
-    tauri::async_runtime::spawn_blocking(move || {
+    let document_dir = tauri::async_runtime::spawn_blocking(move || {
         let file_path = explorer::authorize_file_access(root.as_deref(), &requested, false)?;
-        explorer::read_workspace_file(&file_path)
+        let preview = explorer::read_workspace_file(&file_path)?;
+
+        Ok::<_, String>((
+            preview,
+            explorer::external_document_dir(root.as_deref(), &file_path),
+        ))
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())??;
+
+    // A Markdown file from outside the workspace (opened from the OS, followed
+    // from a link, restored from a previous session) shows the images next to
+    // it. The directory comes from the path the backend just authorised.
+    let (preview, document_dir) = document_dir;
+    if let Some(dir) = document_dir {
+        protocol_state.allow_document_dir(dir);
+    }
+
+    Ok(preview)
 }
 
 #[tauri::command]

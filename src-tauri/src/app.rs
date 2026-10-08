@@ -2,11 +2,15 @@ use std::env;
 
 use crate::{
     commands::{
-        ai, explorer, git, madora_sync, secure_storage, system, utility, webdav, workspace,
+        ai, explorer, git, madora_sync, open_files, secure_storage, system, utility, webdav,
+        workspace,
     },
     protocol::MadoraProtocolState,
     services::{
-        ai::AiCompletionService, madora_sync::MadoraSyncStore, webdav::WebDavStore,
+        ai::AiCompletionService,
+        madora_sync::MadoraSyncStore,
+        open_files::{self as open_files_service, PendingOpenFiles},
+        webdav::WebDavStore,
         workspace::WorkspaceStore,
     },
 };
@@ -17,7 +21,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Runtime,
 };
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[cfg(not(target_os = "linux"))]
 const TRAY_MENU_SHOW_WINDOW: &str = "tray_show_window";
@@ -45,12 +49,16 @@ use tauri_plugin_prevent_default::PlatformOptions;
 
 pub fn run() {
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            // A second launch ("Open with Madora" while it is running) lands
+            // here: queue its files for the already-open window.
+            let files = open_files_service::paths_from_args(
+                args.into_iter().skip(1),
+                Some(std::path::Path::new(&cwd)),
+            );
+            queue_open_files(app, files);
+
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init());
 
@@ -85,6 +93,15 @@ pub fn run() {
         configure_windows_webview(app);
 
         app.manage(MadoraProtocolState::new());
+
+        // Files named on the command line of the first launch. The queue
+        // itself is registered on the builder, because macOS can deliver an
+        // `Opened` event before this hook has run.
+        app.state::<PendingOpenFiles>()
+            .push(open_files_service::paths_from_args(
+                env::args().skip(1),
+                env::current_dir().ok().as_deref(),
+            ));
 
         // Initialize workspace store with app data directory for persistence
         let app_data_dir = app
@@ -124,6 +141,7 @@ pub fn run() {
     });
 
     builder
+        .manage(PendingOpenFiles::new())
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
             utility::path_exists,
@@ -178,6 +196,7 @@ pub fn run() {
             secure_storage::has_ai_api_key,
             secure_storage::store_ai_api_key,
             secure_storage::delete_ai_api_key,
+            open_files::take_pending_open_files,
             system::show_window,
             system::hide_window,
             system::quit_app,
@@ -200,8 +219,31 @@ pub fn run() {
             madora_sync::madora_sync_restart_server,
             madora_sync::madora_sync_publish_editor_state,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS delivers "Open with" and double-clicks as an event, not as
+            // process arguments, including while the app is already running.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                queue_open_files(app, open_files_service::paths_from_urls(urls));
+                show_main_window(app);
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
+}
+
+/// Queues files for the webview and tells it to fetch them. The webview also
+/// fetches once at startup, so a file queued before it loaded is not lost.
+fn queue_open_files(app: &AppHandle, files: Vec<std::path::PathBuf>) {
+    if files.is_empty() {
+        return;
+    }
+
+    app.state::<PendingOpenFiles>().push(files);
+    let _ = app.emit(open_files::OPEN_FILES_EVENT, ());
 }
 
 fn setup_tray(app: &tauri::App) -> tauri::Result<()> {

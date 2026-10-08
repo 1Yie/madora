@@ -555,6 +555,24 @@ pub fn authorize_file_access(
     }
 }
 
+/// The directory of `file` when it is a Markdown document outside the
+/// workspace. `file` must already be resolved by [`authorize_file_access`].
+pub fn external_document_dir(root_path: Option<&Path>, file: &Path) -> Option<PathBuf> {
+    if classify_file_kind(file) != Some(ExplorerFileKind::Markdown) {
+        return None;
+    }
+
+    let inside_workspace = root_path
+        .and_then(|root| root.canonicalize().ok())
+        .is_some_and(|root| file.starts_with(root));
+
+    if inside_workspace {
+        None
+    } else {
+        file.parent().map(Path::to_path_buf)
+    }
+}
+
 /// Fails unless `path` resolves (symlinks and `..` included) to the workspace
 /// root or something inside it. Paths that do not exist yet are judged by
 /// their nearest existing ancestor.
@@ -1525,6 +1543,37 @@ mod tests {
             authorize_file_access(Some(&root), &root.join(".git/hooks/pre-commit"), true).is_err()
         );
         assert!(authorize_file_access(Some(&root), &root.join(".git/config"), false).is_err());
+    }
+
+    #[test]
+    fn only_markdown_outside_the_workspace_has_a_document_directory() {
+        let (_guard, root, outside) = workspace_with_outside();
+        for name in ["note.md", "pic.png", "plain.txt"] {
+            std::fs::write(outside.join(name), b"x").unwrap();
+        }
+        std::fs::write(root.join("inside.md"), b"x").unwrap();
+        let resolved = |path: PathBuf| path.canonicalize().unwrap();
+
+        assert_eq!(
+            external_document_dir(Some(&root), &resolved(outside.join("note.md"))),
+            Some(resolved(outside.clone()))
+        );
+        // Without a workspace every Markdown file is external.
+        assert!(external_document_dir(None, &resolved(outside.join("note.md"))).is_some());
+        // Inside the workspace the workspace rules already apply.
+        assert_eq!(
+            external_document_dir(Some(&root), &resolved(root.join("inside.md"))),
+            None
+        );
+        // Images and text are not documents that reference other files.
+        assert_eq!(
+            external_document_dir(Some(&root), &resolved(outside.join("pic.png"))),
+            None
+        );
+        assert_eq!(
+            external_document_dir(Some(&root), &resolved(outside.join("plain.txt"))),
+            None
+        );
     }
 
     #[test]
