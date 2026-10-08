@@ -239,12 +239,20 @@ mod tests {
         let mut invalid = dir.path().as_os_str().to_os_string().into_vec();
         invalid.extend_from_slice(b"/\xff.md");
         let invalid = OsString::from_vec(invalid);
-        std::fs::write(&invalid, "# hi").unwrap();
+
+        // Whether such a file can exist at all depends on the filesystem:
+        // Linux stores any bytes in a name, macOS rejects the name itself
+        // (EILSEQ), so the write is allowed to fail. Either way the argument
+        // must be dropped instead of reaching the webview mangled.
+        let _ = std::fs::write(&invalid, "# hi");
 
         assert_eq!(
-            paths_from_args([invalid, note.clone().into_os_string()], None,),
+            paths_from_args([invalid.clone(), note.clone().into_os_string()], None),
             vec![note]
         );
+        // The guard itself: a path the webview could never name is never taken,
+        // even where the file does exist.
+        assert!(accept(PathBuf::from(invalid)).is_none());
     }
 
     #[test]
