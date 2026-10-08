@@ -33,3 +33,6 @@ src-tauri/mado
 *.key
 *.keystore
 *.jks
+
+# Local lint experiment fixtures
+src/__linttest__/
