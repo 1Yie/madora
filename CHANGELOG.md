@@ -1,3 +1,10 @@
+## [Desktop 0.4.3](https://github.com/1Yie/madora/compare/v0.4.2...v0.4.3)（2026-10-09） | Mobile 0.0.4（2026-10-09）
+
+### Features
+
+- **open:** run a one-off document window for OS-opened files ([1993deb](https://github.com/1Yie/madora/commit/1993deb175ccba43433ddc2dc2b0222e0dfbbc75))
+- **workspace:** give the document window its own top bar and layout ([1252512](https://github.com/1Yie/madora/commit/125251253c97691d1c298a6537178ec2d221186c))
+
 ## [Desktop 0.4.2](https://github.com/1Yie/madora/compare/v0.4.1...v0.4.2)（2026-10-08） | Mobile 0.0.4（2026-10-08）
 
 ### Bug Fixes
