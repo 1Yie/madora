@@ -26,6 +26,7 @@ import { MarkdownWorkspace } from '../markdown/markdown-workspace';
 import { normalizeExplorerPath } from '../../../lib/path-utils';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
 import { useWorkspace } from '@/context/workspace-provider';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 import { TextWorkspace } from '../workspace/text-workspace';
 
 function inferLanguage(fileName: string): string | undefined {
@@ -297,10 +298,12 @@ export function FilePreview() {
 		root,
 		gitStatus,
 		openFolder: onOpenFolder,
+		initialised,
 	} = useWorkspace();
 	const conflictedFilePaths = gitStatus?.conflictedFiles ?? [];
 	const rootPath = root?.path ?? null;
 	const workspaceOpen = Boolean(root);
+	const documentWindow = isDocumentLaunch();
 	const [markdownMode, setMarkdownMode] = useState<EditorMode>('edit');
 	const toggleMode = () =>
 		setMarkdownMode((m) => (m === 'edit' ? 'preview' : 'edit'));
@@ -318,6 +321,10 @@ export function FilePreview() {
 
 	const isConflicted = isConflictedByIndex || hasConflictMarkers;
 
+	// A document window's files are still being read: showing "nothing open"
+	// for those first frames would only flash.
+	if (!selectedFile && documentWindow && !initialised) return null;
+
 	if (!selectedFile) {
 		return (
 			<Empty>
@@ -326,17 +333,21 @@ export function FilePreview() {
 						<FolderOpen className="size-4" />
 					</EmptyIcon>
 					<EmptyTitle>
-						{workspaceOpen
-							? t('filePreview.selectFileTitle')
-							: t('filePreview.openFolderTitle')}
+						{documentWindow
+							? t('filePreview.documentClosedTitle')
+							: workspaceOpen
+								? t('filePreview.selectFileTitle')
+								: t('filePreview.openFolderTitle')}
 					</EmptyTitle>
 					<EmptyDescription>
-						{workspaceOpen
-							? t('filePreview.selectFileDescription')
-							: t('filePreview.openFolderDescription')}
+						{documentWindow
+							? t('filePreview.documentClosedDescription')
+							: workspaceOpen
+								? t('filePreview.selectFileDescription')
+								: t('filePreview.openFolderDescription')}
 					</EmptyDescription>
 				</EmptyHeader>
-				{!workspaceOpen && (
+				{!workspaceOpen && !documentWindow && (
 					<EmptyContent>
 						<Button onClick={onOpenFolder} variant="outline">
 							<FolderOpen className="mr-1.5 size-4" />

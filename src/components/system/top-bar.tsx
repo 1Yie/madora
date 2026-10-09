@@ -23,7 +23,14 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { isMac, WINDOW_BUTTON_WIDTH } from '@/lib/platform';
+import { useDocumentLayout } from '@/context/workspace-provider';
+import { isDocumentLaunch } from '@/lib/launch-mode';
+import {
+	DOCUMENT_BAR_HEIGHT,
+	isMac,
+	TAB_STRIP_HEIGHT,
+	WINDOW_BUTTON_WIDTH,
+} from '@/lib/platform';
 import {
 	clearStoredMarkdownDrafts,
 	hasUnsaved,
@@ -49,7 +56,17 @@ export default function Titlebar() {
 	const [displayedConfirmMode, setDisplayedConfirmMode] =
 		useState<CloseBehavior>('exit');
 	const [savingBeforeClose, setSavingBeforeClose] = useState(false);
-	const { closeBehavior } = useAppSettings();
+	const { closeBehavior: preferredCloseBehavior } = useAppSettings();
+	// The controls sit on the document bar in a document window, on the tab
+	// strip otherwise, and take the height of whichever is shown.
+	const controlsHeight = useDocumentLayout()
+		? DOCUMENT_BAR_HEIGHT
+		: TAB_STRIP_HEIGHT;
+	// A document window has no tray to bring it back from, so "minimize to
+	// tray" would leave an invisible process behind: closing it quits.
+	const closeBehavior: CloseBehavior = isDocumentLaunch()
+		? 'exit'
+		: preferredCloseBehavior;
 	const bypassCloseGuardRef = useRef(false);
 
 	const closeWindow = useCallback(async (targetBehavior: CloseBehavior) => {
@@ -155,12 +172,13 @@ export default function Titlebar() {
 
 	return (
 		<>
-			{/* Frameless window controls pinned over the tab strip's right end.
+			{/* Frameless window controls pinned over the top bar's right end.
 				macOS uses the native traffic lights instead. */}
 			{isMac ? null : (
 				<div
-					className="fixed top-0 right-0 z-[41] flex h-8 items-center
+					className="fixed top-0 right-0 z-[41] flex items-center
 						text-foreground select-none"
+					style={{ height: controlsHeight }}
 				>
 					<Tooltip>
 						<TooltipTrigger

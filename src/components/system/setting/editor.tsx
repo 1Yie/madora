@@ -47,6 +47,7 @@ import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Switch } from '@/components/ui/switch';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
 import providerModels from '@/assets/models.json';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 
 type ProviderModelOption = {
 	name: string;
@@ -249,9 +250,11 @@ export function EditorSettings() {
 				</SettingsGroup>
 			</SettingsSectionCard>
 
-			<SettingsSectionCard title={t('settings.editor.cards.window.title')}>
-				<CloseBehaviorSetting />
-			</SettingsSectionCard>
+			{!isDocumentLaunch() && (
+				<SettingsSectionCard title={t('settings.editor.cards.window.title')}>
+					<CloseBehaviorSetting />
+				</SettingsSectionCard>
+			)}
 
 			<SettingsSectionCard title={t('settings.editor.cards.ai.title')}>
 				<div className="space-y-4">

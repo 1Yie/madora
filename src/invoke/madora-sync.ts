@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AiProvider, CustomProviderProtocol } from '@/invoke/ai';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 
 export type MadoraSyncRole = 'host' | 'client';
 
@@ -164,5 +165,7 @@ export async function madoraSyncRestartServer(): Promise<boolean> {
 export async function madoraSyncPublishEditorState(
 	state: MadoraSyncEditorStateInput
 ): Promise<boolean> {
+	// A document window runs no sync server, so there is nobody to publish to.
+	if (isDocumentLaunch()) return false;
 	return invoke<boolean>('madora_sync_publish_editor_state', { state });
 }

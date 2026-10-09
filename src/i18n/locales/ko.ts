@@ -800,6 +800,9 @@ const ko = {
 		openFolderTitle: '아직 열린 폴더가 없습니다',
 		openFolderDescription:
 			'로컬 폴더를 열면 Markdown, 이미지, 텍스트 파일을 여기서 미리볼 수 있습니다.',
+		documentClosedTitle: '열려 있는 문서가 없습니다',
+		documentClosedDescription:
+			'이 창은 실행할 때 지정한 파일만 엽니다. 창을 닫거나 런처에서 Madora를 실행해 폴더를 여세요.',
 	},
 } as const;
 

@@ -32,6 +32,7 @@ import { useEffect, type ReactNode } from 'react';
 
 import i18n from '@/i18n';
 import { useAppSettingsStore } from '@/context/app-settings-provider';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 import { isEditorDirty } from '@/lib/unsaved-registry';
 import type { TabEntry } from '@/components/explorer/workspace/tab-bar';
 import { showErrorToast, showSuccessToast } from '@/components/ui/toast';
@@ -1882,6 +1883,18 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 }));
 
 export { useWorkspaceStore };
+
+/**
+ * Whether the document layout (no sidebar, its own top bar) is on screen.
+ *
+ * A document window is known to be one before its files are read, so it uses
+ * that layout from the first paint instead of flashing the workspace one.
+ * `documentMode` covers the macOS session in a full process.
+ */
+export function useDocumentLayout(): boolean {
+	const documentMode = useWorkspaceStore((state) => state.documentMode);
+	return documentMode || isDocumentLaunch();
+}
 
 // ─── Re-usable helpers that call the store ─────────────────────────
 

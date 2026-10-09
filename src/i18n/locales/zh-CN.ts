@@ -762,6 +762,9 @@ const zhCN = {
 		openFolderTitle: '还没有打开任何文件夹',
 		openFolderDescription:
 			'选择本地目录后，Markdown、图片和文本文件会自动列出并可在此预览。',
+		documentClosedTitle: '没有打开的文档',
+		documentClosedDescription:
+			'此窗口只用于打开启动时指定的文件。可以直接关闭它，或从应用启动器打开 Madora 来使用工作区。',
 	},
 } as const;
 

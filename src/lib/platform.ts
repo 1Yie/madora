@@ -27,3 +27,14 @@ export const MAC_TRAFFIC_LIGHTS_WIDTH = 56;
  */
 export const WINDOW_BUTTON_WIDTH = 46;
 export const WINDOW_CONTROLS_WIDTH = WINDOW_BUTTON_WIDTH * 3;
+
+/**
+ * The frameless window controls are pinned over the top-right corner and must
+ * be exactly as tall as the bar they sit on, or a strip of that bar shows
+ * below them and their icons centre higher than the neighbouring buttons.
+ *
+ * The tab strip (`h-8` in `tab-bar.tsx`) is that bar in a workspace; a
+ * document window has its own, taller top bar instead.
+ */
+export const TAB_STRIP_HEIGHT = 32;
+export const DOCUMENT_BAR_HEIGHT = 40;

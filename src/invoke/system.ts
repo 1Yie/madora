@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AppLocale } from '@/i18n/locale';
+import type { LaunchMode } from '@/lib/launch-mode';
 
 /** Checks whether a file or directory exists on the filesystem. */
 export async function pathExists(
@@ -20,6 +21,15 @@ export async function getSystemTheme(): Promise<{
 	accent?: string | null;
 }> {
 	return invoke<{ scheme: string; accent?: string | null }>('get_system_theme');
+}
+
+/**
+ * Whether this process is the full app or a one-off document window. Anything
+ * the backend does not answer clearly counts as the full app.
+ */
+export async function getLaunchMode(): Promise<LaunchMode> {
+	const mode = await invoke<string | undefined>('get_launch_mode');
+	return mode === 'document' ? 'document' : 'full';
 }
 
 /** Shows the main application window (called once on startup). */

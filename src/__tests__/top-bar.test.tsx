@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import Titlebar from '@/components/system/top-bar';
 import i18n from '@/i18n';
+import { setLaunchMode } from '@/lib/launch-mode';
+import { DOCUMENT_BAR_HEIGHT, TAB_STRIP_HEIGHT } from '@/lib/platform';
 
 const mockHideWindow = vi.fn();
 const mockQuitApp = vi.fn();
@@ -44,6 +46,13 @@ vi.mock('@/context/app-settings-provider', () => ({
 	useAppSettings: () => appSettings,
 }));
 
+/** The strip the frameless window controls sit in. */
+function getControlsStrip(container: HTMLElement): HTMLElement {
+	const strip = getCloseButton(container).parentElement;
+	if (!strip) throw new Error('window controls not found');
+	return strip;
+}
+
 function getCloseButton(container: HTMLElement): HTMLButtonElement {
 	const closeButton = container.querySelector('button.group');
 	if (!(closeButton instanceof HTMLButtonElement)) {
@@ -70,6 +79,7 @@ describe('Titlebar close flow', () => {
 	});
 
 	afterEach(() => {
+		setLaunchMode('full');
 		cleanup();
 	});
 
@@ -142,5 +152,56 @@ describe('Titlebar close flow', () => {
 		).toBeInTheDocument();
 		expect(mockHideWindow).not.toHaveBeenCalled();
 		expect(mockQuitApp).not.toHaveBeenCalled();
+	});
+
+	it('is as tall as the tab strip it sits on in a workspace', () => {
+		const { container } = render(<Titlebar />);
+
+		expect(getControlsStrip(container).style.height).toBe(
+			`${TAB_STRIP_HEIGHT}px`
+		);
+	});
+
+	describe('in a one-off document window', () => {
+		beforeEach(() => {
+			setLaunchMode('document');
+		});
+
+		it('is as tall as the document bar, so no strip of it shows underneath', () => {
+			const { container } = render(<Titlebar />);
+
+			expect(getControlsStrip(container).style.height).toBe(
+				`${DOCUMENT_BAR_HEIGHT}px`
+			);
+		});
+
+		it('quits instead of hiding, since there is no tray to restore it from', async () => {
+			appSettings.closeBehavior = 'minimize';
+			const user = userEvent.setup();
+			const { container } = render(<Titlebar />);
+
+			await user.click(getCloseButton(container));
+
+			await waitFor(() => {
+				expect(mockQuitApp).toHaveBeenCalledTimes(1);
+			});
+			expect(mockHideWindow).not.toHaveBeenCalled();
+		});
+
+		it('offers to save or discard, not to minimize, with unsaved changes', async () => {
+			appSettings.closeBehavior = 'minimize';
+			mockHasUnsaved.mockReturnValue(true);
+			const user = userEvent.setup();
+			const { container } = render(<Titlebar />);
+
+			await user.click(getCloseButton(container));
+
+			expect(
+				await screen.findByText('工作区还有文档未保存')
+			).toBeInTheDocument();
+			expect(screen.queryByText('仍然最小化')).not.toBeInTheDocument();
+			expect(mockHideWindow).not.toHaveBeenCalled();
+			expect(mockQuitApp).not.toHaveBeenCalled();
+		});
 	});
 });

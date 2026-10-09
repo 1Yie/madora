@@ -6,6 +6,7 @@ import {
 	SetupWizard,
 	shouldShowSetupWizard,
 } from '@/components/system/setup-wizard';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 import { checkForAppUpdate } from '@/lib/update-check';
 import { showUpdateAvailableToast } from '@/lib/update-toast';
 import Titlebar from './components/system/top-bar';
@@ -24,8 +25,10 @@ let hasRunStartupUpdateCheck = false;
 
 function App() {
 	const { t } = useTranslation();
-	const [showSetupWizard, setShowSetupWizard] = useState(() =>
-		shouldShowSetupWizard()
+	// A one-off document window is for the file it was opened with: the first
+	// run wizard waits for the full app.
+	const [showSetupWizard, setShowSetupWizard] = useState(
+		() => !isDocumentLaunch() && shouldShowSetupWizard()
 	);
 
 	const [settingsOpen, setSettingsOpen] = useState(false);
@@ -61,7 +64,8 @@ function App() {
 	}, []);
 
 	useEffect(() => {
-		if (hasRunStartupUpdateCheck) {
+		// No network at startup for a window that only opens a file.
+		if (hasRunStartupUpdateCheck || isDocumentLaunch()) {
 			return;
 		}
 

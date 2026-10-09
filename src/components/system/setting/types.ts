@@ -5,6 +5,7 @@ import {
 	Palette,
 	Settings as Settings2,
 } from '@keyline-icons/react';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 
 export type SettingsSectionId = 'appearance' | 'editor' | 'sync' | 'about';
 
@@ -16,7 +17,7 @@ export type SettingsSection = {
 };
 
 export function getSettingsSections(t: TFunction): SettingsSection[] {
-	return [
+	const sections: SettingsSection[] = [
 		{
 			id: 'appearance',
 			label: t('settings.sections.appearance.label'),
@@ -42,4 +43,9 @@ export function getSettingsSections(t: TFunction): SettingsSection[] {
 			group: 'system',
 		},
 	];
+
+	// A document window runs no sync server and keeps no sync state.
+	return isDocumentLaunch()
+		? sections.filter((section) => section.id !== 'sync')
+		: sections;
 }

@@ -802,6 +802,9 @@ const ja = {
 		openFolderTitle: 'まだフォルダーが開かれていません',
 		openFolderDescription:
 			'ローカルフォルダーを開くと、Markdown、画像、テキストファイルをここでプレビューできます。',
+		documentClosedTitle: '開いているドキュメントはありません',
+		documentClosedDescription:
+			'このウィンドウは起動時に指定されたファイルを開くためのものです。閉じるか、ランチャーから Madora を起動してフォルダーを開いてください。',
 	},
 } as const;
 

@@ -812,6 +812,9 @@ const en = {
 		openFolderTitle: 'No folder is open yet',
 		openFolderDescription:
 			'After opening a local folder, Markdown, image, and text files will be listed here for preview.',
+		documentClosedTitle: 'No document open',
+		documentClosedDescription:
+			'This window only opens the files it was launched with. Close it, or start Madora from your launcher to work with a folder.',
 	},
 } as const;
 

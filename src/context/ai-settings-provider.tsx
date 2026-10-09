@@ -2,6 +2,7 @@ import create from 'zustand';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
 import { madoraSyncSaveAiCompletionConfig } from '@/invoke/madora-sync';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 
 import { showErrorToast } from '@/components/ui/toast';
 import i18n from '@/i18n';
@@ -298,6 +299,9 @@ function readInitialProvider(): AiProvider {
 }
 
 function syncAiCompletionConfigToHost(state: AiSettingsState) {
+	// A document window has no sync host to mirror the settings to.
+	if (isDocumentLaunch()) return;
+
 	const config = state.providerConfigs[state.provider];
 
 	void madoraSyncSaveAiCompletionConfig({

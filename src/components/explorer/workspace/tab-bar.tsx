@@ -20,7 +20,7 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
 import { MenuItem, MenuSeparator } from '@/components/ui/menu';
 import type { ExplorerNode, FilePreview as FilePreviewData } from '../types';
-import { useWorkspace } from '@/context/workspace-provider';
+import { useDocumentLayout, useWorkspace } from '@/context/workspace-provider';
 import { isMac, WINDOW_CONTROLS_WIDTH } from '@/lib/platform';
 import { isSameOrDescendantPath } from '@/lib/path-utils';
 
@@ -45,11 +45,11 @@ export function TabBar() {
 		closeTabsAction,
 		reorderTabs,
 		tabBarMode,
-		documentMode,
 	} = useWorkspace();
+	const documentLayout = useDocumentLayout();
 	// The window controls float over the tab strip, unless a document session
 	// puts its own top bar above it.
-	const reservesWindowControls = !isMac && !documentMode;
+	const reservesWindowControls = !isMac && !documentLayout;
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);

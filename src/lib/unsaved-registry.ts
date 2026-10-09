@@ -1,4 +1,5 @@
 import { writeWorkspaceFile } from '@/invoke/explorer';
+import { isDocumentLaunch } from '@/lib/launch-mode';
 import { normalizeExplorerPath } from '@/lib/path-utils';
 
 type EditorEntry = {
@@ -109,8 +110,22 @@ export function getStoredMarkdownDrafts(): StoredMarkdownDraft[] {
 	return [...drafts.values()];
 }
 
+/**
+ * Drafts this window answers for. Drafts live in localStorage, which every
+ * Madora process shares, so a one-off document window must not treat the ones
+ * left by another process as its own unsaved work: it would offer to save them
+ * and discard them. It owns only the drafts of the files it has open.
+ */
+function getOwnedMarkdownDrafts(): StoredMarkdownDraft[] {
+	const drafts = getStoredMarkdownDrafts();
+	if (!isDocumentLaunch()) return drafts;
+
+	const registeredFilePaths = getRegisteredEditorFilePaths();
+	return drafts.filter((draft) => registeredFilePaths.has(draft.filePath));
+}
+
 export function clearStoredMarkdownDrafts() {
-	for (const draft of getStoredMarkdownDrafts()) {
+	for (const draft of getOwnedMarkdownDrafts()) {
 		removeStoredMarkdownDraft(draft.filePath);
 	}
 }
@@ -145,6 +160,9 @@ export function hasUnsaved(): boolean {
 			return true;
 		}
 	}
+
+	// A document window has no drafts of files it does not have open.
+	if (isDocumentLaunch()) return false;
 
 	const registeredFilePaths = getRegisteredEditorFilePaths();
 
@@ -190,9 +208,11 @@ export async function saveAll(opts?: { timeoutMs?: number }) {
 	);
 
 	const registeredFilePaths = getRegisteredEditorFilePaths();
-	const draftsToSave = getStoredMarkdownDrafts().filter(
-		(draft) => !registeredFilePaths.has(draft.filePath)
-	);
+	const draftsToSave = isDocumentLaunch()
+		? []
+		: getStoredMarkdownDrafts().filter(
+				(draft) => !registeredFilePaths.has(draft.filePath)
+			);
 
 	const draftResults = await Promise.all(
 		draftsToSave.map(async (draft) => {
