@@ -782,7 +782,7 @@ mod tests {
     fn resolve_cache_model_default_deepseek() {
         let config = AiCompletionConfig::default();
         let model = resolve_cache_model(AiProvider::DeepSeek, &config);
-        assert_eq!(model, "deepseek-v4-pro");
+        assert_eq!(model, "deepseek-flash");
     }
 
     #[test]

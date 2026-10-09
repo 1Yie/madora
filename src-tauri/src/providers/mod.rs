@@ -23,31 +23,31 @@ pub use common::{
 };
 
 const ANTHROPIC_DEFAULT_API_URL: &str = "https://api.anthropic.com";
-const ANTHROPIC_DEFAULT_MODEL: &str = "claude-sonnet-4-6";
+const ANTHROPIC_DEFAULT_MODEL: &str = "claude-fable-5-1";
 const DEEPSEEK_DEFAULT_API_URL: &str = "https://api.deepseek.com";
-const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-v4-pro";
+const DEEPSEEK_DEFAULT_MODEL: &str = "deepseek-flash";
 const GOOGLE_DEFAULT_API_URL: &str = "https://generativelanguage.googleapis.com";
-const GOOGLE_DEFAULT_MODEL: &str = "gemini-2.5-flash";
+const GOOGLE_DEFAULT_MODEL: &str = "gemini-3.8-flash";
 const KIMI_DEFAULT_API_URL: &str = "https://api.moonshot.cn";
-const KIMI_DEFAULT_MODEL: &str = "kimi-k2.7-code";
+const KIMI_DEFAULT_MODEL: &str = "kimi-k3";
 const MINIMAX_DEFAULT_API_URL: &str = "https://api.minimaxi.com/anthropic";
 const MINIMAX_DEFAULT_MODEL: &str = "MiniMax-M3";
 const MINIMAX_CODING_DEFAULT_API_URL: &str = "https://api.minimaxi.com/anthropic";
 const MINIMAX_CODING_DEFAULT_MODEL: &str = "MiniMax-M3";
 const MIMO_DEFAULT_API_URL: &str = "https://api.xiaomimimo.com";
-const MIMO_DEFAULT_MODEL: &str = "mimo-v2.5-pro";
+const MIMO_DEFAULT_MODEL: &str = "mimo-v2.6-pro";
 const MIMO_CODING_DEFAULT_API_URL: &str = "https://token-plan-cn.xiaomimimo.com";
-const MIMO_CODING_DEFAULT_MODEL: &str = "mimo-v2.5-pro";
+const MIMO_CODING_DEFAULT_MODEL: &str = "mimo-v2.6-pro";
 const OPENAI_DEFAULT_API_URL: &str = "https://api.openai.com";
-const OPENAI_DEFAULT_MODEL: &str = "gpt-4o-mini";
+const OPENAI_DEFAULT_MODEL: &str = "gpt-6.1-sol";
 const OPENCODE_GO_DEFAULT_API_URL: &str = "https://opencode.ai/zen/go";
-const OPENCODE_GO_DEFAULT_MODEL: &str = "deepseek-v4-pro";
+const OPENCODE_GO_DEFAULT_MODEL: &str = "kimi-k3";
 const OPENCODE_ZEN_DEFAULT_API_URL: &str = "https://opencode.ai/zen";
-const OPENCODE_ZEN_DEFAULT_MODEL: &str = "claude-sonnet-4-6";
+const OPENCODE_ZEN_DEFAULT_MODEL: &str = "claude-fable-5-1";
 const ZHIPU_DEFAULT_API_URL: &str = "https://open.bigmodel.cn/api/paas/v4";
-const ZHIPU_DEFAULT_MODEL: &str = "glm-5.2";
+const ZHIPU_DEFAULT_MODEL: &str = "glm-5.3";
 const ZHIPU_CODING_DEFAULT_API_URL: &str = "https://open.bigmodel.cn/api/coding/paas/v4";
-const ZHIPU_CODING_DEFAULT_MODEL: &str = "glm-5.2";
+const ZHIPU_CODING_DEFAULT_MODEL: &str = "glm-5.3";
 
 /// How a provider's requests are shaped on the wire.
 ///
