@@ -8,16 +8,31 @@ const STATE_FILE_NAME: &str = "workspace_state.json";
 pub struct WorkspaceStore {
     state: Mutex<WorkspaceState>,
     app_data_dir: PathBuf,
+    /// Whether changes are written back. A document launch only borrows the
+    /// saved preferences: the full app owns the file, and a second process
+    /// rewriting it from a copy that may be stale would clobber its tabs.
+    persist: bool,
 }
 
 impl WorkspaceStore {
     /// Create a new WorkspaceStore, loading persisted state from
     /// `app_data_dir/workspace_state.json` if it exists.
     pub fn new(app_data_dir: PathBuf) -> Self {
+        Self::open(app_data_dir, true)
+    }
+
+    /// Like [`Self::new`], but changes only live in memory; the saved file is
+    /// never written.
+    pub fn read_only(app_data_dir: PathBuf) -> Self {
+        Self::open(app_data_dir, false)
+    }
+
+    fn open(app_data_dir: PathBuf, persist: bool) -> Self {
         let state = Self::load(&app_data_dir);
         Self {
             state: Mutex::new(state),
             app_data_dir,
+            persist,
         }
     }
 
@@ -52,6 +67,10 @@ impl WorkspaceStore {
     // ── Persistence ─────────────────────────────────────────
 
     fn save_inner(&self, state: &WorkspaceState) {
+        if !self.persist {
+            return;
+        }
+
         let path = Self::load_path(&self.app_data_dir);
 
         // Ensure parent directory exists
@@ -224,5 +243,60 @@ impl Default for WorkspaceState {
             tab_bar_mode: Some("scroll".to_string()),
             zoom_level: Some(1.0),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn saved_state_file(dir: &std::path::Path) -> PathBuf {
+        dir.join(STATE_FILE_NAME)
+    }
+
+    #[test]
+    fn a_store_writes_its_changes_back() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let store = WorkspaceStore::new(dir.path().to_path_buf());
+        store.set_zoom_level(1.5).unwrap();
+
+        let reopened = WorkspaceStore::new(dir.path().to_path_buf());
+        assert_eq!(reopened.get_state().unwrap().zoom_level, Some(1.5));
+    }
+
+    #[test]
+    fn a_read_only_store_reads_the_saved_state_but_never_writes_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let owner = WorkspaceStore::new(dir.path().to_path_buf());
+        owner.set_root_path(Some("/ws".to_string())).unwrap();
+        owner.add_tab("/ws/a.md").unwrap();
+        owner.set_zoom_level(1.25).unwrap();
+        let before = std::fs::read_to_string(saved_state_file(dir.path())).unwrap();
+
+        let store = WorkspaceStore::read_only(dir.path().to_path_buf());
+        assert_eq!(store.get_state().unwrap().zoom_level, Some(1.25));
+
+        store.set_zoom_level(2.0).unwrap();
+        store.set_sidebar_width(400).unwrap();
+        store.add_tab("/elsewhere/b.md").unwrap();
+        store.set_root_path(None).unwrap();
+        store.clear().unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(saved_state_file(dir.path())).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn a_read_only_store_still_answers_for_the_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = WorkspaceStore::read_only(dir.path().to_path_buf());
+
+        store.set_zoom_level(2.0).unwrap();
+
+        assert_eq!(store.get_state().unwrap().zoom_level, Some(2.0));
+        assert!(!saved_state_file(dir.path()).exists());
     }
 }

@@ -8,12 +8,15 @@ use crate::{
     protocol::MadoraProtocolState,
     services::{
         ai::AiCompletionService,
+        launch_mode::LaunchMode,
         madora_sync::MadoraSyncStore,
         open_files::{self as open_files_service, PendingOpenFiles},
         webdav::WebDavStore,
         workspace::WorkspaceStore,
     },
 };
+#[cfg(target_os = "macos")]
+use tauri::Emitter;
 #[cfg(not(target_os = "linux"))]
 use tauri::{
     image::Image,
@@ -21,7 +24,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Runtime,
 };
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 #[cfg(not(target_os = "linux"))]
 const TRAY_MENU_SHOW_WINDOW: &str = "tray_show_window";
@@ -48,19 +51,26 @@ use tauri_plugin_prevent_default::Flags;
 use tauri_plugin_prevent_default::PlatformOptions;
 
 pub fn run() {
-    let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            // A second launch ("Open with Madora" while it is running) lands
-            // here: queue its files for the already-open window.
-            let files = open_files_service::paths_from_args(
-                args.into_iter().skip(1),
-                Some(std::path::Path::new(&cwd)),
-            );
-            queue_open_files(app, files);
+    // Files named at launch make this a one-off document window instead of the
+    // full app (see `services::launch_mode`).
+    let launch_files = open_files_service::paths_from_args(
+        env::args_os().skip(1),
+        env::current_dir().ok().as_deref(),
+    );
+    let mode = LaunchMode::for_launch_files(&launch_files);
 
+    let mut builder = tauri::Builder::default();
+
+    // Only the full app is the single instance. A document window never takes
+    // the lock and never hands its files to a running app, so opening a
+    // Markdown file neither wakes nor depends on the full app.
+    if mode.is_full() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
-        }))
-        .plugin(tauri_plugin_opener::init());
+        }));
+    }
+
+    builder = builder.plugin(tauri_plugin_opener::init());
 
     #[cfg(not(debug_assertions))]
     {
@@ -88,26 +98,32 @@ pub fn run() {
         });
     }
 
-    builder = builder.setup(|app| {
+    builder = builder.setup(move |app| {
         #[cfg(all(target_os = "windows", not(debug_assertions)))]
         configure_windows_webview(app);
 
         app.manage(MadoraProtocolState::new());
 
-        // Files named on the command line of the first launch. The queue
-        // itself is registered on the builder, because macOS can deliver an
-        // `Opened` event before this hook has run.
-        app.state::<PendingOpenFiles>()
-            .push(open_files_service::paths_from_args(
-                env::args_os().skip(1),
-                env::current_dir().ok().as_deref(),
-            ));
+        // Files named on the command line of this launch. The queue itself is
+        // registered on the builder, because macOS can deliver an `Opened`
+        // event before this hook has run.
+        app.state::<PendingOpenFiles>().push(launch_files);
 
         // Initialize workspace store with app data directory for persistence
         let app_data_dir = app
             .path()
             .app_data_dir()
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+        if mode.is_document() {
+            // A document window only borrows the saved preferences (sidebar
+            // width, zoom): the workspace, its tabs and the services around it
+            // belong to the full app, so nothing is written back, no folder is
+            // served, and there is no tray, sync server or sync/WebDAV state.
+            app.manage(WorkspaceStore::read_only(app_data_dir));
+            return Ok(());
+        }
+
         let workspace_store = WorkspaceStore::new(app_data_dir.clone());
 
         // Sync initial workspace root into the protocol state
@@ -141,6 +157,7 @@ pub fn run() {
     });
 
     builder
+        .manage(mode)
         .manage(PendingOpenFiles::new())
         .manage(AiCompletionService::new())
         .invoke_handler(tauri::generate_handler![
@@ -198,6 +215,7 @@ pub fn run() {
             secure_storage::store_ai_api_key,
             secure_storage::delete_ai_api_key,
             open_files::take_pending_open_files,
+            system::get_launch_mode,
             system::show_window,
             system::hide_window,
             system::quit_app,
@@ -238,6 +256,10 @@ pub fn run() {
 
 /// Queues files for the webview and tells it to fetch them. The webview also
 /// fetches once at startup, so a file queued before it loaded is not lost.
+///
+/// Only macOS hands files to a running process (LaunchServices reuses it);
+/// elsewhere a file named at launch gets its own document process.
+#[cfg(target_os = "macos")]
 fn queue_open_files(app: &AppHandle, files: Vec<std::path::PathBuf>) {
     if files.is_empty() {
         return;

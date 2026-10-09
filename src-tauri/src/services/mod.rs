@@ -2,6 +2,7 @@ pub mod ai;
 pub mod api_keys;
 pub mod explorer;
 pub mod git;
+pub mod launch_mode;
 pub mod madora_sync;
 pub(crate) mod mutex;
 pub mod open_files;

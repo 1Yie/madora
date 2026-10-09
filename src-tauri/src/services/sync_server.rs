@@ -424,10 +424,11 @@ pub fn publish_desktop_editor_state<R: Runtime>(
     handle: &AppHandle<R>,
     input: EditorStateInput,
 ) -> Result<(), String> {
-    let config = handle
-        .state::<MadoraSyncStore>()
-        .get_config()
-        .map_err(|error| error.to_string())?;
+    // A document window has no sync store: nobody to publish to.
+    let Some(store) = handle.try_state::<MadoraSyncStore>() else {
+        return Ok(());
+    };
+    let config = store.get_config().map_err(|error| error.to_string())?;
 
     let state = EditorStateMessage {
         device_id: "desktop".to_string(),
