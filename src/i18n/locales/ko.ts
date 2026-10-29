@@ -161,16 +161,24 @@ const ko = {
 			customProtocolOptions: {
 				anthropic: {
 					description: 'Anthropic 호환 /v1/messages 엔드포인트용입니다.',
-					label: 'Anthropic Compatible',
+					label: 'Anthropic (Claude)',
 				},
 				google: {
 					description:
 						'Google 호환 models/{id}:generateContent 엔드포인트용입니다.',
-					label: 'Google Compatible',
+					label: 'Google Gemini',
 				},
 				openai: {
 					description: 'OpenAI 호환 /v1/chat/completions 엔드포인트용입니다.',
-					label: 'OpenAI Compatible',
+					label: 'OpenAI Chat Completions',
+				},
+				'openai-responses': {
+					description: 'OpenAI 호환 /v1/responses 엔드포인트용입니다.',
+					label: 'OpenAI Responses',
+				},
+				'openai-codex': {
+					description: 'OpenAI 호환 WebSocket 응답 엔드포인트용입니다.',
+					label: 'OpenAI Codex (WebSocket)',
 				},
 			},
 			apiUrlHint: '사용자 지정 Provider 의 엔드포인트 URL입니다.',

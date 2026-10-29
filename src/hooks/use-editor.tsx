@@ -21,7 +21,11 @@ import {
 	type TooltipView,
 	type ViewUpdate,
 } from '@codemirror/view';
-import { cancelCompletionStream, streamCompletion } from '@/invoke/ai';
+import {
+	cancelCompletionStream,
+	streamCompletion,
+	type CustomProviderProtocol,
+} from '@/invoke/ai';
 import { tags as t } from '@lezer/highlight';
 import { basicSetup } from 'codemirror';
 import { createRoot, type Root } from 'react-dom/client';
@@ -872,7 +876,7 @@ export function useEditor({
 	const syncLoadingRef = useRef(false);
 	const aiSettingsRef = useRef({
 		apiUrl: '',
-		customProtocol: 'openai' as 'anthropic' | 'google' | 'openai',
+		customProtocol: 'openai' as CustomProviderProtocol,
 		enabled: true,
 		hasApiKey: false,
 		model: '',

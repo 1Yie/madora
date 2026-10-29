@@ -1,6 +1,12 @@
 import create from 'zustand';
 import { useEffect, useMemo, type ReactNode } from 'react';
-import { deleteAiApiKey, hasAiApiKey, storeAiApiKey } from '@/invoke/ai';
+import {
+	deleteAiApiKey,
+	hasAiApiKey,
+	isCustomProviderProtocol,
+	storeAiApiKey,
+	type CustomProviderProtocol,
+} from '@/invoke/ai';
 import { madoraSyncSaveAiCompletionConfig } from '@/invoke/madora-sync';
 import { isDocumentLaunch } from '@/lib/launch-mode';
 
@@ -23,7 +29,7 @@ export type AiProvider =
 	| 'zhipu'
 	| 'zhipu-coding';
 
-export type CustomProviderProtocol = 'anthropic' | 'google' | 'openai';
+export type { CustomProviderProtocol } from '@/invoke/ai';
 
 type ProviderConfig = {
 	apiUrl: string;
@@ -168,12 +174,6 @@ function getProviderDefinition(provider: AiProvider): ProviderDefinition {
 
 function getProviderStorageKey(baseKey: string, provider: AiProvider) {
 	return `${baseKey}:${provider}`;
-}
-
-function isCustomProviderProtocol(
-	value: string | null
-): value is CustomProviderProtocol {
-	return value === 'anthropic' || value === 'google' || value === 'openai';
 }
 
 function getProviderKeys(): AiProvider[] {

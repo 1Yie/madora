@@ -1,4 +1,8 @@
-import { streamCompletion } from '@/invoke/ai';
+import {
+	CUSTOM_PROVIDER_PROTOCOLS,
+	isCustomProviderProtocol,
+	streamCompletion,
+} from '@/invoke/ai';
 import {
 	ArrowLeft,
 	ArrowRight,
@@ -33,7 +37,6 @@ import { MathCurveLoader } from '@/components/ui/math-curve-loader';
 import { providerIconMap } from '@/components/ui/provider-icons';
 import {
 	useAiSettings,
-	type CustomProviderProtocol,
 	getProviderDefinitions,
 } from '@/context/ai-settings-provider';
 import { useAppSettings } from '@/context/app-settings-provider';
@@ -42,23 +45,10 @@ import { cn } from '@/lib/utils';
 
 const SETUP_COMPLETE_KEY = 'madora-setup-complete';
 
-const CUSTOM_PROTOCOL_OPTIONS: Array<{
-	labelKey: string;
-	value: CustomProviderProtocol;
-}> = [
-	{
-		labelKey: 'settings.editor.customProtocolOptions.anthropic.label',
-		value: 'anthropic',
-	},
-	{
-		labelKey: 'settings.editor.customProtocolOptions.google.label',
-		value: 'google',
-	},
-	{
-		labelKey: 'settings.editor.customProtocolOptions.openai.label',
-		value: 'openai',
-	},
-];
+const CUSTOM_PROTOCOL_OPTIONS = CUSTOM_PROVIDER_PROTOCOLS.map((value) => ({
+	labelKey: `settings.editor.customProtocolOptions.${value}.label`,
+	value,
+}));
 
 const WIZARD_STEPS = ['welcome', 'configure', 'test', 'success'] as const;
 
@@ -431,10 +421,8 @@ export function SetupWizard({ onComplete }: { onComplete: () => void }) {
 														<Select
 															value={customProtocol}
 															onValueChange={(value) => {
-																if (value === null) return;
-																setCustomProtocol(
-																	value as CustomProviderProtocol
-																);
+																if (isCustomProviderProtocol(value))
+																	setCustomProtocol(value);
 															}}
 														>
 															<SelectTrigger className="bg-muted/20">

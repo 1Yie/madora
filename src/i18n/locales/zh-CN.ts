@@ -147,15 +147,23 @@ const zhCN = {
 			customProtocolOptions: {
 				anthropic: {
 					description: '适用于 /v1/messages 一类 Anthropic 兼容接口。',
-					label: 'Anthropic Compatible',
+					label: 'Anthropic (Claude)',
 				},
 				google: {
 					description: '适用于 Google 风格 models/{id}:generateContent 接口。',
-					label: 'Google Compatible',
+					label: 'Google Gemini',
 				},
 				openai: {
 					description: '适用于 /v1/chat/completions 一类 OpenAI 兼容接口。',
-					label: 'OpenAI Compatible',
+					label: 'OpenAI Chat Completions',
+				},
+				'openai-responses': {
+					description: '适用于 /v1/responses 一类 OpenAI 兼容接口。',
+					label: 'OpenAI Responses',
+				},
+				'openai-codex': {
+					description: '适用于 OpenAI 兼容的 WebSocket 响应接口。',
+					label: 'OpenAI Codex (WebSocket)',
 				},
 			},
 			apiUrlHint: '自定义 Provider 的接口地址。',

@@ -157,17 +157,25 @@ const ja = {
 			customProtocolOptions: {
 				anthropic: {
 					description: 'Anthropic 互換の /v1/messages エンドポイント向けです。',
-					label: 'Anthropic Compatible',
+					label: 'Anthropic (Claude)',
 				},
 				google: {
 					description:
 						'Google 互換の models/{id}:generateContent エンドポイント向けです。',
-					label: 'Google Compatible',
+					label: 'Google Gemini',
 				},
 				openai: {
 					description:
 						'OpenAI 互換の /v1/chat/completions エンドポイント向けです。',
-					label: 'OpenAI Compatible',
+					label: 'OpenAI Chat Completions',
+				},
+				'openai-responses': {
+					description: 'OpenAI 互換の /v1/responses エンドポイント向けです。',
+					label: 'OpenAI Responses',
+				},
+				'openai-codex': {
+					description: 'OpenAI 互換の WebSocket 応答エンドポイント向けです。',
+					label: 'OpenAI Codex (WebSocket)',
 				},
 			},
 			apiUrlHint: 'カスタム Provider のエンドポイント URL。',

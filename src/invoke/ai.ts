@@ -16,7 +16,21 @@ export type AiProvider =
 	| 'zhipu'
 	| 'zhipu-coding';
 
-export type CustomProviderProtocol = 'anthropic' | 'google' | 'openai';
+export const CUSTOM_PROVIDER_PROTOCOLS = [
+	'openai',
+	'openai-responses',
+	'openai-codex',
+	'anthropic',
+	'google',
+] as const;
+
+export type CustomProviderProtocol = (typeof CUSTOM_PROVIDER_PROTOCOLS)[number];
+
+export function isCustomProviderProtocol(
+	value: string | null
+): value is CustomProviderProtocol {
+	return CUSTOM_PROVIDER_PROTOCOLS.some((protocol) => protocol === value);
+}
 
 /** Configuration for an AI completion request. */
 export type AiCompletionConfig = {

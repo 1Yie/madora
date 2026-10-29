@@ -12,7 +12,10 @@ import {
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-	type CustomProviderProtocol,
+	CUSTOM_PROVIDER_PROTOCOLS,
+	isCustomProviderProtocol,
+} from '@/invoke/ai';
+import {
 	getProviderDefinitions,
 	useAiSettings,
 } from '@/context/ai-settings-provider';
@@ -120,33 +123,13 @@ export function EditorSettings() {
 		(item) => item.key === provider
 	);
 	const isCustom = provider === 'custom';
-	const customProtocolOptions: Array<{
-		description: string;
-		label: string;
-		value: CustomProviderProtocol;
-	}> = [
-		{
-			description: t(
-				'settings.editor.customProtocolOptions.anthropic.description'
-			),
-			label: t('settings.editor.customProtocolOptions.anthropic.label'),
-			value: 'anthropic',
-		},
-		{
-			description: t(
-				'settings.editor.customProtocolOptions.google.description'
-			),
-			label: t('settings.editor.customProtocolOptions.google.label'),
-			value: 'google',
-		},
-		{
-			description: t(
-				'settings.editor.customProtocolOptions.openai.description'
-			),
-			label: t('settings.editor.customProtocolOptions.openai.label'),
-			value: 'openai',
-		},
-	];
+	const customProtocolOptions = CUSTOM_PROVIDER_PROTOCOLS.map((value) => ({
+		description: t(
+			`settings.editor.customProtocolOptions.${value}.description`
+		),
+		label: t(`settings.editor.customProtocolOptions.${value}.label`),
+		value,
+	}));
 	const availableModels =
 		(providerModels as Record<string, ProviderModelOption[]>)[provider] ?? [];
 	const selectedCustomProtocolOption = customProtocolOptions.find(
@@ -308,11 +291,7 @@ export function EditorSettings() {
 									<Select
 										value={customProtocol}
 										onValueChange={(value) => {
-											if (
-												value === 'anthropic' ||
-												value === 'google' ||
-												value === 'openai'
-											) {
+											if (isCustomProviderProtocol(value)) {
 												setCustomProtocol(value);
 											}
 										}}

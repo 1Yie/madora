@@ -56,6 +56,8 @@ afterEach(() => {
 	mocks.streamCompletion.mockReset();
 	mocks.cancelCompletionStream.mockReset();
 	mocks.cancelCompletionStream.mockResolvedValue(undefined);
+	mocks.aiSettings.provider = 'deepseek';
+	mocks.aiSettings.customProtocol = 'openai';
 });
 
 describe('completion cancellation', () => {
@@ -143,6 +145,26 @@ describe('completion cancellation', () => {
 
 		return container;
 	}
+
+	it.each(['openai-responses', 'openai-codex'])(
+		'passes the selected %s protocol to completion requests',
+		async (protocol) => {
+			mocks.aiSettings.provider = 'custom';
+			mocks.aiSettings.customProtocol = protocol;
+			mocks.streamCompletion.mockResolvedValue(null);
+
+			await typeAndWaitForRequest();
+
+			expect(mocks.streamCompletion).toHaveBeenCalledWith(
+				expect.objectContaining({
+					config: expect.objectContaining({
+						provider: 'custom',
+						customProtocol: protocol,
+					}),
+				})
+			);
+		}
+	);
 
 	it("shows the backend's final text instead of the raw streamed chunks", async () => {
 		mocks.streamCompletion.mockImplementation(

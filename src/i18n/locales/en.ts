@@ -164,17 +164,26 @@ const en = {
 				anthropic: {
 					description:
 						'Use this for Anthropic-compatible /v1/messages endpoints.',
-					label: 'Anthropic Compatible',
+					label: 'Anthropic (Claude)',
 				},
 				google: {
 					description:
 						'Use this for Google-compatible models/{id}:generateContent endpoints.',
-					label: 'Google Compatible',
+					label: 'Google Gemini',
 				},
 				openai: {
 					description:
 						'Use this for OpenAI-compatible /v1/chat/completions endpoints.',
-					label: 'OpenAI Compatible',
+					label: 'OpenAI Chat Completions',
+				},
+				'openai-responses': {
+					description:
+						'Use this for OpenAI-compatible /v1/responses endpoints.',
+					label: 'OpenAI Responses',
+				},
+				'openai-codex': {
+					description: 'Use this for OpenAI-compatible WebSocket responses.',
+					label: 'OpenAI Codex (WebSocket)',
 				},
 			},
 			apiUrlHint: 'Endpoint URL for the custom provider.',

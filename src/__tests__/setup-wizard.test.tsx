@@ -26,7 +26,10 @@ vi.mock('@/components/ui/provider-icons', () => ({
 		'zhipu-coding': () => <span data-testid="provider-icon">ZC</span>,
 	},
 }));
-import { AiSettingsProvider } from '@/context/ai-settings-provider';
+import {
+	AiSettingsProvider,
+	useAiSettingsStore,
+} from '@/context/ai-settings-provider';
 import {
 	AppSettingsProvider,
 	useAppSettingsStore,
@@ -151,5 +154,36 @@ describe('SetupWizard', () => {
 			).toBeInTheDocument();
 			expect(screen.getByRole('button', { name: '完成验证' })).toBeEnabled();
 		});
+	});
+
+	it('offers and saves the new custom protocol choices', async () => {
+		const user = userEvent.setup();
+		useAiSettingsStore.getState().setProvider('custom');
+		useAiSettingsStore.getState().setCustomProtocol('openai');
+		renderWizard();
+
+		await user.click(await screen.findByRole('button', { name: '开始配置' }));
+		const trigger = screen
+			.getByText('OpenAI Chat Completions')
+			.closest('button');
+		expect(trigger).not.toBeNull();
+		await user.click(trigger!);
+
+		for (const label of [
+			'OpenAI Chat Completions',
+			'OpenAI Responses',
+			'OpenAI Codex (WebSocket)',
+			'Anthropic (Claude)',
+			'Google Gemini',
+		]) {
+			expect(
+				await screen.findByRole('option', { name: label })
+			).toBeInTheDocument();
+		}
+		await user.click(screen.getByRole('option', { name: 'OpenAI Responses' }));
+		expect(
+			useAiSettingsStore.getState().providerConfigs.custom.customProtocol
+		).toBe('openai-responses');
+		useAiSettingsStore.getState().setProvider('deepseek');
 	});
 });
