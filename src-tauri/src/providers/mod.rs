@@ -4,6 +4,8 @@ mod custom;
 mod deepseek;
 mod google;
 mod openai;
+mod openai_codex;
+mod openai_responses;
 mod opencode_go;
 mod opencode_zen;
 
@@ -63,6 +65,7 @@ pub enum Protocol {
     GoogleGenerate,
     /// OpenAI Responses `/v1/responses`.
     OpenAiResponses,
+    OpenAiCodex,
     /// DeepSeek's raw fill-in-the-middle `/completions`.
     DeepSeekCompletion,
 }
@@ -87,8 +90,16 @@ impl Protocol {
                 google::request_google_compatible_fim(client, prompt_manager, config, request).await
             }
             Self::OpenAiResponses => {
-                opencode_zen::request_openai_responses_fim(client, prompt_manager, config, request)
-                    .await
+                openai_responses::request_openai_responses_fim(
+                    client,
+                    prompt_manager,
+                    config,
+                    request,
+                )
+                .await
+            }
+            Self::OpenAiCodex => {
+                openai_codex::complete(prompt_manager, config, request, &mut |_| Ok(())).await
             }
             Self::DeepSeekCompletion => {
                 deepseek::request_deepseek_completion(client, prompt_manager, config, request).await
@@ -136,7 +147,7 @@ impl Protocol {
                 .await
             }
             Self::OpenAiResponses => {
-                opencode_zen::request_openai_responses_fim_stream(
+                openai_responses::request_openai_responses_fim_stream(
                     client,
                     prompt_manager,
                     config,
@@ -144,6 +155,9 @@ impl Protocol {
                     on_chunk,
                 )
                 .await
+            }
+            Self::OpenAiCodex => {
+                openai_codex::complete(prompt_manager, config, request, on_chunk).await
             }
             Self::DeepSeekCompletion => {
                 deepseek::request_deepseek_completion_stream(
@@ -435,5 +449,29 @@ mod tests {
         }
 
         assert!(default_model(AiProvider::Custom).is_none());
+    }
+
+    #[test]
+    fn opencode_catalogue_models_have_protocol_routes() {
+        let catalogue: HashMap<String, Vec<serde_json::Value>> =
+            serde_json::from_str(include_str!("../../../src/assets/models.json"))
+                .expect("models.json should be valid JSON");
+
+        for (key, route) in [
+            (
+                "opencode-go",
+                super::opencode_go::protocol_for_model
+                    as fn(&str) -> Result<super::Protocol, String>,
+            ),
+            ("opencode-zen", super::opencode_zen::protocol_for_model),
+        ] {
+            for entry in &catalogue[key] {
+                let model = entry["value"].as_str().expect("model value is a string");
+                assert!(
+                    route(model).is_ok(),
+                    "model '{model}' in {key} has no protocol route"
+                );
+            }
+        }
     }
 }

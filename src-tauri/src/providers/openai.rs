@@ -170,7 +170,51 @@ fn build_openai_compatible_payload(
         // spend the entire completion budget on hidden reasoning. Explicitly turn
         // that off for providers/models that document a compatibility switch.
         let lower_model = model.to_ascii_lowercase();
-        if lower_model.starts_with("qwen") {
+        if matches!(provider, AiProvider::OpenAi | AiProvider::OpenCodeGo)
+            && (lower_model.starts_with("gpt-6") || lower_model.starts_with("gpt-5.6"))
+        {
+            // GPT-6.1 Sol and GPT-6 Astra require reasoning and reject
+            // temperature in that mode; the other GPT-6 models support none.
+            let requires_reasoning =
+                lower_model.starts_with("gpt-6.1-sol") || lower_model.starts_with("gpt-6-astra");
+            object.remove("max_tokens");
+            object.remove("stop");
+            object.insert(
+                "max_completion_tokens".to_string(),
+                json!(if requires_reasoning {
+                    params.max_tokens.max(512)
+                } else {
+                    params.max_tokens
+                }),
+            );
+            object.insert(
+                "reasoning_effort".to_string(),
+                json!(if requires_reasoning { "low" } else { "none" }),
+            );
+            if requires_reasoning {
+                object.remove("temperature");
+            }
+        } else if lower_model.starts_with("kimi-k3") {
+            // Kimi K3 uses always-on reasoning rather than the K2 thinking
+            // switch. Go's K3 (unlike K3.1) only exposes max effort.
+            let effort = if provider == AiProvider::OpenCodeGo && lower_model == "kimi-k3" {
+                "max"
+            } else {
+                "low"
+            };
+            object.remove("temperature");
+            object.insert("reasoning_effort".to_string(), json!(effort));
+            object.insert("max_tokens".to_string(), json!(params.max_tokens.max(512)));
+        } else if lower_model.starts_with("kimi-k2.7-code") {
+            // K2.7 Code also has mandatory thinking, but no effort selector.
+            object.remove("temperature");
+            object.insert("max_tokens".to_string(), json!(params.max_tokens.max(512)));
+        } else if provider == AiProvider::OpenCodeGo
+            && lower_model.starts_with("minimax-m3.1-flash")
+        {
+            object.insert("reasoning_effort".to_string(), json!("low"));
+            object.insert("max_tokens".to_string(), json!(params.max_tokens.max(512)));
+        } else if lower_model.starts_with("qwen") {
             object.insert("enable_thinking".to_string(), json!(false));
         } else if should_disable_structured_thinking(provider, &lower_model) {
             object.insert("thinking".to_string(), json!({ "type": "disabled" }));
@@ -276,6 +320,122 @@ mod tests {
         assert_eq!(payload["max_tokens"], json!(123));
         assert_eq!(payload["temperature"], json!(0.5));
         assert_eq!(payload["stop"], json!(["X", "Y"]));
+    }
+
+    #[test]
+    fn gpt_6_and_5_6_use_supported_reasoning_and_sampling_parameters() {
+        let params = CompletionParams {
+            max_tokens: 64,
+            temperature: 0.2,
+            stop: STOP_SEQUENCES,
+        };
+        for model in ["gpt-6.1-sol", "gpt-6-astra"] {
+            let payload = build_openai_compatible_payload(
+                AiProvider::OpenAi,
+                model,
+                "system".into(),
+                "user".into(),
+                params,
+                false,
+            );
+            assert_eq!(payload["reasoning_effort"], "low");
+            assert_eq!(payload["max_completion_tokens"], 512);
+            assert!(payload.get("temperature").is_none());
+            assert!(payload.get("max_tokens").is_none());
+            assert!(payload.get("stop").is_none());
+        }
+        for model in [
+            "gpt-6.1-terra",
+            "gpt-6-sol",
+            "gpt-6-luna",
+            "gpt-5.6",
+            "gpt-5.6-terra",
+        ] {
+            let payload = build_openai_compatible_payload(
+                AiProvider::OpenAi,
+                model,
+                "system".into(),
+                "user".into(),
+                params,
+                false,
+            );
+            assert_eq!(payload["reasoning_effort"], "none");
+            assert_eq!(payload["max_completion_tokens"], 64);
+            assert!(payload.get("temperature").is_some());
+            assert!(payload.get("max_tokens").is_none());
+            assert!(payload.get("stop").is_none());
+        }
+    }
+
+    #[test]
+    fn kimi_always_thinking_models_do_not_disable_thinking() {
+        let params = CompletionParams {
+            max_tokens: 64,
+            temperature: 0.2,
+            stop: STOP_SEQUENCES,
+        };
+        for (provider, model) in [
+            (AiProvider::Kimi, "kimi-k3"),
+            (AiProvider::Kimi, "kimi-k3.1-pro-highspeed"),
+            (AiProvider::OpenCodeGo, "kimi-k3.1-pro"),
+            (AiProvider::OpenCodeZen, "kimi-k3"),
+        ] {
+            let payload = build_openai_compatible_payload(
+                provider,
+                model,
+                "system".into(),
+                "user".into(),
+                params,
+                true,
+            );
+            assert_eq!(payload["reasoning_effort"], "low");
+            assert_eq!(payload["max_tokens"], 512);
+            assert!(payload.get("thinking").is_none());
+            assert!(payload.get("temperature").is_none());
+        }
+        let go_k3 = build_openai_compatible_payload(
+            AiProvider::OpenCodeGo,
+            "kimi-k3",
+            "system".into(),
+            "user".into(),
+            params,
+            false,
+        );
+        assert_eq!(go_k3["reasoning_effort"], "max");
+        assert_eq!(go_k3["max_tokens"], 512);
+        assert!(go_k3.get("thinking").is_none());
+        assert!(go_k3.get("temperature").is_none());
+        let payload = build_openai_compatible_payload(
+            AiProvider::Kimi,
+            "kimi-k2.7-code",
+            "system".into(),
+            "user".into(),
+            params,
+            false,
+        );
+        assert_eq!(payload["max_tokens"], 512);
+        assert!(payload.get("thinking").is_none());
+        assert!(payload.get("temperature").is_none());
+        assert!(payload.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn opencode_go_minimax_m3_1_uses_low_effort() {
+        let payload = build_openai_compatible_payload(
+            AiProvider::OpenCodeGo,
+            "minimax-m3.1-flash",
+            "system".into(),
+            "user".into(),
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
+            false,
+        );
+        assert_eq!(payload["reasoning_effort"], "low");
+        assert_eq!(payload["max_tokens"], 512);
+        assert!(payload.get("thinking").is_none());
     }
 
     // ─── end to end against a scripted local server ─────────────────

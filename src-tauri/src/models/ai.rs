@@ -9,6 +9,10 @@ pub enum CustomProviderProtocol {
     #[serde(rename = "openai")]
     #[default]
     OpenAi,
+    #[serde(rename = "openai-responses")]
+    OpenAiResponses,
+    #[serde(rename = "openai-codex")]
+    OpenAiCodex,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Default)]

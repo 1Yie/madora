@@ -137,6 +137,12 @@ fn google_generate_content_url(api_url: &str, model: &str, stream: bool) -> Stri
         ":generateContent"
     };
 
+    // The legacy Go base has no Gemini endpoint. Its other protocol routes
+    // still work there, but Gemini moved to the dedicated inference API.
+    if api_url.trim_end_matches('/') == "https://opencode.ai/zen/go" {
+        return format!("https://opencode.ai/inference/go/google/v1beta/models/{model}{suffix}");
+    }
+
     join_url(api_url, &format!("/v1/models/{model}{suffix}"))
 }
 
@@ -155,6 +161,9 @@ fn build_google_payload(
 
     let lower_model = model.to_ascii_lowercase();
     if let Some(thinking_config) = google_thinking_config(&lower_model) {
+        if thinking_config["thinkingLevel"] == "low" {
+            generation_config["maxOutputTokens"] = json!(params.max_tokens.max(512));
+        }
         generation_config["thinkingConfig"] = thinking_config;
     }
 
@@ -182,10 +191,13 @@ fn build_google_payload(
 }
 
 fn google_thinking_config(lower_model: &str) -> Option<Value> {
-    if lower_model.starts_with("gemini-3.1-pro") {
-        // Gemini 3.1 Pro cannot fully disable thinking. Low is the least
-        // expensive supported level and reduces the risk of exhausting the
-        // output budget before any completion text is emitted.
+    if lower_model.starts_with("gemini-4")
+        || lower_model.starts_with("gemini-3.8")
+        || lower_model.starts_with("gemini-3.7")
+        || lower_model.starts_with("gemini-3.1-pro")
+    {
+        // These models do not support "minimal"; low is their least
+        // expensive thinking level.
         return Some(json!({ "thinkingLevel": "low" }));
     }
 
@@ -238,10 +250,30 @@ mod tests {
             google_generate_content_url("https://opencode.ai/zen", "gemini-3.1-pro", true),
             "https://opencode.ai/zen/v1/models/gemini-3.1-pro:streamGenerateContent?alt=sse"
         );
+        assert_eq!(
+            google_generate_content_url("https://opencode.ai/zen/go", "gemini-4-argon", true),
+            "https://opencode.ai/inference/go/google/v1beta/models/gemini-4-argon:streamGenerateContent?alt=sse"
+        );
+        assert_eq!(
+            google_generate_content_url("https://custom.example/go", "gemini-4-argon", false),
+            "https://custom.example/go/v1/models/gemini-4-argon:generateContent"
+        );
     }
 
     #[test]
     fn uses_conservative_thinking_controls_for_gemini_models() {
+        assert_eq!(
+            google_thinking_config("gemini-4-argon"),
+            Some(json!({ "thinkingLevel": "low" }))
+        );
+        assert_eq!(
+            google_thinking_config("gemini-3.8-flash"),
+            Some(json!({ "thinkingLevel": "low" }))
+        );
+        assert_eq!(
+            google_thinking_config("gemini-3.7-flash"),
+            Some(json!({ "thinkingLevel": "low" }))
+        );
         assert_eq!(
             google_thinking_config("gemini-3.1-pro"),
             Some(json!({ "thinkingLevel": "low" }))
@@ -275,6 +307,25 @@ mod tests {
             json!({ "thinkingLevel": "minimal" })
         );
         assert_eq!(payload["store"], json!(false));
+    }
+
+    #[test]
+    fn low_thinking_gemini_models_have_room_to_complete() {
+        let payload = build_google_payload(
+            "gemini-4-argon",
+            "system".into(),
+            "user".into(),
+            CompletionParams {
+                max_tokens: 64,
+                temperature: 0.2,
+                stop: STOP_SEQUENCES,
+            },
+        );
+        assert_eq!(payload["generationConfig"]["maxOutputTokens"], 512);
+        assert_eq!(
+            payload["generationConfig"]["thinkingConfig"]["thinkingLevel"],
+            "low"
+        );
     }
 
     #[test]

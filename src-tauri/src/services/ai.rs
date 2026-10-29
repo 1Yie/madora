@@ -757,6 +757,48 @@ mod tests {
     }
 
     #[test]
+    fn every_custom_protocol_has_an_independent_cache_and_in_flight_key() {
+        let service = test_service();
+        let request = CompletionRequest {
+            title: None,
+            prefix: "same".into(),
+            suffix: None,
+        };
+        let mut keys = std::collections::HashSet::new();
+        for protocol in [
+            CustomProviderProtocol::OpenAi,
+            CustomProviderProtocol::Anthropic,
+            CustomProviderProtocol::Google,
+            CustomProviderProtocol::OpenAiResponses,
+            CustomProviderProtocol::OpenAiCodex,
+        ] {
+            let config = AiCompletionConfig {
+                provider: Some(AiProvider::Custom),
+                custom_protocol: Some(protocol),
+                api_url: Some("https://example.com/proxy/v1".into()),
+                model: Some("same".into()),
+                ..Default::default()
+            };
+            assert!(keys.insert(build_completion_cache_key(&service, &config, &request)));
+        }
+        assert_eq!(keys.len(), 5);
+    }
+
+    #[test]
+    fn websocket_scheme_normalization_is_shared_by_connection_and_cache() {
+        let config = AiCompletionConfig {
+            provider: Some(AiProvider::Custom),
+            custom_protocol: Some(CustomProviderProtocol::OpenAiCodex),
+            api_url: Some("wss://example.com/proxy/v1".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_cache_api_url(AiProvider::Custom, &config),
+            "https://example.com/proxy/v1",
+        );
+    }
+
+    #[test]
     fn resolve_cache_api_url_already_has_beta() {
         let config = AiCompletionConfig {
             api_url: Some("https://api.deepseek.com/beta".into()),

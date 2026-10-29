@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::LazyLock,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use futures_util::StreamExt;
 use reqwest::{RequestBuilder, Response, Url};
@@ -83,6 +86,35 @@ const MAX_SEND_RETRIES: usize = 2;
 const RETRY_AFTER_CAP: Duration = Duration::from_secs(5);
 const RETRY_BACKOFFS: [Duration; MAX_SEND_RETRIES] =
     [Duration::from_millis(250), Duration::from_secs(1)];
+
+/// Go requires a stable session identifier. A fresh, non-user-identifying ID
+/// is generated for each Madora process and reused across completion requests.
+static OPENCODE_GO_SESSION: LazyLock<String> = LazyLock::new(|| {
+    let mut random = [0_u8; 16];
+    if getrandom::getrandom(&mut random).is_ok() {
+        let hex: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("madora-{hex}")
+    } else {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        format!("madora-{}-{timestamp:x}", std::process::id())
+    }
+});
+
+fn with_provider_headers(request: RequestBuilder, provider: AiProvider) -> RequestBuilder {
+    if provider == AiProvider::OpenCodeGo {
+        request
+            .header("x-opencode-session", OPENCODE_GO_SESSION.as_str())
+            .header(
+                reqwest::header::USER_AGENT,
+                concat!("Madora/", env!("CARGO_PKG_VERSION")),
+            )
+    } else {
+        request
+    }
+}
 
 /// Extracts a readable message from a provider error body.
 ///
@@ -303,6 +335,21 @@ pub fn resolve_api_url(
     }
 
     let api_url = trim_trailing_slash(api_url).to_string();
+    // Keep cache keys and connection resolution identical. Only the custom
+    // WebSocket protocol accepts WS schemes; validate via their HTTP equivalent.
+    let api_url = if config.provider == Some(AiProvider::Custom)
+        && config.custom_protocol == Some(crate::models::ai::CustomProviderProtocol::OpenAiCodex)
+    {
+        if let Some(rest) = api_url.strip_prefix("wss://") {
+            format!("https://{rest}")
+        } else if let Some(rest) = api_url.strip_prefix("ws://") {
+            format!("http://{rest}")
+        } else {
+            api_url
+        }
+    } else {
+        api_url
+    };
 
     // Auto-prepend https:// (or http:// when use_ssl is false) if no scheme present
     let api_url = if !api_url.starts_with("http://") && !api_url.starts_with("https://") {
@@ -565,7 +612,7 @@ where
     F: FnMut() -> RequestBuilder,
 {
     let response = send_with_status_retries(|| {
-        let request = build();
+        let request = with_provider_headers(build(), provider);
 
         // Streaming is bounded by the client's connect/read timeouts; a
         // non-streaming request gets a wall-clock cap because nothing is
@@ -787,6 +834,18 @@ pub async fn stream_sse_response(
     response: Response,
     mut on_event: impl FnMut(SseEvent) -> Result<(), String>,
 ) -> Result<(), String> {
+    stream_sse_response_until(response, |event| {
+        on_event(event)?;
+        Ok(false)
+    })
+    .await
+}
+
+/// A terminal protocol event can finish an SSE request before HTTP EOF.
+pub async fn stream_sse_response_until(
+    response: Response,
+    mut on_event: impl FnMut(SseEvent) -> Result<bool, String>,
+) -> Result<(), String> {
     let mut buffer = String::new();
     let mut pending_bytes = Vec::new();
     let mut stream = response.bytes_stream();
@@ -804,7 +863,9 @@ pub async fn stream_sse_response(
 
         while let Some(raw_event) = take_next_sse_block(&mut buffer) {
             if let Some(event) = parse_sse_event(&raw_event) {
-                on_event(event)?;
+                if on_event(event)? {
+                    return Ok(());
+                }
             }
         }
     }
@@ -818,7 +879,7 @@ pub async fn stream_sse_response(
 
     if !buffer.trim().is_empty() {
         if let Some(event) = parse_sse_event(&buffer) {
-            on_event(event)?;
+            let _ = on_event(event)?;
         }
     }
 
@@ -829,6 +890,28 @@ pub async fn stream_sse_response(
 mod tests {
     use super::*;
     use crate::models::ai::AiCompletionConfig;
+
+    #[test]
+    fn opencode_go_headers_are_stable_and_provider_specific() {
+        let client = reqwest::Client::new();
+        let build = |provider| {
+            with_provider_headers(client.post("https://example.com"), provider)
+                .build()
+                .unwrap()
+        };
+        let first = build(AiProvider::OpenCodeGo);
+        let second = build(AiProvider::OpenCodeGo);
+        let other = build(AiProvider::OpenCodeZen);
+
+        let session = first.headers().get("x-opencode-session").unwrap();
+        assert!(!session.is_empty());
+        assert_eq!(Some(session), second.headers().get("x-opencode-session"));
+        assert!(other.headers().get("x-opencode-session").is_none());
+        assert_eq!(
+            first.headers().get(reqwest::header::USER_AGENT).unwrap(),
+            concat!("Madora/", env!("CARGO_PKG_VERSION"))
+        );
+    }
 
     // ─── take_last_chars ─────────────────────────────────────────────
 

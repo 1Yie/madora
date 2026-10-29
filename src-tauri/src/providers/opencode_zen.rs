@@ -1,48 +1,5 @@
-use reqwest::Client;
-use serde::Deserialize;
-use serde_json::{json, Value};
-
-use crate::{
-    i18n,
-    models::ai::{AiCompletionConfig, AiProvider, CompletionRequest},
-    prompt::{prompt_profile_for_openai_compatible, PromptManager},
-    providers::{
-        common::{
-            join_url, parse_stream_event, parse_success_json, send_request, stream_completion,
-            CompletionKind, CompletionParams, OpenEndedStop, PreparedCompletion,
-        },
-        Protocol,
-    },
-};
-
-#[derive(Deserialize)]
-struct ResponsesApiOutputContent {
-    text: Option<String>,
-    #[serde(rename = "type")]
-    type_name: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ResponsesApiOutputItem {
-    content: Option<Vec<ResponsesApiOutputContent>>,
-    #[serde(rename = "type")]
-    type_name: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ResponsesApiResponse {
-    output: Option<Vec<ResponsesApiOutputItem>>,
-    output_text: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct ResponsesApiStreamEvent {
-    delta: Option<String>,
-    response: Option<ResponsesApiResponse>,
-    text: Option<String>,
-    #[serde(rename = "type")]
-    type_name: Option<String>,
-}
+use super::Protocol;
+use crate::i18n;
 
 /// The protocol this model is served over.
 pub(crate) fn protocol_for_model(model: &str) -> Result<Protocol, String> {
@@ -72,10 +29,17 @@ pub(crate) fn protocol_for_model(model: &str) -> Result<Protocol, String> {
 
 fn matches_responses_route(model: &str) -> bool {
     model.starts_with("gpt-")
+        || model.starts_with("muse-")
+        || (model.starts_with("grok-") && model != "grok-code")
 }
 
 fn matches_anthropic_route(model: &str) -> bool {
-    model.starts_with("claude-") || model.starts_with("qwen")
+    model.starts_with("claude-")
+        || (model.starts_with("qwen") && !matches!(model, "qwen3.8-max" | "qwen3-coder"))
+        || matches!(
+            model,
+            "minimax-m2.1-free" | "minimax-m2.5-free" | "minimax-m3-free"
+        )
 }
 
 fn matches_google_route(model: &str) -> bool {
@@ -83,7 +47,8 @@ fn matches_google_route(model: &str) -> bool {
 }
 
 fn matches_chat_completions_route(model: &str) -> bool {
-    model.starts_with("deepseek-")
+    matches!(model, "qwen3.8-max" | "qwen3-coder")
+        || model.starts_with("deepseek-")
         || model.starts_with("minimax-")
         || model.starts_with("glm-")
         || model.starts_with("kimi-")
@@ -92,154 +57,33 @@ fn matches_chat_completions_route(model: &str) -> bool {
         || model.starts_with("mimo-")
         || model.starts_with("north-mini-code-")
         || model.starts_with("nemotron-")
-}
-
-pub(crate) async fn request_openai_responses_fim(
-    client: &Client,
-    prompt_manager: &PromptManager,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-) -> Result<String, String> {
-    let PreparedCompletion {
-        connection,
-        system_prompt,
-        user_prompt,
-    } = PreparedCompletion::prepare(
-        prompt_manager,
-        config,
-        request,
-        prompt_profile_for_openai_compatible,
-        AiProvider::OpenCodeZen,
-        OpenEndedStop::Structural,
-    )?;
-    let provider = connection.provider;
-    let payload = build_responses_payload(
-        &connection.model,
-        system_prompt,
-        user_prompt,
-        connection.params,
-        false,
-    );
-
-    let response = send_request(CompletionKind::Whole, provider, || {
-        client
-            .post(join_url(&connection.api_url, "/v1/responses"))
-            .bearer_auth(&connection.api_key)
-            .json(&payload)
-    })
-    .await?;
-
-    let payload =
-        parse_success_json::<ResponsesApiResponse>(provider.display_name(), response).await?;
-
-    Ok(take_responses_output_text(payload))
-}
-
-pub(crate) async fn request_openai_responses_fim_stream(
-    client: &Client,
-    prompt_manager: &PromptManager,
-    config: &AiCompletionConfig,
-    request: &CompletionRequest,
-    on_chunk: &mut (dyn FnMut(String) -> Result<(), String> + Send),
-) -> Result<String, String> {
-    let PreparedCompletion {
-        connection,
-        system_prompt,
-        user_prompt,
-    } = PreparedCompletion::prepare(
-        prompt_manager,
-        config,
-        request,
-        prompt_profile_for_openai_compatible,
-        AiProvider::OpenCodeZen,
-        OpenEndedStop::Structural,
-    )?;
-    let provider = connection.provider;
-    let payload = build_responses_payload(
-        &connection.model,
-        system_prompt,
-        user_prompt,
-        connection.params,
-        true,
-    );
-
-    let response = send_request(CompletionKind::Stream, provider, || {
-        client
-            .post(join_url(&connection.api_url, "/v1/responses"))
-            .bearer_auth(&connection.api_key)
-            .json(&payload)
-    })
-    .await?;
-
-    stream_completion(
-        CompletionKind::Stream,
-        provider,
-        response,
-        |event, accumulated| {
-            let payload = parse_stream_event::<ResponsesApiStreamEvent>(provider, event)?;
-            // Only fall back to the completed event's full text when nothing
-            // streamed, or the answer would be emitted twice.
-            let chunk = take_responses_stream_text(payload, accumulated.is_empty());
-
-            Ok(Some(chunk).filter(|text| !text.is_empty()))
-        },
-        on_chunk,
-    )
-    .await
-}
-
-fn build_responses_payload(
-    model: &str,
-    system_prompt: String,
-    user_prompt: String,
-    params: CompletionParams,
-    stream: bool,
-) -> Value {
-    // The Responses API has no stop-sequence parameter, so only the budget and
-    // temperature carry over.
-    json!({
-        "model": model,
-        "input": user_prompt,
-        "instructions": system_prompt,
-        "max_output_tokens": params.max_tokens,
-        "temperature": params.temperature,
-        "store": false,
-        "stream": stream,
-    })
-}
-
-fn take_responses_output_text(payload: ResponsesApiResponse) -> String {
-    payload.output_text.unwrap_or_else(|| {
-        payload
-            .output
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|item| item.type_name.as_deref() == Some("message"))
-            .flat_map(|item| item.content.unwrap_or_default().into_iter())
-            .filter(|content| content.type_name.as_deref() == Some("output_text"))
-            .filter_map(|content| content.text)
-            .collect::<Vec<_>>()
-            .join("")
-    })
-}
-
-fn take_responses_stream_text(
-    payload: ResponsesApiStreamEvent,
-    allow_completion_fallback: bool,
-) -> String {
-    match payload.type_name.as_deref() {
-        Some("response.output_text.delta") => payload.delta.or(payload.text).unwrap_or_default(),
-        Some("response.completed") if allow_completion_fallback => payload
-            .response
-            .map(take_responses_output_text)
-            .unwrap_or_default(),
-        _ => String::new(),
-    }
+        || model.starts_with("flint-")
+        || model.starts_with("mistral-")
+        || model.starts_with("ling-")
+        || model.starts_with("longcat-")
+        || model.starts_with("step-")
+        || model.starts_with("hy3")
+        || model.starts_with("hy4-")
+        || model.starts_with("trinity-")
+        || model.starts_with("laguna-")
+        || model.starts_with("ring-")
+        || matches!(
+            model,
+            "beam-free"
+                | "cat-jam-free"
+                | "space-bunny-free"
+                | "exo-free"
+                | "fledge-alpha-free"
+                | "ll-alpha-free"
+                | "x-preview-f-free"
+        )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::ai::{AiCompletionConfig, AiProvider};
+    use serde_json::json;
 
     #[test]
     fn routes_responses_models() {
@@ -251,6 +95,21 @@ mod tests {
             protocol_for_model("gpt-5.1-codex-max").unwrap(),
             Protocol::OpenAiResponses
         );
+        for model in [
+            "grok-4.7",
+            "grok-4.6",
+            "grok-4.5",
+            "grok-build-0.1",
+            "muse-wonder-1.0",
+            "muse-spark-1.2",
+            "muse-spark-1.3-contributor-free",
+        ] {
+            assert_eq!(
+                protocol_for_model(model).unwrap(),
+                Protocol::OpenAiResponses,
+                "{model}"
+            );
+        }
     }
 
     #[test]
@@ -263,6 +122,33 @@ mod tests {
             protocol_for_model("big-pickle").unwrap(),
             Protocol::OpenAiChat
         );
+        for model in [
+            "flint-40b-free",
+            "beam-free",
+            "mistral-large-4",
+            "ling-3.1-flash-free",
+            "longcat-2.0-free",
+            "step-5-preview-free",
+            "hy3-free",
+            "trinity-large-preview-free",
+            "laguna-s-2.1-free",
+            "ring-2.6-1t-free",
+            "exo-free",
+            "fledge-alpha-free",
+            "ll-alpha-free",
+            "x-preview-f-free",
+            "cat-jam-free",
+            "space-bunny-free",
+            "grok-code",
+            "qwen3.8-max",
+            "qwen3-coder",
+        ] {
+            assert_eq!(
+                protocol_for_model(model).unwrap(),
+                Protocol::OpenAiChat,
+                "{model}"
+            );
+        }
     }
 
     #[test]
@@ -275,6 +161,20 @@ mod tests {
             protocol_for_model("qwen3.7-max").unwrap(),
             Protocol::AnthropicMessages
         );
+        for model in [
+            "qwen3.8-flash",
+            "qwen3.6-plus",
+            "qwen3.5-plus",
+            "minimax-m2.1-free",
+            "minimax-m2.5-free",
+            "minimax-m3-free",
+        ] {
+            assert_eq!(
+                protocol_for_model(model).unwrap(),
+                Protocol::AnthropicMessages,
+                "{model}"
+            );
+        }
     }
 
     #[test]
@@ -356,8 +256,19 @@ mod tests {
 
     #[tokio::test]
     async fn zen_routes_each_model_family_to_its_own_endpoint() {
-        let cases: [(&str, &str, &str); 4] = [
+        let cases = [
             ("gpt-5.5", "/v1/responses", r#"{"output_text":"ld!"}"#),
+            ("grok-4.7", "/v1/responses", r#"{"output_text":"ld!"}"#),
+            (
+                "muse-wonder-1.0",
+                "/v1/responses",
+                r#"{"output_text":"ld!"}"#,
+            ),
+            (
+                "muse-spark-1.3",
+                "/v1/responses",
+                r#"{"output_text":"ld!"}"#,
+            ),
             (
                 "claude-sonnet-4-6",
                 "/v1/messages",
@@ -402,6 +313,79 @@ mod tests {
         );
         assert!(body.get("stop").is_none());
         assert!(body["input"].as_str().unwrap().contains("Hello, wor"));
+        assert_eq!(body["temperature"], json!(0.3_f32));
+        assert_eq!(body["max_output_tokens"], json!(512));
+        assert!(body.get("reasoning").is_none());
+    }
+
+    #[tokio::test]
+    async fn zen_latest_text_models_use_chat_completions() {
+        for model in ["flint-40b-free", "beam-free", "mistral-large-4"] {
+            let server = MockServer::start(vec![ScriptedResponse::json(
+                200,
+                r#"{"choices":[{"message":{"content":"ok"}}]}"#,
+            )])
+            .await;
+            assert_eq!(zen_complete(&server, model).await.as_deref(), Ok("ok"));
+            let sent = &server.requests()[0];
+            assert_eq!(sent.path, "/v1/chat/completions", "{model}");
+            assert_eq!(sent.json()["model"], model);
+            assert_eq!(sent.header("authorization"), Some("Bearer sk-test-key"));
+        }
+    }
+
+    #[tokio::test]
+    async fn zen_gpt_responses_use_supported_reasoning_and_token_budgets() {
+        for (model, effort) in [
+            ("gpt-5.6-luna", "none"),
+            ("gpt-5.6-sol", "none"),
+            ("gpt-5.6-terra", "none"),
+            ("gpt-6.1-terra", "none"),
+            ("gpt-6-sol", "none"),
+            ("gpt-6-luna", "none"),
+            ("gpt-6-luna-2026-06-01", "none"),
+            ("gpt-6.1-sol", "low"),
+            ("gpt-6-astra", "low"),
+            ("gpt-5.1-codex", "low"),
+            ("gpt-5.3-codex-spark", "low"),
+        ] {
+            let server =
+                MockServer::start(vec![ScriptedResponse::json(200, r#"{"output_text":"ok"}"#)])
+                    .await;
+            assert_eq!(zen_complete(&server, model).await.as_deref(), Ok("ok"));
+            let sent = &server.requests()[0];
+            assert_eq!(sent.path, "/v1/responses");
+            let payload = sent.json();
+            assert_eq!(payload["model"], model);
+            assert_eq!(payload["reasoning"], json!({ "effort": effort }));
+            assert_eq!(payload["max_output_tokens"], 512);
+            assert_eq!(payload["store"], false);
+            assert_eq!(payload["stream"], false);
+            if effort == "low" {
+                assert!(payload.get("temperature").is_none(), "{model}: {payload}");
+            } else {
+                assert_eq!(payload["temperature"], json!(0.3_f32), "{model}");
+            }
+            assert!(payload.get("stop").is_none());
+            assert!(payload.get("max_tokens").is_none());
+            assert!(payload.get("reasoning_effort").is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn zen_gpt6_streaming_reserves_tokens_for_reasoning_without_a_suffix() {
+        let server = MockServer::start(vec![ScriptedResponse::sse(&[
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n",
+        ])])
+        .await;
+        let (result, chunks) = zen_stream(&server, "gpt-6.1-sol").await;
+        assert_eq!(result.as_deref(), Ok("ok"));
+        assert_eq!(chunks, vec!["ok"]);
+        let payload = server.requests()[0].json();
+        assert_eq!(payload["reasoning"], json!({ "effort": "low" }));
+        assert_eq!(payload["max_output_tokens"], 512);
+        assert_eq!(payload["stream"], true);
+        assert!(payload.get("temperature").is_none());
     }
 
     #[tokio::test]

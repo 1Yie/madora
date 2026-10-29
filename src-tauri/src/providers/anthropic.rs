@@ -217,6 +217,27 @@ fn build_anthropic_compatible_payload(
         // Anthropic-compatible Qwen endpoints default to thinking-on unless the
         // request explicitly disables it.
         let lower_model = model.to_ascii_lowercase();
+        if [
+            "claude-fable-5",
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "claude-haiku-5",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+        ]
+        .iter()
+        .any(|prefix| lower_model.starts_with(prefix))
+        {
+            object.remove("temperature");
+        }
+        if matches!(provider, AiProvider::MiniMax | AiProvider::MiniMaxCoding)
+            && lower_model.starts_with("minimax-m3.1-flash")
+        {
+            // M3.1 always reasons and defaults to maximum effort. Low keeps
+            // inline completions responsive while leaving room for thoughts.
+            object.insert("output_config".to_string(), json!({ "effort": "low" }));
+            object.insert("max_tokens".to_string(), json!(params.max_tokens.max(512)));
+        }
         if should_disable_anthropic_thinking(provider, &lower_model) {
             object.insert("thinking".to_string(), json!({ "type": "disabled" }));
         }
@@ -306,6 +327,64 @@ mod tests {
         );
 
         assert!(payload.get("thinking").is_none());
+    }
+
+    #[test]
+    fn newer_claude_models_do_not_receive_unsupported_temperature() {
+        let params = CompletionParams {
+            max_tokens: 64,
+            temperature: 0.2,
+            stop: STOP_SEQUENCES,
+        };
+        for model in [
+            "claude-fable-5-1",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
+            "claude-haiku-5-5",
+            "claude-opus-4-7",
+            "claude-opus-4-8",
+        ] {
+            let payload = build_anthropic_compatible_payload(
+                AiProvider::Anthropic,
+                model,
+                "system".into(),
+                "user".into(),
+                params,
+                false,
+            );
+            assert!(payload.get("temperature").is_none(), "{model}");
+        }
+        let older = build_anthropic_compatible_payload(
+            AiProvider::Anthropic,
+            "claude-sonnet-4-6",
+            "system".into(),
+            "user".into(),
+            params,
+            false,
+        );
+        assert!(older.get("temperature").is_some());
+    }
+
+    #[test]
+    fn minimax_m3_1_uses_low_effort_for_inline_completion() {
+        let params = CompletionParams {
+            max_tokens: 64,
+            temperature: 0.2,
+            stop: STOP_SEQUENCES,
+        };
+        for provider in [AiProvider::MiniMax, AiProvider::MiniMaxCoding] {
+            let payload = build_anthropic_compatible_payload(
+                provider,
+                "MiniMax-M3.1-Flash",
+                "system".into(),
+                "user".into(),
+                params,
+                false,
+            );
+            assert_eq!(payload["output_config"]["effort"], "low");
+            assert_eq!(payload["max_tokens"], 512);
+            assert!(payload.get("thinking").is_none());
+        }
     }
 
     #[test]
