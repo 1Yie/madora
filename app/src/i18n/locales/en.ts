@@ -219,6 +219,16 @@ const en = {
 			},
 			customConfigTitle: 'Custom Provider',
 			customProtocolOptions: {
+				'openai-responses': {
+					description:
+						'OpenAI Responses over HTTP at /v1/responses, with streaming and non-streaming support.',
+					label: 'OpenAI Responses (HTTP)',
+				},
+				'openai-codex': {
+					description:
+						'OpenAI Responses over WebSocket at /v1/responses. Uses an API key, not a ChatGPT subscription. Native apps only; on Web, choose HTTP because browsers cannot set secure handshake headers.',
+					label: 'OpenAI Codex (WebSocket)',
+				},
 				anthropic: {
 					description:
 						'Use this for Anthropic-compatible /v1/messages endpoints.',

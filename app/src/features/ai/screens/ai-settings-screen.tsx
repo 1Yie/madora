@@ -38,15 +38,12 @@ import {
 import { useMadoraSync } from '@/features/madora-sync';
 import { BackButton } from '@/shared/components';
 import { ProviderGlyph } from '../components/provider-glyph';
-import { getProviderDefinitions } from '../lib/provider-definitions';
+import {
+	CUSTOM_PROTOCOLS,
+	getProviderDefinitions,
+} from '../lib/provider-definitions';
 import { useAiSettings } from '../providers/settings-provider';
-import type { AiProvider, CustomProviderProtocol } from '../types';
-
-const CUSTOM_PROTOCOLS: CustomProviderProtocol[] = [
-	'openai',
-	'anthropic',
-	'google',
-];
+import type { AiProvider } from '../types';
 
 type ProviderModelOption = {
 	name: string;
@@ -209,6 +206,14 @@ export function AiSettingsScreen({ onBack }: { onBack?: () => void }) {
 									/>
 								))}
 							</View>
+							<Text
+								className="text-[13px] leading-5"
+								style={{ color: palette.mutedForeground }}
+							>
+								{t(
+									`settings.editor.customProtocolOptions.${settings.customProtocol}.description`
+								)}
+							</Text>
 
 							<FieldLabel
 								icon={

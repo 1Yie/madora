@@ -215,6 +215,16 @@ const ko = {
 			},
 			customConfigTitle: '사용자 지정 Provider',
 			customProtocolOptions: {
+				'openai-responses': {
+					description:
+						'HTTP /v1/responses를 통해 OpenAI Responses 스트리밍 및 비스트리밍 요청을 지원합니다.',
+					label: 'OpenAI Responses (HTTP)',
+				},
+				'openai-codex': {
+					description:
+						'WebSocket /v1/responses를 사용합니다. ChatGPT 구독이 아닌 API 키가 필요합니다. 네이티브 앱 전용이며 브라우저는 안전한 인증 헤더를 설정할 수 없으므로 웹에서는 HTTP를 선택하세요.',
+					label: 'OpenAI Codex (WebSocket)',
+				},
 				anthropic: {
 					description: 'Anthropic 호환 /v1/messages 엔드포인트에 사용합니다.',
 					label: 'Anthropic Compatible',

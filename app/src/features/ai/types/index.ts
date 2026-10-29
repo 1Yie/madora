@@ -14,7 +14,12 @@ export type AiProvider =
 	| 'zhipu'
 	| 'zhipu-coding';
 
-export type CustomProviderProtocol = 'anthropic' | 'google' | 'openai';
+export type CustomProviderProtocol =
+	| 'anthropic'
+	| 'google'
+	| 'openai'
+	| 'openai-responses'
+	| 'openai-codex';
 
 export type ProviderConfig = {
 	apiUrl: string;

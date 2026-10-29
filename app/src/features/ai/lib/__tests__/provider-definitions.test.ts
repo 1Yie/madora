@@ -30,6 +30,8 @@ describe('AI provider definitions', () => {
 		expect(isCustomProviderProtocol('openai')).toBe(true);
 		expect(isCustomProviderProtocol('anthropic')).toBe(true);
 		expect(isCustomProviderProtocol('google')).toBe(true);
+		expect(isCustomProviderProtocol('openai-responses')).toBe(true);
+		expect(isCustomProviderProtocol('openai-codex')).toBe(true);
 		expect(isCustomProviderProtocol('deepseek')).toBe(false);
 		expect(isCustomProviderProtocol(null)).toBe(false);
 	});

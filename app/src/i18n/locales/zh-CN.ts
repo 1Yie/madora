@@ -191,6 +191,16 @@ const zhCN = {
 			},
 			customConfigTitle: '自定义接口配置',
 			customProtocolOptions: {
+				'openai-responses': {
+					description:
+						'通过 HTTP 调用 /v1/responses，支持流式与非流式 OpenAI Responses 请求。',
+					label: 'OpenAI Responses (HTTP)',
+				},
+				'openai-codex': {
+					description:
+						'通过 WebSocket 调用 /v1/responses，使用 API Key，而非 ChatGPT 订阅。仅限原生应用；浏览器无法设置安全握手头，请在 Web 端选择 HTTP。',
+					label: 'OpenAI Codex (WebSocket)',
+				},
 				anthropic: {
 					description: '适用于 /v1/messages 一类 Anthropic 兼容接口。',
 					label: 'Anthropic Compatible',

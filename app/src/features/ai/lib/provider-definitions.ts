@@ -7,6 +7,14 @@ import type {
 
 export const DEFAULT_PROVIDER: AiProvider = 'deepseek';
 
+export const CUSTOM_PROTOCOLS: CustomProviderProtocol[] = [
+	'openai',
+	'openai-responses',
+	'openai-codex',
+	'anthropic',
+	'google',
+];
+
 export const PROVIDERS: ProviderDefinition[] = [
 	{
 		defaultApiUrl: 'https://api.deepseek.com',
@@ -109,7 +117,7 @@ export function isProvider(value: string | null): value is AiProvider {
 export function isCustomProviderProtocol(
 	value: string | null
 ): value is CustomProviderProtocol {
-	return value === 'anthropic' || value === 'google' || value === 'openai';
+	return CUSTOM_PROTOCOLS.some((protocol) => protocol === value);
 }
 
 export function getProviderDefinition(

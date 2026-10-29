@@ -27,13 +27,12 @@ import {
 	SliderTrack,
 } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import {
-	useAiSettings,
-	type AiProvider,
-	type CustomProviderProtocol,
-} from '@/features/ai';
+import { useAiSettings, type AiProvider } from '@/features/ai';
 import { ProviderGlyph } from '@/features/ai/components/provider-glyph';
-import { getProviderDefinitions } from '@/features/ai/lib/provider-definitions';
+import {
+	CUSTOM_PROTOCOLS,
+	getProviderDefinitions,
+} from '@/features/ai/lib/provider-definitions';
 import {
 	QrScanner,
 	formatPairingEndpoint,
@@ -68,11 +67,6 @@ const CONTENT_STEPS: Exclude<OnboardingStep, 'welcome' | 'ready'>[] = [
 ];
 
 const THEME_OPTIONS: ThemePreference[] = ['system', 'light', 'dark'];
-const CUSTOM_PROTOCOLS: CustomProviderProtocol[] = [
-	'openai',
-	'anthropic',
-	'google',
-];
 
 type ProviderModelOption = {
 	name: string;
@@ -651,6 +645,14 @@ function AiStep() {
 							))}
 						</View>
 
+						<Text
+							className="text-[13px] leading-5"
+							style={{ color: palette.mutedForeground }}
+						>
+							{t(
+								`settings.editor.customProtocolOptions.${settings.customProtocol}.description`
+							)}
+						</Text>
 						<LabeledInput label={t('common.labels.apiUrl')}>
 							<InputField
 								autoCapitalize="none"

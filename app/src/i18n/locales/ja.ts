@@ -214,6 +214,16 @@ const ja = {
 			},
 			customConfigTitle: 'カスタム Provider',
 			customProtocolOptions: {
+				'openai-responses': {
+					description:
+						'HTTP 経由の /v1/responses。OpenAI Responses のストリーミング・非ストリーミングに対応します。',
+					label: 'OpenAI Responses (HTTP)',
+				},
+				'openai-codex': {
+					description:
+						'WebSocket 経由の /v1/responses。ChatGPT サブスクリプションではなく API キーを使用します。ネイティブアプリ専用です。ブラウザーでは安全な認証ヘッダーを設定できないため、HTTP を選択してください。',
+					label: 'OpenAI Codex (WebSocket)',
+				},
 				anthropic: {
 					description: 'Anthropic 互換の /v1/messages エンドポイント向けです。',
 					label: 'Anthropic Compatible',

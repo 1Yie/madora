@@ -14,6 +14,7 @@ import type {
 	AiCompletionRequest,
 	AiProvider,
 } from '../types';
+import { requestResponses } from './openai-responses';
 
 const COMPLETION_CACHE_MAX_ENTRIES = 128;
 const COMPLETION_CACHE_TTL_MS = 15_000;
@@ -30,6 +31,8 @@ const DEEPSEEK_NO_SUFFIX_STOP_SEQUENCES = [
 	'!',
 ];
 const ANTHROPIC_API_VERSION = '2023-06-01';
+// Anonymous identity for this JS runtime; never persisted or derived from user data.
+const OPENCODE_GO_SESSION_ID = `madora-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
 
 type CompletionCacheEntry = {
 	expiresAt: number;
@@ -48,7 +51,14 @@ const completionInFlight = new Map<string, Promise<string>>();
 export async function generateCompletion(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
+	signal?: AbortSignal;
 }): Promise<string> {
+	if (isCustomResponses(opts.config)) {
+		return requestOpenAiResponsesFim(opts.config, opts.request, () => {}, {
+			signal: opts.signal,
+			stream: false,
+		});
+	}
 	let completion = '';
 	await streamCompletion({
 		...opts,
@@ -63,7 +73,17 @@ export async function streamCompletion(opts: {
 	config: AiCompletionConfig;
 	request: AiCompletionRequest;
 	onChunk: (chunk: string) => void;
+	signal?: AbortSignal;
 }): Promise<void> {
+	if (isCustomResponses(opts.config)) {
+		// Each request owns its socket/abort lifecycle. Do not join a shared
+		// in-flight request or reuse a completion authorized by another key.
+		await requestOpenAiResponsesFim(opts.config, opts.request, opts.onChunk, {
+			signal: opts.signal,
+			stream: true,
+		});
+		return;
+	}
 	const cacheKey = buildCompletionCacheKey(opts.config, opts.request);
 	const cached = getCachedCompletion(cacheKey);
 
@@ -92,6 +112,14 @@ export async function streamCompletion(opts: {
 	} finally {
 		completionInFlight.delete(cacheKey);
 	}
+}
+
+function isCustomResponses(config: AiCompletionConfig) {
+	return (
+		config.provider === 'custom' &&
+		(config.customProtocol === 'openai-responses' ||
+			config.customProtocol === 'openai-codex')
+	);
 }
 
 async function requestCompletionByProvider(
@@ -136,6 +164,9 @@ async function requestCustomFim(
 			return requestGoogleCompatibleFim(config, request, onChunk);
 		case 'openai':
 			return requestOpenAiCompatibleFim(config, request, onChunk);
+		case 'openai-responses':
+		case 'openai-codex':
+			return requestOpenAiResponsesFim(config, request, onChunk);
 	}
 }
 
@@ -147,15 +178,40 @@ async function requestOpenCodeGoFim(
 	const model = resolveModel(config);
 	const lowerModel = model.toLowerCase();
 	if (
+		lowerModel.startsWith('gpt-') ||
+		lowerModel.startsWith('grok-') ||
+		lowerModel.startsWith('muse-spark-')
+	) {
+		return requestOpenAiResponsesFim(config, request, onChunk);
+	}
+	if (lowerModel.startsWith('gemini-')) {
+		return requestGoogleCompatibleFim(config, request, onChunk);
+	}
+	if (
 		lowerModel.startsWith('glm-') ||
 		lowerModel.startsWith('kimi-') ||
 		lowerModel.startsWith('deepseek-') ||
-		lowerModel.startsWith('mimo-')
+		lowerModel.startsWith('mimo-') ||
+		lowerModel.startsWith('step-') ||
+		lowerModel.startsWith('hy3') ||
+		lowerModel.startsWith('hy4-') ||
+		lowerModel.startsWith('longcat-') ||
+		lowerModel.startsWith('minimax-m3.1-flash') ||
+		[
+			'beam-free',
+			'iceman-contributor-free',
+			'cat-jam-free',
+			'space-bunny',
+		].includes(lowerModel)
 	) {
 		return requestOpenAiCompatibleFim(config, request, onChunk);
 	}
 
-	if (lowerModel.startsWith('minimax-') || lowerModel.startsWith('qwen')) {
+	if (
+		lowerModel.startsWith('claude-') ||
+		lowerModel.startsWith('minimax-') ||
+		lowerModel.startsWith('qwen')
+	) {
 		return requestAnthropicCompatibleFim(config, request, onChunk);
 	}
 
@@ -172,11 +228,22 @@ async function requestOpenCodeZenFim(
 	const model = resolveModel(config);
 	const lowerModel = model.toLowerCase();
 
-	if (lowerModel.startsWith('gpt-')) {
+	if (
+		lowerModel.startsWith('gpt-') ||
+		lowerModel.startsWith('muse-') ||
+		(lowerModel.startsWith('grok-') && lowerModel !== 'grok-code')
+	) {
 		return requestOpenAiResponsesFim(config, request, onChunk);
 	}
 
-	if (lowerModel.startsWith('claude-') || lowerModel.startsWith('qwen')) {
+	if (
+		lowerModel.startsWith('claude-') ||
+		(lowerModel.startsWith('qwen') &&
+			!['qwen3.8-max', 'qwen3-coder'].includes(lowerModel)) ||
+		['minimax-m2.1-free', 'minimax-m2.5-free', 'minimax-m3-free'].includes(
+			lowerModel
+		)
+	) {
 		return requestAnthropicCompatibleFim(config, request, onChunk);
 	}
 
@@ -185,6 +252,7 @@ async function requestOpenCodeZenFim(
 	}
 
 	if (
+		['qwen3.8-max', 'qwen3-coder'].includes(lowerModel) ||
 		lowerModel.startsWith('deepseek-') ||
 		lowerModel.startsWith('minimax-') ||
 		lowerModel.startsWith('glm-') ||
@@ -193,7 +261,26 @@ async function requestOpenCodeZenFim(
 		lowerModel === 'big-pickle' ||
 		lowerModel.startsWith('mimo-') ||
 		lowerModel.startsWith('north-mini-code-') ||
-		lowerModel.startsWith('nemotron-')
+		lowerModel.startsWith('nemotron-') ||
+		lowerModel.startsWith('flint-') ||
+		lowerModel.startsWith('mistral-') ||
+		lowerModel.startsWith('ling-') ||
+		lowerModel.startsWith('longcat-') ||
+		lowerModel.startsWith('step-') ||
+		lowerModel.startsWith('hy3') ||
+		lowerModel.startsWith('hy4-') ||
+		lowerModel.startsWith('trinity-') ||
+		lowerModel.startsWith('laguna-') ||
+		lowerModel.startsWith('ring-') ||
+		[
+			'beam-free',
+			'cat-jam-free',
+			'space-bunny-free',
+			'exo-free',
+			'fledge-alpha-free',
+			'll-alpha-free',
+			'x-preview-f-free',
+		].includes(lowerModel)
 	) {
 		return requestOpenAiCompatibleFim(config, request, onChunk);
 	}
@@ -230,7 +317,7 @@ async function requestDeepSeekFim(
 			thinking: { type: 'disabled' },
 			stream: true,
 		},
-		provider: 'DeepSeek',
+		provider: 'deepseek',
 		stream: true,
 	});
 
@@ -274,7 +361,7 @@ async function requestOpenAiCompatibleFim(
 			temperature,
 			true
 		),
-		provider: displayProviderName(provider),
+		provider,
 		stream: true,
 	});
 
@@ -329,7 +416,7 @@ async function requestAnthropicCompatibleFim(
 			...headers,
 			'anthropic-version': ANTHROPIC_API_VERSION,
 		},
-		provider: displayProviderName(provider),
+		provider,
 		stream: true,
 	});
 
@@ -365,7 +452,7 @@ async function requestGoogleCompatibleFim(
 	const temperature = hasSuffix ? 0.3 : 0.2;
 
 	const response = await postJson(
-		googleGenerateContentUrl(apiUrl, model, true),
+		googleGenerateContentUrl(apiUrl, model, true, provider),
 		{
 			body: buildGooglePayload(
 				model,
@@ -375,7 +462,7 @@ async function requestGoogleCompatibleFim(
 				temperature
 			),
 			headers: { 'x-goog-api-key': apiKey },
-			provider: displayProviderName(provider),
+			provider,
 			stream: true,
 		}
 	);
@@ -398,7 +485,8 @@ async function requestGoogleCompatibleFim(
 async function requestOpenAiResponsesFim(
 	config: AiCompletionConfig,
 	request: AiCompletionRequest,
-	onChunk: (chunk: string) => void
+	onChunk: (chunk: string) => void,
+	options: { signal?: AbortSignal; stream: boolean } = { stream: true }
 ) {
 	const provider = config.provider;
 	const apiKey = resolveApiKey(config);
@@ -412,17 +500,40 @@ async function requestOpenAiResponsesFim(
 	const maxTokens = hasSuffix ? MAX_COMPLETION_TOKENS : 64;
 	const temperature = hasSuffix ? 0.3 : 0.2;
 
+	const reasoningEffort = openAiReasoningEffort(model);
+	if (isCustomResponses(config)) {
+		return requestResponses({
+			apiKey,
+			apiUrl,
+			onChunk,
+			payload: {
+				model,
+				input: userPrompt,
+				instructions: systemPrompt,
+				max_output_tokens:
+					reasoningEffort === 'low' ? Math.max(maxTokens, 512) : maxTokens,
+				...(reasoningEffort === 'low' ? {} : { temperature }),
+				...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+				store: false,
+			},
+			signal: options.signal,
+			stream: options.stream,
+			websocket: config.customProtocol === 'openai-codex',
+		});
+	}
 	const response = await postJson(joinUrl(apiUrl, '/v1/responses'), {
 		apiKey,
 		body: {
 			model,
 			input: userPrompt,
 			instructions: systemPrompt,
-			max_output_tokens: maxTokens,
-			temperature,
+			max_output_tokens:
+				reasoningEffort === 'low' ? Math.max(maxTokens, 512) : maxTokens,
+			...(reasoningEffort === 'low' ? {} : { temperature }),
+			...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
 			stream: true,
 		},
-		provider: displayProviderName(provider),
+		provider,
 		stream: true,
 	});
 
@@ -447,7 +558,7 @@ async function postJson(
 		apiKey?: string;
 		body: unknown;
 		headers?: Record<string, string>;
-		provider: string;
+		provider: AiProvider;
 		stream: boolean;
 	}
 ) {
@@ -458,11 +569,17 @@ async function postJson(
 			'Content-Type': 'application/json',
 			...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
 			...opts.headers,
+			...(opts.provider === 'opencode-go'
+				? {
+						'User-Agent': 'Madora',
+						'x-opencode-session': OPENCODE_GO_SESSION_ID,
+					}
+				: {}),
 		},
 		method: 'POST',
 	}).catch((error: unknown) => {
 		throw new Error(
-			`${opts.provider} request failed: ${getErrorMessage(error)}`
+			`${displayProviderName(opts.provider)} request failed: ${getErrorMessage(error)}`
 		);
 	});
 
@@ -471,7 +588,7 @@ async function postJson(
 			.text()
 			.catch(() => 'Failed to read error details');
 		throw new Error(
-			`${opts.provider} API error (HTTP ${response.status}): ${body}`
+			`${displayProviderName(opts.provider)} API error (HTTP ${response.status}): ${body}`
 		);
 	}
 
@@ -501,13 +618,47 @@ function buildOpenAiCompatiblePayload(
 	if (stream) payload.stream = true;
 
 	const lowerModel = model.toLowerCase();
-	if (lowerModel.startsWith('qwen')) {
+	const reasoningEffort = openAiReasoningEffort(model);
+	if (reasoningEffort) {
+		payload.reasoning_effort = reasoningEffort;
+		payload.max_completion_tokens =
+			reasoningEffort === 'low' ? Math.max(maxTokens, 512) : maxTokens;
+		delete payload.max_tokens;
+		delete payload.stop;
+		if (reasoningEffort === 'low') delete payload.temperature;
+	} else if (lowerModel.startsWith('kimi-k3')) {
+		payload.reasoning_effort =
+			provider === 'opencode-go' && lowerModel === 'kimi-k3' ? 'max' : 'low';
+		payload.max_tokens = Math.max(maxTokens, 512);
+		delete payload.temperature;
+	} else if (
+		lowerModel === 'kimi-k2.7-code' ||
+		lowerModel.startsWith('kimi-k2.7-code-')
+	) {
+		payload.max_tokens = Math.max(maxTokens, 512);
+		delete payload.temperature;
+	} else if (lowerModel.startsWith('minimax-m3.1-flash')) {
+		payload.reasoning_effort = 'low';
+		payload.max_tokens = Math.max(maxTokens, 512);
+	} else if (lowerModel.startsWith('qwen')) {
 		payload.enable_thinking = false;
 	} else if (shouldDisableStructuredThinking(provider, lowerModel)) {
 		payload.thinking = { type: 'disabled' };
 	}
 
 	return payload;
+}
+
+function openAiReasoningEffort(model: string): 'none' | 'low' | null {
+	const lowerModel = model.trim().toLowerCase();
+	if (/^gpt-5.*-codex(?:-|$)/.test(lowerModel)) return 'low';
+	if (lowerModel.startsWith('gpt-5.6')) return 'none';
+	if (!lowerModel.startsWith('gpt-6')) return null;
+	return ['gpt-6.1-terra', 'gpt-6-sol', 'gpt-6-luna'].some(
+		(name) => lowerModel === name || lowerModel.startsWith(`${name}-`)
+	)
+		? 'none'
+		: 'low';
 }
 
 function buildAnthropicCompatiblePayload(
@@ -530,8 +681,29 @@ function buildAnthropicCompatiblePayload(
 
 	if (stream) payload.stream = true;
 
-	if (provider !== 'anthropic' && model.toLowerCase().startsWith('qwen')) {
+	const lowerModel = model.toLowerCase();
+	if (
+		[
+			'claude-fable-5',
+			'claude-opus-5',
+			'claude-opus-4-7',
+			'claude-opus-4-8',
+			'claude-sonnet-5',
+			'claude-haiku-5',
+		].some((name) => lowerModel === name || lowerModel.startsWith(`${name}-`))
+	) {
+		delete payload.temperature;
+	}
+
+	if (provider !== 'anthropic' && lowerModel.startsWith('qwen')) {
 		payload.thinking = { type: 'disabled' };
+	}
+	if (
+		(provider === 'minimax' || provider === 'minimax-coding') &&
+		lowerModel.startsWith('minimax-m3.1-flash')
+	) {
+		payload.output_config = { effort: 'low' };
+		payload.max_tokens = Math.max(maxTokens, 512);
 	}
 
 	return payload;
@@ -551,7 +723,15 @@ function buildGooglePayload(
 		temperature,
 	};
 	const thinkingConfig = googleThinkingConfig(model.toLowerCase());
-	if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
+	if (thinkingConfig) {
+		generationConfig.thinkingConfig = thinkingConfig;
+		if (
+			'thinkingLevel' in thinkingConfig &&
+			thinkingConfig.thinkingLevel === 'low'
+		) {
+			generationConfig.maxOutputTokens = Math.max(maxTokens, 512);
+		}
+	}
 
 	return {
 		contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
@@ -564,13 +744,23 @@ function buildGooglePayload(
 function googleGenerateContentUrl(
 	apiUrl: string,
 	model: string,
-	stream: boolean
+	stream: boolean,
+	provider: AiProvider
 ) {
 	const suffix = stream ? ':streamGenerateContent?alt=sse' : ':generateContent';
+	if (provider === 'opencode-go' && apiUrl === 'https://opencode.ai/zen/go') {
+		return `https://opencode.ai/inference/go/google/v1beta/models/${model}${suffix}`;
+	}
 	return joinUrl(apiUrl, `/v1/models/${model}${suffix}`);
 }
 
 function googleThinkingConfig(lowerModel: string) {
+	if (
+		lowerModel.startsWith('gemini-4') ||
+		lowerModel.startsWith('gemini-3.8') ||
+		lowerModel.startsWith('gemini-3.7')
+	)
+		return { thinkingLevel: 'low' };
 	if (lowerModel.startsWith('gemini-3.1-pro')) return { thinkingLevel: 'low' };
 	if (lowerModel.startsWith('gemini-3')) return { thinkingLevel: 'minimal' };
 	if (lowerModel.startsWith('gemini-2.5-pro')) return { thinkingBudget: 128 };
@@ -696,8 +886,7 @@ function resolveApiUrl(config: AiCompletionConfig) {
 	const value = (config.apiUrl ?? '').trim() || defaultUrl;
 	if (value.length === 0) throw new Error('Please enter the API URL first.');
 	const trimmed = value.replace(/\/+$/, '');
-	if (trimmed.startsWith('http://') || trimmed.startsWith('https://'))
-		return trimmed;
+	if (/^(?:https?|wss?):\/\//.test(trimmed)) return trimmed;
 	return `${config.useSsl ? 'https' : 'http'}://${trimmed}`;
 }
 
