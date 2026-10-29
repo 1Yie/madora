@@ -1,3 +1,19 @@
+## [Desktop 0.4.4](https://github.com/1Yie/madora/compare/v0.4.3...v0.4.4)（2026-10-29） | Mobile 0.0.4（unchanged）
+
+This release publishes desktop builds only; the mobile app remains at 0.0.4.
+
+### Features
+
+- **ai:** add responses and codex transports ([e5a3b98](https://github.com/1Yie/madora/commit/e5a3b98c8a20160896cedab02916c9aec38bdc0b))
+- **editor:** expose custom responses protocols ([e254138](https://github.com/1Yie/madora/commit/e254138f2cdad066741cdf54825892683e1821ed))
+- **app:** prepare custom responses protocols for a future mobile release ([b9ed709](https://github.com/1Yie/madora/commit/b9ed709289215c1012dd223e3706112369faed17))
+
+### Improvements
+
+- **ai:** refresh the provider model catalog and update model-specific routing ([51f71cd](https://github.com/1Yie/madora/commit/51f71cd07747f72ef86ae31328fb69346a2d4fd2))
+
+The Codex WebSocket option uses the OpenAI Responses API with an API key; ChatGPT subscription OAuth is not supported.
+
 ## [Desktop 0.4.3](https://github.com/1Yie/madora/compare/v0.4.2...v0.4.3)（2026-10-09） | Mobile 0.0.4（2026-10-09）
 
 ### Features
